@@ -107,7 +107,7 @@ function MacLib:Window(Settings)
 
 	local notificationsUIListLayout = Instance.new("UIListLayout")
 	notificationsUIListLayout.Name = "NotificationsUIListLayout"
-	notificationsUIListLayout.Padding = UDim.new(0, 10)
+	notificationsUIListLayout.Padding = UDim.new(0, scaleSize(10))
 	notificationsUIListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
 	notificationsUIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 	notificationsUIListLayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
@@ -177,7 +177,7 @@ function MacLib:Window(Settings)
 	dividerInteract.BorderSizePixel = 0
 	dividerInteract.FontFace = Font.new("rbxasset://fonts/families/SourceSansPro.json")
 	dividerInteract.Position = UDim2.fromScale(0.5, 0)
-	dividerInteract.Size = UDim2.new(1, 6, 1, 0)
+	dividerInteract.Size = UDim2.new(1, scaleSize(6), 1, 0)
 	dividerInteract.Text = ""
 	dividerInteract.TextColor3 = Color3.fromRGB(0, 0, 0)
 	dividerInteract.TextSize = scaleSize(14)
@@ -189,7 +189,7 @@ function MacLib:Window(Settings)
 	windowControls.BackgroundTransparency = 1
 	windowControls.BorderColor3 = Color3.fromRGB(0, 0, 0)
 	windowControls.BorderSizePixel = 0
-	windowControls.Size = UDim2.new(1, 0, 0, 31)
+	windowControls.Size = UDim2.new(1, 0, 0, scaleSize(31))
 
 	local controls = Instance.new("Frame")
 	controls.Name = "Controls"
@@ -201,7 +201,7 @@ function MacLib:Window(Settings)
 
 	local uIListLayout = Instance.new("UIListLayout")
 	uIListLayout.Name = "UIListLayout"
-	uIListLayout.Padding = UDim.new(0, 5)
+	uIListLayout.Padding = UDim.new(0, scaleSize(5))
 	uIListLayout.FillDirection = Enum.FillDirection.Horizontal
 	uIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 	uIListLayout.VerticalAlignment = Enum.VerticalAlignment.Center
@@ -323,7 +323,7 @@ function MacLib:Window(Settings)
 	divider1.BorderColor3 = Color3.fromRGB(0, 0, 0)
 	divider1.BorderSizePixel = 0
 	divider1.Position = UDim2.fromScale(0, 1)
-	divider1.Size = UDim2.new(1, 0, 0, 1)
+	divider1.Size = UDim2.new(1, 0, 0, scaleSize(1))
 	divider1.Parent = windowControls
 
 	windowControls.Parent = sidebar
@@ -335,7 +335,7 @@ function MacLib:Window(Settings)
 	information.BorderColor3 = Color3.fromRGB(0, 0, 0)
 	information.BorderSizePixel = 0
 	information.Position = scaleOffset(0, 31)
-	information.Size = UDim2.new(1, 0, 0, 60)
+	information.Size = UDim2.new(1, 0, 0, scaleSize(60))
 
 	local divider2 = Instance.new("Frame")
 	divider2.Name = "Divider"
@@ -345,7 +345,7 @@ function MacLib:Window(Settings)
 	divider2.BorderColor3 = Color3.fromRGB(0, 0, 0)
 	divider2.BorderSizePixel = 0
 	divider2.Position = UDim2.fromScale(0, 1)
-	divider2.Size = UDim2.new(1, 0, 0, 1)
+	divider2.Size = UDim2.new(1, 0, 0, scaleSize(1))
 	divider2.Parent = information
 
 	local informationHolder = Instance.new("Frame")
@@ -424,7 +424,7 @@ function MacLib:Window(Settings)
 	title.BackgroundTransparency = 1
 	title.BorderColor3 = Color3.fromRGB(0, 0, 0)
 	title.BorderSizePixel = 0
-	title.Size = UDim2.new(1, -20, 0, 0)
+	title.Size = UDim2.new(1, -scaleSize(20), 0, 0)
 	title.Parent = titleFrame
 
 	local subtitle = Instance.new("TextLabel")
@@ -449,12 +449,12 @@ function MacLib:Window(Settings)
 	subtitle.BorderColor3 = Color3.fromRGB(0, 0, 0)
 	subtitle.BorderSizePixel = 0
 	subtitle.LayoutOrder = 1
-	subtitle.Size = UDim2.new(1, -20, 0, 0)
+	subtitle.Size = UDim2.new(1, -scaleSize(20), 0, 0)
 	subtitle.Parent = titleFrame
 
 	local titleFrameUIListLayout = Instance.new("UIListLayout")
 	titleFrameUIListLayout.Name = "TitleFrameUIListLayout"
-	titleFrameUIListLayout.Padding = UDim.new(0, 3)
+	titleFrameUIListLayout.Padding = UDim.new(0, scaleSize(3))
 	titleFrameUIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 	titleFrameUIListLayout.VerticalAlignment = Enum.VerticalAlignment.Center
 	titleFrameUIListLayout.Parent = titleFrame
@@ -472,7 +472,7 @@ function MacLib:Window(Settings)
 	sidebarGroup.BorderColor3 = Color3.fromRGB(0, 0, 0)
 	sidebarGroup.BorderSizePixel = 0
 	sidebarGroup.Position = scaleOffset(0, 91)
-	sidebarGroup.Size = UDim2.new(1, 0, 1, -91)
+	sidebarGroup.Size = UDim2.new(1, 0, 1, -scaleSize(91))
 
 	local userInfo = Instance.new("Frame")
 	userInfo.Name = "UserInfo"
@@ -482,7 +482,7 @@ function MacLib:Window(Settings)
 	userInfo.BorderColor3 = Color3.fromRGB(0, 0, 0)
 	userInfo.BorderSizePixel = 0
 	userInfo.Position = UDim2.fromScale(0, 1)
-	userInfo.Size = UDim2.new(1, 0, 0, 107)
+	userInfo.Size = UDim2.new(1, 0, 0, scaleSize(107))
 
 	local informationGroup = Instance.new("Frame")
 	informationGroup.Name = "InformationGroup"
@@ -540,7 +540,7 @@ function MacLib:Window(Settings)
 	userAndDisplayFrame.BorderColor3 = Color3.fromRGB(0, 0, 0)
 	userAndDisplayFrame.BorderSizePixel = 0
 	userAndDisplayFrame.LayoutOrder = 1
-	userAndDisplayFrame.Size = UDim2.new(1, -42, 0, 32)
+	userAndDisplayFrame.Size = UDim2.new(1, -scaleSize(42), 0, scaleSize(32))
 
 	local displayName = Instance.new("TextLabel")
 	displayName.Name = "DisplayName"
@@ -572,7 +572,7 @@ function MacLib:Window(Settings)
 
 	local userAndDisplayFrameUIListLayout = Instance.new("UIListLayout")
 	userAndDisplayFrameUIListLayout.Name = "UserAndDisplayFrameUIListLayout"
-	userAndDisplayFrameUIListLayout.Padding = UDim.new(0, 1)
+	userAndDisplayFrameUIListLayout.Padding = UDim.new(0, scaleSize(1))
 	userAndDisplayFrameUIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 	userAndDisplayFrameUIListLayout.Parent = userAndDisplayFrame
 
@@ -624,7 +624,7 @@ function MacLib:Window(Settings)
 	tabSwitchers.BackgroundTransparency = 1
 	tabSwitchers.BorderColor3 = Color3.fromRGB(0, 0, 0)
 	tabSwitchers.BorderSizePixel = 0
-	tabSwitchers.Size = UDim2.new(1, 0, 1, -107)
+	tabSwitchers.Size = UDim2.new(1, 0, 1, -scaleSize(107))
 
 	local tabSwitchersScrollingFrame = Instance.new("ScrollingFrame")
 	tabSwitchersScrollingFrame.Name = "TabSwitchersScrollingFrame"
@@ -642,7 +642,7 @@ function MacLib:Window(Settings)
 
 	local tabSwitchersScrollingFrameUIListLayout = Instance.new("UIListLayout")
 	tabSwitchersScrollingFrameUIListLayout.Name = "TabSwitchersScrollingFrameUIListLayout"
-	tabSwitchersScrollingFrameUIListLayout.Padding = UDim.new(0, 17)
+	tabSwitchersScrollingFrameUIListLayout.Padding = UDim.new(0, scaleSize(17))
 	tabSwitchersScrollingFrameUIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 	tabSwitchersScrollingFrameUIListLayout.Parent = tabSwitchersScrollingFrame
 
@@ -730,7 +730,7 @@ function MacLib:Window(Settings)
 	topbar.BackgroundTransparency = 1
 	topbar.BorderColor3 = Color3.fromRGB(0, 0, 0)
 	topbar.BorderSizePixel = 0
-	topbar.Size = UDim2.new(1, 0, 0, 63)
+	topbar.Size = UDim2.new(1, 0, 0, scaleSize(63))
 
 	local divider4 = Instance.new("Frame")
 	divider4.Name = "Divider"
@@ -1498,7 +1498,7 @@ function MacLib:Window(Settings)
 			elements1.BorderColor3 = Color3.fromRGB(0, 0, 0)
 			elements1.BorderSizePixel = 0
 			elements1.Position = scaleOffset(0, 63)
-			elements1.Size = UDim2.new(1, 0, 1, -63)
+			elements1.Size = UDim2.new(1, 0, 1, -scaleSize(63))
 			elements1.ClipsDescendants = true
 
 			local elementsUIPadding = Instance.new("UIPadding")
@@ -1533,7 +1533,7 @@ function MacLib:Window(Settings)
 
 			local elementsScrollingUIListLayout = Instance.new("UIListLayout")
 			elementsScrollingUIListLayout.Name = "ElementsScrollingUIListLayout"
-			elementsScrollingUIListLayout.Padding = UDim.new(0, 15)
+			elementsScrollingUIListLayout.Padding = UDim.new(0, scaleSize(15))
 			elementsScrollingUIListLayout.FillDirection = Enum.FillDirection.Horizontal
 			elementsScrollingUIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 			elementsScrollingUIListLayout.Parent = elementsScrolling
@@ -1550,7 +1550,7 @@ function MacLib:Window(Settings)
 
 			local leftUIListLayout = Instance.new("UIListLayout")
 			leftUIListLayout.Name = "LeftUIListLayout"
-			leftUIListLayout.Padding = UDim.new(0, 15)
+			leftUIListLayout.Padding = UDim.new(0, scaleSize(15))
 			leftUIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 			leftUIListLayout.Parent = left
 
@@ -1569,7 +1569,7 @@ function MacLib:Window(Settings)
 
 			local rightUIListLayout = Instance.new("UIListLayout")
 			rightUIListLayout.Name = "RightUIListLayout"
-			rightUIListLayout.Padding = UDim.new(0, 15)
+			rightUIListLayout.Padding = UDim.new(0, scaleSize(15))
 			rightUIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 			rightUIListLayout.Parent = right
 
@@ -1604,7 +1604,7 @@ function MacLib:Window(Settings)
 
 				local sectionUIListLayout = Instance.new("UIListLayout")
 				sectionUIListLayout.Name = "SectionUIListLayout"
-				sectionUIListLayout.Padding = UDim.new(0, 10)
+				sectionUIListLayout.Padding = UDim.new(0, scaleSize(10))
 				sectionUIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 				sectionUIListLayout.Parent = section
 
@@ -4474,7 +4474,7 @@ function MacLib:Window(Settings)
 					paragraph.BackgroundTransparency = 1
 					paragraph.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					paragraph.BorderSizePixel = 0
-					paragraph.Size = UDim2.new(1, 0, 0, 38)
+					paragraph.Size = UDim2.new(1, 0, 0, scaleSize(38))
 					paragraph.Parent = section
 
 					local paragraphHeader = Instance.new("TextLabel")
@@ -5901,4 +5901,3 @@ return MacLib
 
 
 
-nigger
