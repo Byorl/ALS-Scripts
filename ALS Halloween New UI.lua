@@ -313,7 +313,6 @@ local function buildAutoAbilityUI()
                     local cfg = getgenv().UnitAbilities[unitName][abilityName]
                     local saved = getgenv().Config.abilities[unitName] and getgenv().Config.abilities[unitName][abilityName]
 
-                    -- Restore ALL saved config values to cfg
                     local defaultToggle = saved and saved.enabled or false
                     if saved then
                         cfg.enabled = saved.enabled or false
