@@ -62,6 +62,8 @@ getgenv().SeamlessLimiterEnabled = false
 getgenv().BingoEnabled = false
 getgenv().CapsuleEnabled = false
 getgenv().RemoveEnemiesEnabled = false
+getgenv().AntiAFKEnabled = false
+getgenv().BlackScreenEnabled = false
 getgenv().WebhookURL = getgenv().Config.inputs.WebhookURL or ""
 getgenv().UnitAbilities = {}
 
@@ -75,9 +77,40 @@ local Window = Fluent:CreateWindow({
     MinimizeKey = Enum.KeyCode.LeftControl
 })
 
+local ScreenGui = Instance.new("ScreenGui", game:GetService("CoreGui"))
+ScreenGui.Name = "ALS_ToggleIcon"
+
+local ImageButton = Instance.new("ImageButton", ScreenGui)
+ImageButton.Size = UDim2.new(0, 50, 0, 50)
+ImageButton.Position = UDim2.new(0, 20, 0, 20)
+ImageButton.AnchorPoint = Vector2.new(0, 0)
+ImageButton.BackgroundTransparency = 1
+ImageButton.Image = "rbxassetid://72399447876912"
+ImageButton.Active = true
+ImageButton.Draggable = true
+
+local isVisible = true
+
+local function toggleUI()
+	isVisible = not isVisible
+	if isVisible then
+		Window:SelectTab(1)
+	else
+		Window:Minimize()
+	end
+end
+
+ImageButton.MouseButton1Click:Connect(toggleUI)
+
+game:GetService("UserInputService").InputBegan:Connect(function(input, processed)
+	if not processed and input.KeyCode == Enum.KeyCode.LeftControl then
+		toggleUI()
+	end
+end)
+
 local Tabs = {
     AutoEvent = Window:AddTab({ Title = "Auto Event", Icon = "calendar" }),
-    AutoAbility = Window:AddTab({ Title = "Auto Ability", Icon = "zap" }),
+    AutoAbility = Window:AddTab({ Title = "Auto Ability", Icon = "bot" }),
     CardSelection = Window:AddTab({ Title = "Card Selection", Icon = "layers" }),
     BossRush = Window:AddTab({ Title = "Boss Rush", Icon = "trophy" }),
     Webhook = Window:AddTab({ Title = "Webhook", Icon = "send" }),
@@ -184,6 +217,30 @@ AutoEventToggle:OnChanged(function()
     end
 end)
 
+local AutoFastRetryToggle = Tabs.AutoEvent:AddToggle("AutoFastRetryToggle", {
+    Title = "Auto Fast Retry",
+    Description = "Faster And Better auto replay",
+    Default = getgenv().Config.toggles.AutoFastRetryToggle or false
+})
+
+AutoFastRetryToggle:OnChanged(function()
+    getgenv().AutoFastRetryEnabled = Options.AutoFastRetryToggle.Value
+    getgenv().Config.toggles.AutoFastRetryToggle = Options.AutoFastRetryToggle.Value
+    saveConfig(getgenv().Config)
+    if getgenv().AutoFastRetryEnabled then
+        Fluent:Notify({
+            Title = "Auto Fast Retry",
+            Content = "Enabled!",
+            Duration = 3
+        })
+    else
+        Fluent:Notify({
+            Title = "Auto Fast Retry",
+            Content = "Disabled!",
+            Duration = 3
+        })
+    end
+end)
 
 Tabs.AutoAbility:AddParagraph({
     Title = "Auto Ability System",
@@ -239,7 +296,12 @@ local function getTowerInfo(unitName)
 end
 
 local function getAllAbilities(unitName)
-    local towerInfo = getTowerInfo(unitName)
+    local towerNameToCheck = unitName
+    if unitName == "TuskSummon_Act4" then
+        towerNameToCheck = "JohnnyGodly"
+    end
+    
+    local towerInfo = getTowerInfo(towerNameToCheck)
     if not towerInfo then return {} end
     
     local abilities = {}
@@ -285,10 +347,6 @@ end
 local function buildAutoAbilityUI()
     local clientData = getClientData()
     if not clientData or not clientData.Slots then
-        Tabs.AutoAbility:AddParagraph({
-            Title = "No Units Found",
-            Content = "Could not load your equipped units from ClientData."
-        })
         return
     end
     
@@ -427,7 +485,35 @@ end
 
 task.spawn(function()
     task.wait(1)
-    buildAutoAbilityUI()
+    
+    local maxRetries = 10
+    local retryDelay = 3
+    local success = false
+    
+    for attempt = 1, maxRetries do
+        local clientData = getClientData()
+        if clientData and clientData.Slots then
+            buildAutoAbilityUI()
+            success = true
+            break
+        else
+            if attempt < maxRetries then
+                Fluent:Notify({
+                    Title = "Auto Ability",
+                    Content = "ClientData loading failed, retrying... (" .. attempt .. "/" .. maxRetries .. ")",
+                    Duration = 3
+                })
+                task.wait(retryDelay)
+            end
+        end
+    end
+    
+    if not success then
+        Tabs.AutoAbility:AddParagraph({
+            Title = "❌ Failed to Load Units",
+            Content = "Could not load your equipped units from ClientData after " .. maxRetries .. " attempts. Please rejoin or reload the script."
+        })
+    end
 end)
 
 
@@ -879,6 +965,84 @@ RemoveEnemiesToggle:OnChanged(function()
     end
 end)
 
+local FPSBoostToggle = Tabs.Misc:AddToggle("FPSBoostToggle", {
+	Title = "FPS Boost",
+	Description = "Removes lighting, textures, and non-model objects for better performance",
+	Default = getgenv().Config.toggles.FPSBoostToggle or false
+})
+
+FPSBoostToggle:OnChanged(function()
+	getgenv().FPSBoostEnabled = Options.FPSBoostToggle.Value
+	getgenv().Config.toggles.FPSBoostToggle = Options.FPSBoostToggle.Value
+	saveConfig(getgenv().Config)
+
+	if getgenv().FPSBoostEnabled then
+		Fluent:Notify({
+			Title = "FPS Boost",
+			Content = "Optimization enabled!",
+			Duration = 3
+		})
+	else
+		Fluent:Notify({
+			Title = "FPS Boost",
+			Content = "Optimization disabled!",
+			Duration = 3
+		})
+	end
+end)
+
+local AntiAFKToggle = Tabs.Misc:AddToggle("AntiAFKToggle", {
+	Title = "Anti-AFK",
+	Description = "Prevents being kicked for inactivity",
+	Default = getgenv().Config.toggles.AntiAFKToggle or false
+})
+
+AntiAFKToggle:OnChanged(function()
+	getgenv().AntiAFKEnabled = Options.AntiAFKToggle.Value
+	getgenv().Config.toggles.AntiAFKToggle = Options.AntiAFKToggle.Value
+	saveConfig(getgenv().Config)
+
+	if getgenv().AntiAFKEnabled then
+		Fluent:Notify({
+			Title = "Anti-AFK",
+			Content = "Anti-AFK enabled!",
+			Duration = 3
+		})
+	else
+		Fluent:Notify({
+			Title = "Anti-AFK",
+			Content = "Anti-AFK disabled!",
+			Duration = 3
+		})
+	end
+end)
+
+local BlackScreenToggle = Tabs.Misc:AddToggle("BlackScreenToggle", {
+	Title = "Black Screen",
+	Description = "Covers screen with black overlay and disables rendering",
+	Default = getgenv().Config.toggles.BlackScreenToggle or false
+})
+
+BlackScreenToggle:OnChanged(function()
+	getgenv().BlackScreenEnabled = Options.BlackScreenToggle.Value
+	getgenv().Config.toggles.BlackScreenToggle = Options.BlackScreenToggle.Value
+	saveConfig(getgenv().Config)
+
+	if getgenv().BlackScreenEnabled then
+		Fluent:Notify({
+			Title = "Black Screen",
+			Content = "Black screen enabled!",
+			Duration = 3
+		})
+	else
+		Fluent:Notify({
+			Title = "Black Screen",
+			Content = "Black screen disabled!",
+			Duration = 3
+		})
+	end
+end)
+
 
 SaveManager:SetLibrary(Fluent)
 InterfaceManager:SetLibrary(Fluent)
@@ -898,6 +1062,134 @@ Fluent:Notify({
 })
 
 SaveManager:LoadAutoloadConfig()
+
+for inputKey, value in pairs(getgenv().Config.inputs) do
+    if inputKey:match("^Card_") then
+        local cardName = inputKey:gsub("^Card_", "")
+        local num = tonumber(value)
+        if num and getgenv().CardPriority[cardName] then
+            getgenv().CardPriority[cardName] = num
+        end
+    elseif inputKey:match("^BossRushCard_") then
+        local cardName = inputKey:gsub("^BossRushCard_", "")
+        local num = tonumber(value)
+        if num and getgenv().BossRushCardPriority[cardName] then
+            getgenv().BossRushCardPriority[cardName] = num
+        end
+    end
+end
+
+task.spawn(function()
+    repeat task.wait() until game.CoreGui:FindFirstChild("RobloxPromptGui")
+    
+    local Players = game:GetService("Players")
+    local TeleportService = game:GetService("TeleportService")
+    local promptOverlay = game.CoreGui.RobloxPromptGui.promptOverlay
+    
+    promptOverlay.ChildAdded:Connect(function(child)
+        if child.Name == "ErrorPrompt" then
+            print("[Auto Rejoin] Disconnect detected! Attempting to rejoin...")
+            spawn(function()
+                while true do
+                    local success = pcall(function()
+                        TeleportService:Teleport(12886143095, Players.LocalPlayer)
+                    end)
+                    if success then
+                        print("[Auto Rejoin] Rejoining...")
+                        break
+                    else
+                        print("[Auto Rejoin] Rejoin failed, retrying in 2 seconds...")
+                        task.wait(2)
+                    end
+                end
+            end)
+        end
+    end)
+    
+    print("[Auto Rejoin] Auto rejoin system loaded!")
+end)
+
+task.spawn(function()
+    local vu = game:GetService("VirtualUser")
+    
+    game:GetService("Players").LocalPlayer.Idled:Connect(function()
+        if getgenv().AntiAFKEnabled then
+            vu:Button2Down(Vector2.new(0,0),workspace.CurrentCamera.CFrame)
+            wait(1)
+            vu:Button2Up(Vector2.new(0,0),workspace.CurrentCamera.CFrame)
+        end
+    end)
+    
+    print("[Anti-AFK] Anti-AFK system loaded!")
+end)
+
+task.spawn(function()
+    local blackScreenGui = nil
+    local blackFrame = nil
+    
+    local function createBlackScreen()
+        if blackScreenGui then return end
+        
+        blackScreenGui = Instance.new("ScreenGui")
+        blackScreenGui.Name = "BlackScreenOverlay"
+        blackScreenGui.DisplayOrder = 999999
+        blackScreenGui.IgnoreGuiInset = true
+        blackScreenGui.ResetOnSpawn = false
+        
+        blackFrame = Instance.new("Frame")
+        blackFrame.Size = UDim2.new(1, 0, 1, 0)
+        blackFrame.Position = UDim2.new(0, 0, 0, 0)
+        blackFrame.BackgroundColor3 = Color3.new(0, 0, 0)
+        blackFrame.BorderSizePixel = 0
+        blackFrame.Parent = blackScreenGui
+        
+        pcall(function()
+            blackScreenGui.Parent = game:GetService("CoreGui")
+        end)
+        
+        pcall(function()
+            local workspace = game:GetService("Workspace")
+            if workspace.CurrentCamera then
+                workspace.CurrentCamera.MaxAxisFieldOfView = 0.001
+            end
+            settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+        end)
+    end
+    
+    local function removeBlackScreen()
+        if blackScreenGui then
+            blackScreenGui:Destroy()
+            blackScreenGui = nil
+            blackFrame = nil
+        end
+        
+        pcall(function()
+            local workspace = game:GetService("Workspace")
+            if workspace.CurrentCamera then
+                workspace.CurrentCamera.MaxAxisFieldOfView = 70
+            end
+        end)
+    end
+    
+    while true do
+        task.wait(0.5)
+        
+        if getgenv().BlackScreenEnabled then
+            if not blackScreenGui then
+                createBlackScreen()
+            end
+        else
+            if blackScreenGui then
+                removeBlackScreen()
+            end
+        end
+        
+        if Fluent.Unloaded then
+            removeBlackScreen()
+            break
+        end
+    end
+end)
 
 task.spawn(function()
     while true do
@@ -931,6 +1223,63 @@ task.spawn(function()
 end)
 
 task.spawn(function()
+	while true do
+		task.wait(10)
+
+		if getgenv().FPSBoostEnabled then
+			pcall(function()
+				local lighting = game:GetService("Lighting")
+				for _, child in ipairs(lighting:GetChildren()) do
+					child:Destroy()
+				end
+				lighting.Ambient = Color3.new(1, 1, 1)
+				lighting.Brightness = 1
+				lighting.GlobalShadows = false
+				lighting.FogEnd = 100000
+				lighting.FogStart = 100000
+				lighting.ClockTime = 12
+				lighting.GeographicLatitude = 0
+
+				for _, obj in ipairs(game.Workspace:GetDescendants()) do
+					if obj:IsA("BasePart") then
+						if obj:IsA("Part") or obj:IsA("MeshPart") or obj:IsA("WedgePart") or obj:IsA("CornerWedgePart") then
+							obj.Material = Enum.Material.SmoothPlastic
+							if obj:FindFirstChildOfClass("Texture") then
+								for _, texture in ipairs(obj:GetChildren()) do
+									if texture:IsA("Texture") then
+										texture:Destroy()
+									end
+								end
+							end
+							if obj:IsA("MeshPart") then
+								obj.TextureID = ""
+							end
+						end
+						if obj:IsA("Decal") then
+							obj:Destroy()
+						end
+					end
+					if obj:IsA("SurfaceAppearance") then
+						obj:Destroy()
+					end
+				end
+
+				local mapPath = game.Workspace:FindFirstChild("Map") and game.Workspace.Map:FindFirstChild("Map")
+				if mapPath then
+					for _, child in ipairs(mapPath:GetChildren()) do
+						if not child:IsA("Model") then
+							child:Destroy()
+						end
+					end
+				end
+			end)
+		end
+
+		if Fluent.Unloaded then break end
+	end
+end)
+
+task.spawn(function()
     while true do
         task.wait(1)
         
@@ -954,6 +1303,57 @@ task.spawn(function()
             end
         end
         
+        if Fluent.Unloaded then break end
+    end
+end)
+
+task.spawn(function()
+    local p = game:GetService("Players").LocalPlayer
+    local v = game:GetService("VirtualInputManager")
+    local g = game:GetService("GuiService")
+    local rs = game:GetService("ReplicatedStorage")
+    local seen = false
+
+    local function press(k)
+        v:SendKeyEvent(true, k, false, game)
+        task.wait(0.1)
+        v:SendKeyEvent(false, k, false, game)
+    end
+
+    while true do
+        task.wait(1)
+
+        if getgenv().AutoFastRetryEnabled then
+            pcall(function()
+                local s = p:WaitForChild("PlayerGui"):WaitForChild("Settings")
+                local a = s:WaitForChild("AutoReady")
+
+                if a.Value == true then
+                    rs.Remotes.SetSettings:InvokeServer("AutoReady")
+                end
+
+                local e = p.PlayerGui:FindFirstChild("EndGameUI")
+                if e and e:FindFirstChild("BG") then
+                    seen = true
+                    local r = e.BG.Buttons:FindFirstChild("Retry")
+                    if r then
+                        g.SelectedObject = r
+                        repeat
+                            press(Enum.KeyCode.Return)
+                            task.wait(0.5)
+                        until not p.PlayerGui:FindFirstChild("EndGameUI")
+                        g.SelectedObject = nil
+                    end
+                elseif g.SelectedObject ~= nil then
+                    g.SelectedObject = nil
+                end
+
+                if seen and not a.Value then
+                    rs.Remotes.SetSettings:InvokeServer("AutoReady")
+                end
+            end)
+        end
+
         if Fluent.Unloaded then break end
     end
 end)
@@ -1715,8 +2115,8 @@ task.spawn(function()
         description = description .. "\n**Level:** " .. (clientData.Level or 0) .. " [" .. formatNumber(clientData.EXP or 0) .. "/" .. formatNumber(clientData.MaxEXP or 0) .. "]"
         
         local playerStatsText = ""
-        playerStatsText = playerStatsText .. "<:gold:1265957290251522089> " .. formatNumber(clientData.Gold or 0)
-        playerStatsText = playerStatsText .. "\n<:jewel:1217525743408648253> " .. formatNumber(clientData.Jewels or 0)
+        playerStatsText = playerStatsText .. "<:jewel:1217525743408648253> " .. formatNumber(clientData.Jewels or 0)
+        playerStatsText = playerStatsText .. "\n<:gold:1265957290251522089> " .. formatNumber(clientData.Gold or 0)
         playerStatsText = playerStatsText .. "\n<:emerald:1389165843966984192> " .. formatNumber(clientData.Emeralds or 0)
         playerStatsText = playerStatsText .. "\n<:rerollshard:1426315987019501598> " .. formatNumber(clientData.Rerolls or 0)
         playerStatsText = playerStatsText .. "\n<:candybasket:1426304615284084827> " .. formatNumber(clientData.CandyBasket or 0)
@@ -1732,17 +2132,21 @@ task.spawn(function()
             for _, reward in ipairs(rewards) do
                 local totalAmount = 0
                 
-                if reward.name == "CandyBasket" then
+                if reward.name == "CandyBasket" or reward.name == "Candy Basket" then
                     local currentAmount = clientData.CandyBasket or 0
                     totalAmount = currentAmount + reward.amount
                 elseif reward.name == "HallowenBingoStamp" or reward.name:find("Bingo Stamp") then
                     if clientData.ItemData and clientData.ItemData.HallowenBingoStamp then
-                        totalAmount = clientData.ItemData.HallowenBingoStamp.Amount or 0
+                        totalAmount = (clientData.ItemData.HallowenBingoStamp.Amount or 0) + reward.amount
+                    else
+                        totalAmount = reward.amount
                     end
                 elseif clientData.Items and clientData.Items[reward.name] then
-                    totalAmount = clientData.Items[reward.name].Amount or 0
+                    totalAmount = (clientData.Items[reward.name].Amount or 0) + reward.amount
                 elseif clientData[reward.name] then
-                    totalAmount = clientData[reward.name]
+                    totalAmount = clientData[reward.name] + reward.amount
+                else
+                    totalAmount = reward.amount
                 end
                 
                 rewardsText = rewardsText .. "+" .. formatNumber(reward.amount) .. " " .. reward.name .. " [ Total: " .. formatNumber(totalAmount) .. " ]\n"
@@ -1817,64 +2221,75 @@ end)
 
 task.spawn(function()
     local endgameCount = 0
-    local seamlessRetry = nil
+    local hasRun = false
     
-    local function checkSeamlessRetry()
-        local ok, result = pcall(function()
-            local settingsGui = LocalPlayer.PlayerGui:WaitForChild("Settings", 10)
-            if settingsGui then
-                local seamless = settingsGui:FindFirstChild("SeamlessRetry")
-                if seamless and seamless:IsA("ValueBase") then
-                    return seamless
-                end
+    repeat task.wait(0.5) until not LocalPlayer.PlayerGui:FindFirstChild("TeleportUI")
+    
+    print("[Seamless Fix] Waiting for Settings GUI...")
+    repeat task.wait(0.5) until LocalPlayer.PlayerGui:FindFirstChild("Settings")
+    print("[Seamless Fix] Settings GUI found!")
+    
+    local function getSeamlessValue()
+        local settings = game:GetService("Players").LocalPlayer.PlayerGui:FindFirstChild("Settings")
+        if settings then
+            local seamless = settings:FindFirstChild("SeamlessRetry")
+            if seamless then
+                print("[Seamless Fix] SeamlessRetry.Value =", seamless.Value)
+                return seamless.Value
+            else
+                print("[Seamless Fix] SeamlessRetry not found in Settings")
             end
-            return nil
+        else
+            print("[Seamless Fix] Settings not found")
+        end
+        return false
+    end
+    
+    local function setSeamlessRetry()
+        pcall(function()
+            RS.Remotes.SetSettings:InvokeServer("SeamlessRetry")
         end)
-        return ok and result or nil
+    end
+    
+    local function restartMatch()
+        pcall(function()
+            RS.Remotes.RestartMatch:FireServer()
+        end)
     end
     
     task.spawn(function()
-        task.wait(2)
-        seamlessRetry = checkSeamlessRetry()
-        if seamlessRetry and seamlessRetry.Value == false then
-            pcall(function()
-                RS.Remotes.SetSettings:InvokeServer("SeamlessRetry", true)
-                print("[Seamless Fix] Enabled seamless retry on startup")
-            end)
+        if getgenv().SeamlessLimiterEnabled then
+            print("[Seamless Fix] Checking initial seamless state...")
+            local currentSeamless = getSeamlessValue()
+            if endgameCount < (getgenv().MaxSeamlessRounds or 4) then
+                if not currentSeamless then
+                    setSeamlessRetry()
+                    task.wait(0.5)
+                    print("[Seamless Fix] Enabled Seamless Retry")
+                else
+                    print("[Seamless Fix] Seamless Retry already enabled")
+                end
+            end
         end
     end)
     
     LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
         if not getgenv().SeamlessLimiterEnabled then return end
         
-        if child.Name == "EndGameUI" then
+        if child.Name == "EndGameUI" and not hasRun then
+            hasRun = true
             endgameCount = endgameCount + 1
-            
             local maxRounds = getgenv().MaxSeamlessRounds or 4
+            print("[Seamless Fix] Endgame detected. Current seamless rounds: " .. endgameCount .. "/" .. maxRounds)
             
-            if endgameCount >= maxRounds then
-                if not seamlessRetry then
-                    seamlessRetry = checkSeamlessRetry()
-                end
-                
-                if seamlessRetry then
-                    local currentValue = seamlessRetry.Value
-                    
-                    if currentValue == true then
-                        task.wait(2)
-                        
-                        pcall(function()
-                            RS.Remotes.SetSettings:InvokeServer("SeamlessRetry")
-                        end)
-                        
-                        task.wait(0.5)
-                        
-                        pcall(function()
-                            RS.Remotes.RestartMatch:InvokeServer()
-                        end)
-                        
-                        endgameCount = 0
-                    end
+            if endgameCount >= maxRounds and getSeamlessValue() then
+                task.wait(0.5)
+                setSeamlessRetry()
+                print("[Seamless Fix] Disabled Seamless Retry")
+                task.wait(0.5)
+                if not getSeamlessValue() then
+                    restartMatch()
+                    print("[Seamless Fix] Restarted match")
                 end
             end
         end
@@ -1882,126 +2297,122 @@ task.spawn(function()
     
     LocalPlayer.PlayerGui.ChildRemoved:Connect(function(child)
         if child.Name == "EndGameUI" then
-            local maxRounds = getgenv().MaxSeamlessRounds or 4
-            if endgameCount < maxRounds then
-                endgameCount = 0
-            end
+            hasRun = false
+            print("[Seamless Fix] EndgameUI removed, ready for next round")
         end
     end)
 end)
 
-if game.PlaceId == 12900046592 then
-    task.spawn(function()
-        task.wait(2)
+task.spawn(function()
+    task.wait(2)
+    
+    local BingoEvents = RS:WaitForChild("Events"):WaitForChild("Bingo")
+    local UseStampEvent = BingoEvents:FindFirstChild("UseStamp")
+    local ClaimRewardEvent = BingoEvents:FindFirstChild("ClaimReward")
+    local CompleteBoardEvent = BingoEvents:FindFirstChild("CompleteBoard")
+    
+    print("[Auto Bingo] Bingo automation loaded!")
+    
+    while true do
+        task.wait(1)
         
-        local BingoEvents = RS:WaitForChild("Events"):WaitForChild("Bingo")
-        local UseStampEvent = BingoEvents:FindFirstChild("UseStamp")
-        local ClaimRewardEvent = BingoEvents:FindFirstChild("ClaimReward")
-        local CompleteBoardEvent = BingoEvents:FindFirstChild("CompleteBoard")
-        
-        print("[Auto Bingo] Bingo automation loaded!")
-        
-        while true do
-            task.wait(1)
-            
-            if getgenv().BingoEnabled then
-                if UseStampEvent then
-                    print("[Auto Bingo] Using 25 stamps...")
-                    for i = 1, 25 do
-                        pcall(function()
-                            UseStampEvent:FireServer()
-                        end)
-                        task.wait(0.1)
-                    end
-                    task.wait(0.2)
-                end
-                
-                if ClaimRewardEvent then
-                    print("[Auto Bingo] Claiming 25 rewards...")
-                    for i = 1, 25 do
-                        pcall(function()
-                            ClaimRewardEvent:InvokeServer(i)
-                        end)
-                        task.wait(0.1)
-                    end
-                    task.wait(0.2)
-                end
-                
-
-                if CompleteBoardEvent then
-                    print("[Auto Bingo] Completing board...")
+        if getgenv().BingoEnabled then
+            if UseStampEvent then
+                print("[Auto Bingo] Using 25 stamps...")
+                for i = 1, 25 do
                     pcall(function()
-                        CompleteBoardEvent:InvokeServer()
+                        UseStampEvent:FireServer()
                     end)
                     task.wait(0.1)
                 end
-
-                print("[Auto Bingo] Cycle complete, waiting 0 seconds...")
-                task.wait(0)
+                task.wait(0.2)
             end
             
-            if Fluent.Unloaded then break end
+            if ClaimRewardEvent then
+                print("[Auto Bingo] Claiming 25 rewards...")
+                for i = 1, 25 do
+                    pcall(function()
+                        ClaimRewardEvent:InvokeServer(i)
+                    end)
+                    task.wait(0.1)
+                end
+                task.wait(0.2)
+            end
+            
+
+            if CompleteBoardEvent then
+                print("[Auto Bingo] Completing board...")
+                pcall(function()
+                    CompleteBoardEvent:InvokeServer()
+                end)
+                task.wait(0.1)
+            end
+
+            print("[Auto Bingo] Cycle complete, waiting 0 seconds...")
+            task.wait(0)
         end
-    end)
+        
+        if Fluent.Unloaded then break end
+    end
+end)
+
+task.spawn(function()
+    task.wait(2)
     
-    task.spawn(function()
+    local PurchaseEvent = RS:WaitForChild("Events"):WaitForChild("Hallowen2025"):WaitForChild("Purchase")
+    local OpenCapsuleEvent = RS:WaitForChild("Remotes"):WaitForChild("OpenCapsule")
+    
+    print("[Auto Capsules] Capsule automation loaded!")
+    
+    while true do
         task.wait(2)
         
-        local PurchaseEvent = RS:WaitForChild("Events"):WaitForChild("Hallowen2025"):WaitForChild("Purchase")
-        local OpenCapsuleEvent = RS:WaitForChild("Remotes"):WaitForChild("OpenCapsule")
-        
-        print("[Auto Capsules] Capsule automation loaded!")
-        
-        while true do
-            task.wait(2)
-            
-            if getgenv().CapsuleEnabled then
-                local clientData = getClientData()
-                if clientData then
-                    local candyBasket = clientData.CandyBasket or 0
-                    local capsuleAmount = 0
-                    
-                    if clientData.ItemData and clientData.ItemData.HalloweenCapsule2025 then
-                        capsuleAmount = clientData.ItemData.HalloweenCapsule2025.Amount or 0
-                    end
-                    
-                    if candyBasket >= 100000 then
-                        print("[Auto Capsules] Buying 100 capsules (" .. candyBasket .. " candy)")
-                        pcall(function()
-                            PurchaseEvent:InvokeServer(1, 100)
-                        end)
-                        task.wait(1)
-                    elseif candyBasket >= 10000 then
-                        print("[Auto Capsules] Buying 10 capsules (" .. candyBasket .. " candy)")
-                        pcall(function()
-                            PurchaseEvent:InvokeServer(1, 10)
-                        end)
-                        task.wait(1)
-                    elseif candyBasket >= 1000 then
-                        print("[Auto Capsules] Buying 1 capsule (" .. candyBasket .. " candy)")
-                        pcall(function()
-                            PurchaseEvent:InvokeServer(1, 1)
-                        end)
-                        task.wait(1)
-                    end
-                    
-                    task.wait(0.5)
-                    clientData = getClientData()
-                    if clientData and clientData.ItemData and clientData.ItemData.HalloweenCapsule2025 then
-                        capsuleAmount = clientData.ItemData.HalloweenCapsule2025.Amount or 0
-                    end
-                    
-                    if capsuleAmount > 0 then
-                        print("[Auto Capsules] Opening " .. capsuleAmount .. " capsules")
-                        pcall(function()
-                            OpenCapsuleEvent:FireServer("HalloweenCapsule2025", capsuleAmount)
-                        end)
-                        task.wait(1)
-                    end
+        if getgenv().CapsuleEnabled then
+            local clientData = getClientData()
+            if clientData then
+                local candyBasket = clientData.CandyBasket or 0
+                local capsuleAmount = 0
+                
+                if clientData.ItemData and clientData.ItemData.HalloweenCapsule2025 then
+                    capsuleAmount = clientData.ItemData.HalloweenCapsule2025.Amount or 0
+                end
+                
+                if candyBasket >= 100000 then
+                    print("[Auto Capsules] Buying 100 capsules (" .. candyBasket .. " candy)")
+                    pcall(function()
+                        PurchaseEvent:InvokeServer(1, 100)
+                    end)
+                    task.wait(1)
+                elseif candyBasket >= 10000 then
+                    print("[Auto Capsules] Buying 10 capsules (" .. candyBasket .. " candy)")
+                    pcall(function()
+                        PurchaseEvent:InvokeServer(1, 10)
+                    end)
+                    task.wait(1)
+                elseif candyBasket >= 1000 then
+                    print("[Auto Capsules] Buying 1 capsule (" .. candyBasket .. " candy)")
+                    pcall(function()
+                        PurchaseEvent:InvokeServer(1, 1)
+                    end)
+                    task.wait(1)
+                end
+                
+                task.wait(0.5)
+                clientData = getClientData()
+                if clientData and clientData.ItemData and clientData.ItemData.HalloweenCapsule2025 then
+                    capsuleAmount = clientData.ItemData.HalloweenCapsule2025.Amount or 0
+                end
+                
+                if capsuleAmount > 0 then
+                    print("[Auto Capsules] Opening " .. capsuleAmount .. " capsules")
+                    pcall(function()
+                        OpenCapsuleEvent:FireServer("HalloweenCapsule2025", capsuleAmount)
+                    end)
+                    task.wait(1)
                 end
             end
-            
-            if Fluent.Unloaded then break end
         end
-    end)
-end
+        
+        if Fluent.Unloaded then break end
+    end
+end)
