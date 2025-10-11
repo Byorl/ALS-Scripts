@@ -55,6 +55,14 @@ local function scaleOffset(x, y)
 	return UDim2.fromOffset(math.floor(x * sizeMult), math.floor(y * sizeMult))
 end
 
+local function scaleSize(x)
+	return math.floor(x * sizeMult)
+end
+
+local function scaleUDim(scale, offset)
+	return UDim.new(scale, math.floor(offset * sizeMult))
+end
+
 --// Functions
 local function GetGui()
 	local newGui = Instance.new("ScreenGui")
@@ -107,10 +115,10 @@ function MacLib:Window(Settings)
 
 	local notificationsUIPadding = Instance.new("UIPadding")
 	notificationsUIPadding.Name = "NotificationsUIPadding"
-	notificationsUIPadding.PaddingBottom = UDim.new(0, 10)
-	notificationsUIPadding.PaddingLeft = UDim.new(0, 10)
-	notificationsUIPadding.PaddingRight = UDim.new(0, 10)
-	notificationsUIPadding.PaddingTop = UDim.new(0, 10)
+	notificationsUIPadding.PaddingBottom = scaleUDim(0, 10)
+	notificationsUIPadding.PaddingLeft = scaleUDim(0, 10)
+	notificationsUIPadding.PaddingRight = scaleUDim(0, 10)
+	notificationsUIPadding.PaddingTop = scaleUDim(0, 10)
 	notificationsUIPadding.Parent = notifications
 
 	local base = Instance.new("Frame")
@@ -129,7 +137,7 @@ function MacLib:Window(Settings)
 
 	local baseUICorner = Instance.new("UICorner")
 	baseUICorner.Name = "BaseUICorner"
-	baseUICorner.CornerRadius = UDim.new(0, 10)
+	baseUICorner.CornerRadius = scaleUDim(0, 10)
 	baseUICorner.Parent = base
 
 	local baseUIStroke = Instance.new("UIStroke")
@@ -156,7 +164,7 @@ function MacLib:Window(Settings)
 	divider.BorderColor3 = Color3.fromRGB(0, 0, 0)
 	divider.BorderSizePixel = 0
 	divider.Position = UDim2.fromScale(1, 0)
-	divider.Size = UDim2.new(0, 1, 1, 0)
+	divider.Size = UDim2.new(0, scaleSize(1), 1, scaleSize(0))
 	divider.Parent = sidebar
 
 	local dividerInteract = Instance.new("TextButton")
@@ -171,7 +179,7 @@ function MacLib:Window(Settings)
 	dividerInteract.Size = UDim2.new(1, 6, 1, 0)
 	dividerInteract.Text = ""
 	dividerInteract.TextColor3 = Color3.fromRGB(0, 0, 0)
-	dividerInteract.TextSize = 14
+	dividerInteract.TextSize = scaleSize(14)
 	dividerInteract.Parent = divider
 
 	local windowControls = Instance.new("Frame")
@@ -200,7 +208,7 @@ function MacLib:Window(Settings)
 
 	local uIPadding = Instance.new("UIPadding")
 	uIPadding.Name = "UIPadding"
-	uIPadding.PaddingLeft = UDim.new(0, 11)
+	uIPadding.PaddingLeft = scaleUDim(0, 11)
 	uIPadding.Parent = controls
 
 	local windowControlSettings = {
@@ -220,7 +228,7 @@ function MacLib:Window(Settings)
 	exit.FontFace = Font.new("rbxasset://fonts/families/SourceSansPro.json")
 	exit.Text = ""
 	exit.TextColor3 = Color3.fromRGB(0, 0, 0)
-	exit.TextSize = 14
+	exit.TextSize = scaleSize(14)
 	exit.AutoButtonColor = false
 	exit.BackgroundColor3 = Color3.fromRGB(250, 93, 86)
 	exit.BorderColor3 = Color3.fromRGB(0, 0, 0)
@@ -238,7 +246,7 @@ function MacLib:Window(Settings)
 	minimize.FontFace = Font.new("rbxasset://fonts/families/SourceSansPro.json")
 	minimize.Text = ""
 	minimize.TextColor3 = Color3.fromRGB(0, 0, 0)
-	minimize.TextSize = 14
+	minimize.TextSize = scaleSize(14)
 	minimize.AutoButtonColor = false
 	minimize.BackgroundColor3 = Color3.fromRGB(252, 190, 57)
 	minimize.BorderColor3 = Color3.fromRGB(0, 0, 0)
@@ -257,7 +265,7 @@ function MacLib:Window(Settings)
 	maximize.FontFace = Font.new("rbxasset://fonts/families/SourceSansPro.json")
 	maximize.Text = ""
 	maximize.TextColor3 = Color3.fromRGB(0, 0, 0)
-	maximize.TextSize = 14
+	maximize.TextSize = scaleSize(14)
 	maximize.AutoButtonColor = false
 	maximize.BackgroundColor3 = Color3.fromRGB(119, 174, 94)
 	maximize.BorderColor3 = Color3.fromRGB(0, 0, 0)
@@ -349,10 +357,10 @@ function MacLib:Window(Settings)
 
 	local informationHolderUIPadding = Instance.new("UIPadding")
 	informationHolderUIPadding.Name = "InformationHolderUIPadding"
-	informationHolderUIPadding.PaddingBottom = UDim.new(0, 10)
-	informationHolderUIPadding.PaddingLeft = UDim.new(0, 23)
-	informationHolderUIPadding.PaddingRight = UDim.new(0, 22)
-	informationHolderUIPadding.PaddingTop = UDim.new(0, 10)
+	informationHolderUIPadding.PaddingBottom = scaleUDim(0, 10)
+	informationHolderUIPadding.PaddingLeft = scaleUDim(0, 23)
+	informationHolderUIPadding.PaddingRight = scaleUDim(0, 22)
+	informationHolderUIPadding.PaddingTop = scaleUDim(0, 10)
 	informationHolderUIPadding.Parent = informationHolder
 
 	local globalSettingsButton = Instance.new("ImageButton")
@@ -405,7 +413,7 @@ function MacLib:Window(Settings)
 	title.Text = Settings.Title
 	title.TextColor3 = Color3.fromRGB(255, 255, 255)
 	title.RichText = true
-	title.TextSize = 18
+	title.TextSize = scaleSize(18)
 	title.TextTransparency = 0.1
 	title.TextTruncate = Enum.TextTruncate.SplitWord
 	title.TextXAlignment = Enum.TextXAlignment.Left
@@ -429,7 +437,7 @@ function MacLib:Window(Settings)
 	subtitle.Text = Settings.Subtitle
 	subtitle.RichText = true
 	subtitle.TextColor3 = Color3.fromRGB(255, 255, 255)
-	subtitle.TextSize = 12
+	subtitle.TextSize = scaleSize(12)
 	subtitle.TextTransparency = 0.7
 	subtitle.TextTruncate = Enum.TextTruncate.SplitWord
 	subtitle.TextXAlignment = Enum.TextXAlignment.Left
@@ -485,8 +493,8 @@ function MacLib:Window(Settings)
 
 	local informationGroupUIPadding = Instance.new("UIPadding")
 	informationGroupUIPadding.Name = "InformationGroupUIPadding"
-	informationGroupUIPadding.PaddingBottom = UDim.new(0, 17)
-	informationGroupUIPadding.PaddingLeft = UDim.new(0, 25)
+	informationGroupUIPadding.PaddingBottom = scaleUDim(0, 17)
+	informationGroupUIPadding.PaddingLeft = scaleUDim(0, 25)
 	informationGroupUIPadding.Parent = informationGroup
 
 	local informationGroupUIListLayout = Instance.new("UIListLayout")
@@ -542,7 +550,7 @@ function MacLib:Window(Settings)
 	)
 	displayName.Text = LocalPlayer.DisplayName
 	displayName.TextColor3 = Color3.fromRGB(255, 255, 255)
-	displayName.TextSize = 13
+	displayName.TextSize = scaleSize(13)
 	displayName.TextTransparency = 0.1
 	displayName.TextTruncate = Enum.TextTruncate.SplitWord
 	displayName.TextXAlignment = Enum.TextXAlignment.Left
@@ -557,8 +565,8 @@ function MacLib:Window(Settings)
 
 	local userAndDisplayFrameUIPadding = Instance.new("UIPadding")
 	userAndDisplayFrameUIPadding.Name = "UserAndDisplayFrameUIPadding"
-	userAndDisplayFrameUIPadding.PaddingLeft = UDim.new(0, 8)
-	userAndDisplayFrameUIPadding.PaddingTop = UDim.new(0, 3)
+	userAndDisplayFrameUIPadding.PaddingLeft = scaleUDim(0, 8)
+	userAndDisplayFrameUIPadding.PaddingTop = scaleUDim(0, 3)
 	userAndDisplayFrameUIPadding.Parent = userAndDisplayFrame
 
 	local userAndDisplayFrameUIListLayout = Instance.new("UIListLayout")
@@ -576,7 +584,7 @@ function MacLib:Window(Settings)
 	)
 	username.Text = "@" .. LocalPlayer.Name
 	username.TextColor3 = Color3.fromRGB(255, 255, 255)
-	username.TextSize = 12
+	username.TextSize = scaleSize(12)
 	username.TextTransparency = 0.7
 	username.TextTruncate = Enum.TextTruncate.SplitWord
 	username.TextXAlignment = Enum.TextXAlignment.Left
@@ -596,17 +604,17 @@ function MacLib:Window(Settings)
 
 	local userInfoUIPadding = Instance.new("UIPadding")
 	userInfoUIPadding.Name = "UserInfoUIPadding"
-	userInfoUIPadding.PaddingLeft = UDim.new(0, 10)
-	userInfoUIPadding.PaddingRight = UDim.new(0, 10)
+	userInfoUIPadding.PaddingLeft = scaleUDim(0, 10)
+	userInfoUIPadding.PaddingRight = scaleUDim(0, 10)
 	userInfoUIPadding.Parent = userInfo
 
 	userInfo.Parent = sidebarGroup
 
 	local sidebarGroupUIPadding = Instance.new("UIPadding")
 	sidebarGroupUIPadding.Name = "SidebarGroupUIPadding"
-	sidebarGroupUIPadding.PaddingLeft = UDim.new(0, 10)
-	sidebarGroupUIPadding.PaddingRight = UDim.new(0, 10)
-	sidebarGroupUIPadding.PaddingTop = UDim.new(0, 31)
+	sidebarGroupUIPadding.PaddingLeft = scaleUDim(0, 10)
+	sidebarGroupUIPadding.PaddingRight = scaleUDim(0, 10)
+	sidebarGroupUIPadding.PaddingTop = scaleUDim(0, 31)
 	sidebarGroupUIPadding.Parent = sidebarGroup
 
 	local tabSwitchers = Instance.new("Frame")
@@ -639,7 +647,7 @@ function MacLib:Window(Settings)
 
 	local tabSwitchersScrollingFrameUIPadding = Instance.new("UIPadding")
 	tabSwitchersScrollingFrameUIPadding.Name = "TabSwitchersScrollingFrameUIPadding"
-	tabSwitchersScrollingFrameUIPadding.PaddingTop = UDim.new(0, 2)
+	tabSwitchersScrollingFrameUIPadding.PaddingTop = scaleUDim(0, 2)
 	tabSwitchersScrollingFrameUIPadding.Parent = tabSwitchersScrollingFrame
 
 	tabSwitchersScrollingFrame.Parent = tabSwitchers
@@ -744,8 +752,8 @@ function MacLib:Window(Settings)
 
 	local uIPadding2 = Instance.new("UIPadding")
 	uIPadding2.Name = "UIPadding"
-	uIPadding2.PaddingLeft = UDim.new(0, 20)
-	uIPadding2.PaddingRight = UDim.new(0, 20)
+	uIPadding2.PaddingLeft = scaleUDim(0, 20)
+	uIPadding2.PaddingRight = scaleUDim(0, 20)
 	uIPadding2.Parent = elements
 
 	local moveIcon = Instance.new("ImageButton")
@@ -767,7 +775,7 @@ function MacLib:Window(Settings)
 	interact.FontFace = Font.new("rbxasset://fonts/families/SourceSansPro.json")
 	interact.Text = ""
 	interact.TextColor3 = Color3.fromRGB(0, 0, 0)
-	interact.TextSize = 14
+	interact.TextSize = scaleSize(14)
 	interact.AnchorPoint = Vector2.new(0.5, 0.5)
 	interact.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 	interact.BackgroundTransparency = 1
@@ -875,7 +883,7 @@ function MacLib:Window(Settings)
 	currentTab.Text = ""
 	currentTab.RichText = true
 	currentTab.TextColor3 = Color3.fromRGB(255, 255, 255)
-	currentTab.TextSize = 15
+	currentTab.TextSize = scaleSize(15)
 	currentTab.TextTransparency = 0.5
 	currentTab.TextTruncate = Enum.TextTruncate.SplitWord
 	currentTab.TextXAlignment = Enum.TextXAlignment.Left
@@ -913,13 +921,13 @@ function MacLib:Window(Settings)
 
 	local globalSettingsUICorner = Instance.new("UICorner")
 	globalSettingsUICorner.Name = "GlobalSettingsUICorner"
-	globalSettingsUICorner.CornerRadius = UDim.new(0, 10)
+	globalSettingsUICorner.CornerRadius = scaleUDim(0, 10)
 	globalSettingsUICorner.Parent = globalSettings
 
 	local globalSettingsUIPadding = Instance.new("UIPadding")
 	globalSettingsUIPadding.Name = "GlobalSettingsUIPadding"
-	globalSettingsUIPadding.PaddingBottom = UDim.new(0, 10)
-	globalSettingsUIPadding.PaddingTop = UDim.new(0, 10)
+	globalSettingsUIPadding.PaddingBottom = scaleUDim(0, 10)
+	globalSettingsUIPadding.PaddingTop = scaleUDim(0, 10)
 	globalSettingsUIPadding.Parent = globalSettings
 
 	local globalSettingsUIListLayout = Instance.new("UIListLayout")
@@ -1211,7 +1219,7 @@ function MacLib:Window(Settings)
 		globalSetting.FontFace = Font.new("rbxasset://fonts/families/SourceSansPro.json")
 		globalSetting.Text = ""
 		globalSetting.TextColor3 = Color3.fromRGB(0, 0, 0)
-		globalSetting.TextSize = 14
+		globalSetting.TextSize = scaleSize(14)
 		globalSetting.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 		globalSetting.BackgroundTransparency = 1
 		globalSetting.BorderColor3 = Color3.fromRGB(0, 0, 0)
@@ -1220,7 +1228,7 @@ function MacLib:Window(Settings)
 
 		local globalSettingToggleUIPadding = Instance.new("UIPadding")
 		globalSettingToggleUIPadding.Name = "GlobalSettingToggleUIPadding"
-		globalSettingToggleUIPadding.PaddingLeft = UDim.new(0, 15)
+		globalSettingToggleUIPadding.PaddingLeft = scaleUDim(0, 15)
 		globalSettingToggleUIPadding.Parent = globalSetting
 
 		local settingName = Instance.new("TextLabel")
@@ -1229,7 +1237,7 @@ function MacLib:Window(Settings)
 		settingName.Text = Settings.Name
 		settingName.RichText = true
 		settingName.TextColor3 = Color3.fromRGB(255, 255, 255)
-		settingName.TextSize = 13
+		settingName.TextSize = scaleSize(13)
 		settingName.TextTransparency = 0.5
 		settingName.TextTruncate = Enum.TextTruncate.SplitWord
 		settingName.TextXAlignment = Enum.TextXAlignment.Left
@@ -1261,7 +1269,7 @@ function MacLib:Window(Settings)
 		)
 		checkmark.Text = "✓"
 		checkmark.TextColor3 = Color3.fromRGB(255, 255, 255)
-		checkmark.TextSize = 13
+		checkmark.TextSize = scaleSize(13)
 		checkmark.TextTransparency = 1
 		checkmark.TextXAlignment = Enum.TextXAlignment.Left
 		checkmark.TextYAlignment = Enum.TextYAlignment.Top
@@ -1389,7 +1397,7 @@ function MacLib:Window(Settings)
 
 		local uIPadding1 = Instance.new("UIPadding")
 		uIPadding1.Name = "UIPadding"
-		uIPadding1.PaddingBottom = UDim.new(0, 15)
+		uIPadding1.PaddingBottom = scaleUDim(0, 15)
 		uIPadding1.Parent = sectionTabSwitchers
 
 		sectionTabSwitchers.Parent = tabGroup
@@ -1402,7 +1410,7 @@ function MacLib:Window(Settings)
 			tabSwitcher.FontFace = Font.new("rbxasset://fonts/families/SourceSansPro.json")
 			tabSwitcher.Text = ""
 			tabSwitcher.TextColor3 = Color3.fromRGB(0, 0, 0)
-			tabSwitcher.TextSize = 14
+			tabSwitcher.TextSize = scaleSize(14)
 			tabSwitcher.AutoButtonColor = false
 			tabSwitcher.AnchorPoint = Vector2.new(0.5, 0)
 			tabSwitcher.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
@@ -1459,7 +1467,7 @@ function MacLib:Window(Settings)
 			tabSwitcherName.Text = Settings.Name
 			tabSwitcherName.RichText = true
 			tabSwitcherName.TextColor3 = Color3.fromRGB(255, 255, 255)
-			tabSwitcherName.TextSize = 16
+			tabSwitcherName.TextSize = scaleSize(16)
 			tabSwitcherName.TextTransparency = 0.5
 			tabSwitcherName.TextTruncate = Enum.TextTruncate.SplitWord
 			tabSwitcherName.TextXAlignment = Enum.TextXAlignment.Left
@@ -1475,9 +1483,9 @@ function MacLib:Window(Settings)
 
 			local tabSwitcherUIPadding = Instance.new("UIPadding")
 			tabSwitcherUIPadding.Name = "TabSwitcherUIPadding"
-			tabSwitcherUIPadding.PaddingLeft = UDim.new(0, 24)
-			tabSwitcherUIPadding.PaddingRight = UDim.new(0, 35)
-			tabSwitcherUIPadding.PaddingTop = UDim.new(0, 1)
+			tabSwitcherUIPadding.PaddingLeft = scaleUDim(0, 24)
+			tabSwitcherUIPadding.PaddingRight = scaleUDim(0, 35)
+			tabSwitcherUIPadding.PaddingTop = scaleUDim(0, 1)
 			tabSwitcherUIPadding.Parent = tabSwitcher
 
 			tabSwitcher.Parent = sectionTabSwitchers
@@ -1494,9 +1502,9 @@ function MacLib:Window(Settings)
 
 			local elementsUIPadding = Instance.new("UIPadding")
 			elementsUIPadding.Name = "ElementsUIPadding"
-			elementsUIPadding.PaddingRight = UDim.new(0, 5)
-			elementsUIPadding.PaddingTop = UDim.new(0, 10)
-			elementsUIPadding.PaddingBottom = UDim.new(0, 10)
+			elementsUIPadding.PaddingRight = scaleUDim(0, 5)
+			elementsUIPadding.PaddingTop = scaleUDim(0, 10)
+			elementsUIPadding.PaddingBottom = scaleUDim(0, 10)
 			elementsUIPadding.Parent = elements1
 
 			local elementsScrolling = Instance.new("ScrollingFrame")
@@ -1516,10 +1524,10 @@ function MacLib:Window(Settings)
 
 			local elementsScrollingUIPadding = Instance.new("UIPadding")
 			elementsScrollingUIPadding.Name = "ElementsScrollingUIPadding"
-			elementsScrollingUIPadding.PaddingBottom = UDim.new(0, 5)
-			elementsScrollingUIPadding.PaddingLeft = UDim.new(0, 11)
-			elementsScrollingUIPadding.PaddingRight = UDim.new(0, 3)
-			elementsScrollingUIPadding.PaddingTop = UDim.new(0, 5)
+			elementsScrollingUIPadding.PaddingBottom = scaleUDim(0, 5)
+			elementsScrollingUIPadding.PaddingLeft = scaleUDim(0, 11)
+			elementsScrollingUIPadding.PaddingRight = scaleUDim(0, 3)
+			elementsScrollingUIPadding.PaddingTop = scaleUDim(0, 5)
 			elementsScrollingUIPadding.Parent = elementsScrolling
 
 			local elementsScrollingUIListLayout = Instance.new("UIListLayout")
@@ -1601,10 +1609,10 @@ function MacLib:Window(Settings)
 
 				local sectionUIPadding = Instance.new("UIPadding")
 				sectionUIPadding.Name = "SectionUIPadding"
-				sectionUIPadding.PaddingBottom = UDim.new(0, 20)
-				sectionUIPadding.PaddingLeft = UDim.new(0, 20)
-				sectionUIPadding.PaddingRight = UDim.new(0, 18)
-				sectionUIPadding.PaddingTop = UDim.new(0, 22)
+				sectionUIPadding.PaddingBottom = scaleUDim(0, 20)
+				sectionUIPadding.PaddingLeft = scaleUDim(0, 20)
+				sectionUIPadding.PaddingRight = scaleUDim(0, 18)
+				sectionUIPadding.PaddingTop = scaleUDim(0, 22)
 				sectionUIPadding.Parent = section
 
 				function SectionFunctions:Button(Settings, Flag)
@@ -1624,7 +1632,7 @@ function MacLib:Window(Settings)
 					buttonInteract.FontFace = Font.new(assets.interFont)
 					buttonInteract.RichText = true
 					buttonInteract.TextColor3 = Color3.fromRGB(255, 255, 255)
-					buttonInteract.TextSize = 13
+					buttonInteract.TextSize = scaleSize(13)
 					buttonInteract.TextTransparency = 0.5
 					buttonInteract.TextTruncate = Enum.TextTruncate.AtEnd
 					buttonInteract.TextXAlignment = Enum.TextXAlignment.Left
@@ -1719,7 +1727,7 @@ function MacLib:Window(Settings)
 					toggleName.Text = ToggleFunctions.Settings.Name
 					toggleName.RichText = true
 					toggleName.TextColor3 = Color3.fromRGB(255, 255, 255)
-					toggleName.TextSize = 13
+					toggleName.TextSize = scaleSize(13)
 					toggleName.TextTransparency = 0.5
 					toggleName.TextTruncate = Enum.TextTruncate.AtEnd
 					toggleName.TextXAlignment = Enum.TextXAlignment.Left
@@ -1750,10 +1758,10 @@ function MacLib:Window(Settings)
 
 					local toggleUIPadding = Instance.new("UIPadding")
 					toggleUIPadding.Name = "ToggleUIPadding"
-					toggleUIPadding.PaddingBottom = UDim.new(0, 1)
+					toggleUIPadding.PaddingBottom = scaleUDim(0, 1)
 					toggleUIPadding.PaddingLeft = UDim.new(0, -2)
-					toggleUIPadding.PaddingRight = UDim.new(0, 3)
-					toggleUIPadding.PaddingTop = UDim.new(0, 1)
+					toggleUIPadding.PaddingRight = scaleUDim(0, 3)
+					toggleUIPadding.PaddingTop = scaleUDim(0, 1)
 					toggleUIPadding.Parent = toggle1
 
 					local togglerHead = Instance.new("ImageLabel")
@@ -1858,7 +1866,7 @@ function MacLib:Window(Settings)
 					sliderName.Text = SliderFunctions.Settings.Name
 					sliderName.RichText = true
 					sliderName.TextColor3 = Color3.fromRGB(255, 255, 255)
-					sliderName.TextSize = 13
+					sliderName.TextSize = scaleSize(13)
 					sliderName.TextTransparency = 0.5
 					sliderName.TextTruncate = Enum.TextTruncate.AtEnd
 					sliderName.TextXAlignment = Enum.TextXAlignment.Left
@@ -1886,7 +1894,7 @@ function MacLib:Window(Settings)
 					sliderValue.Name = "SliderValue"
 					sliderValue.FontFace = Font.new(assets.interFont)
 					sliderValue.TextColor3 = Color3.fromRGB(255, 255, 255)
-					sliderValue.TextSize = 12
+					sliderValue.TextSize = scaleSize(12)
 					sliderValue.TextTransparency = 0.1
 					--sliderValue.TextTruncate = Enum.TextTruncate.AtEnd
 					sliderValue.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
@@ -1900,7 +1908,7 @@ function MacLib:Window(Settings)
 
 					local sliderValueUICorner = Instance.new("UICorner")
 					sliderValueUICorner.Name = "SliderValueUICorner"
-					sliderValueUICorner.CornerRadius = UDim.new(0, 4)
+					sliderValueUICorner.CornerRadius = scaleUDim(0, 4)
 					sliderValueUICorner.Parent = sliderValue
 
 					local sliderValueUIStroke = Instance.new("UIStroke")
@@ -1912,8 +1920,8 @@ function MacLib:Window(Settings)
 
 					local sliderValueUIPadding = Instance.new("UIPadding")
 					sliderValueUIPadding.Name = "SliderValueUIPadding"
-					sliderValueUIPadding.PaddingLeft = UDim.new(0, 2)
-					sliderValueUIPadding.PaddingRight = UDim.new(0, 2)
+					sliderValueUIPadding.PaddingLeft = scaleUDim(0, 2)
+					sliderValueUIPadding.PaddingRight = scaleUDim(0, 2)
 					sliderValueUIPadding.Parent = sliderValue
 
 					sliderValue.Parent = sliderElements
@@ -1954,7 +1962,7 @@ function MacLib:Window(Settings)
 
 					local sliderElementsUIPadding = Instance.new("UIPadding")
 					sliderElementsUIPadding.Name = "SliderElementsUIPadding"
-					sliderElementsUIPadding.PaddingTop = UDim.new(0, 3)
+					sliderElementsUIPadding.PaddingTop = scaleUDim(0, 3)
 					sliderElementsUIPadding.Parent = sliderElements
 
 					sliderElements.Parent = slider
@@ -2119,7 +2127,7 @@ function MacLib:Window(Settings)
 					inputName.Text = InputFunctions.Settings.Name
 					inputName.RichText = true
 					inputName.TextColor3 = Color3.fromRGB(255, 255, 255)
-					inputName.TextSize = 13
+					inputName.TextSize = scaleSize(13)
 					inputName.TextTransparency = 0.5
 					inputName.TextTruncate = Enum.TextTruncate.AtEnd
 					inputName.TextXAlignment = Enum.TextXAlignment.Left
@@ -2138,7 +2146,7 @@ function MacLib:Window(Settings)
 					inputBox.FontFace = Font.new(assets.interFont)
 					inputBox.Text = "Hello world!"
 					inputBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-					inputBox.TextSize = 12
+					inputBox.TextSize = scaleSize(12)
 					inputBox.TextTransparency = 0.1
 					inputBox.AnchorPoint = Vector2.new(1, 0.5)
 					inputBox.AutomaticSize = Enum.AutomaticSize.X
@@ -2154,7 +2162,7 @@ function MacLib:Window(Settings)
 
 					local inputBoxUICorner = Instance.new("UICorner")
 					inputBoxUICorner.Name = "InputBoxUICorner"
-					inputBoxUICorner.CornerRadius = UDim.new(0, 4)
+					inputBoxUICorner.CornerRadius = scaleUDim(0, 4)
 					inputBoxUICorner.Parent = inputBox
 
 					local inputBoxUIStroke = Instance.new("UIStroke")
@@ -2166,8 +2174,8 @@ function MacLib:Window(Settings)
 
 					local inputBoxUIPadding = Instance.new("UIPadding")
 					inputBoxUIPadding.Name = "InputBoxUIPadding"
-					inputBoxUIPadding.PaddingLeft = UDim.new(0, 5)
-					inputBoxUIPadding.PaddingRight = UDim.new(0, 5)
+					inputBoxUIPadding.PaddingLeft = scaleUDim(0, 5)
+					inputBoxUIPadding.PaddingRight = scaleUDim(0, 5)
 					inputBoxUIPadding.Parent = inputBox
 
 					local inputBoxUISizeConstraint = Instance.new("UISizeConstraint")
@@ -2295,7 +2303,7 @@ function MacLib:Window(Settings)
 					keybindName.Text = KeybindFunctions.Settings.Name
 					keybindName.RichText = true
 					keybindName.TextColor3 = Color3.fromRGB(255, 255, 255)
-					keybindName.TextSize = 13
+					keybindName.TextSize = scaleSize(13)
 					keybindName.TextTransparency = 0.5
 					keybindName.TextTruncate = Enum.TextTruncate.AtEnd
 					keybindName.TextXAlignment = Enum.TextXAlignment.Left
@@ -2316,7 +2324,7 @@ function MacLib:Window(Settings)
 					binderBox.PlaceholderText = "..."
 					binderBox.Text = ""
 					binderBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-					binderBox.TextSize = 12
+					binderBox.TextSize = scaleSize(12)
 					binderBox.TextTransparency = 0.1
 					binderBox.AnchorPoint = Vector2.new(1, 0.5)
 					binderBox.AutomaticSize = Enum.AutomaticSize.X
@@ -2331,7 +2339,7 @@ function MacLib:Window(Settings)
 
 					local binderBoxUICorner = Instance.new("UICorner")
 					binderBoxUICorner.Name = "BinderBoxUICorner"
-					binderBoxUICorner.CornerRadius = UDim.new(0, 4)
+					binderBoxUICorner.CornerRadius = scaleUDim(0, 4)
 					binderBoxUICorner.Parent = binderBox
 
 					local binderBoxUIStroke = Instance.new("UIStroke")
@@ -2343,8 +2351,8 @@ function MacLib:Window(Settings)
 
 					local binderBoxUIPadding = Instance.new("UIPadding")
 					binderBoxUIPadding.Name = "BinderBoxUIPadding"
-					binderBoxUIPadding.PaddingLeft = UDim.new(0, 5)
-					binderBoxUIPadding.PaddingRight = UDim.new(0, 5)
+					binderBoxUIPadding.PaddingLeft = scaleUDim(0, 5)
+					binderBoxUIPadding.PaddingRight = scaleUDim(0, 5)
 					binderBoxUIPadding.Parent = binderBox
 
 					local binderBoxUISizeConstraint = Instance.new("UISizeConstraint")
@@ -2474,8 +2482,8 @@ function MacLib:Window(Settings)
 
 					local dropdownUIPadding = Instance.new("UIPadding")
 					dropdownUIPadding.Name = "DropdownUIPadding"
-					dropdownUIPadding.PaddingLeft = UDim.new(0, 15)
-					dropdownUIPadding.PaddingRight = UDim.new(0, 15)
+					dropdownUIPadding.PaddingLeft = scaleUDim(0, 15)
+					dropdownUIPadding.PaddingRight = scaleUDim(0, 15)
 					dropdownUIPadding.Parent = dropdown
 
 					local interact = Instance.new("TextButton")
@@ -2483,7 +2491,7 @@ function MacLib:Window(Settings)
 					interact.FontFace = Font.new("rbxasset://fonts/families/SourceSansPro.json")
 					interact.Text = ""
 					interact.TextColor3 = Color3.fromRGB(0, 0, 0)
-					interact.TextSize = 14
+					interact.TextSize = scaleSize(14)
 					interact.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 					interact.BackgroundTransparency = 1
 					interact.BorderColor3 = Color3.fromRGB(0, 0, 0)
@@ -2497,7 +2505,7 @@ function MacLib:Window(Settings)
 					dropdownName.Text = Settings.Default and (DropdownFunctions.Settings.Name .. " • " .. table.concat(Selected, ", ")) or (DropdownFunctions.Settings.Name .. "...")
 					dropdownName.RichText = true
 					dropdownName.TextColor3 = Color3.fromRGB(255, 255, 255)
-					dropdownName.TextSize = 13
+					dropdownName.TextSize = scaleSize(13)
 					dropdownName.TextTransparency = 0.5
 					dropdownName.TextTruncate = Enum.TextTruncate.SplitWord
 					dropdownName.TextXAlignment = Enum.TextXAlignment.Left
@@ -2518,7 +2526,7 @@ function MacLib:Window(Settings)
 
 					local dropdownUICorner = Instance.new("UICorner")
 					dropdownUICorner.Name = "DropdownUICorner"
-					dropdownUICorner.CornerRadius = UDim.new(0, 6)
+					dropdownUICorner.CornerRadius = scaleUDim(0, 6)
 					dropdownUICorner.Parent = dropdown
 
 					local dropdownImage = Instance.new("ImageLabel")
@@ -2547,8 +2555,8 @@ function MacLib:Window(Settings)
 
 					local dropdownFrameUIPadding = Instance.new("UIPadding")
 					dropdownFrameUIPadding.Name = "DropdownFrameUIPadding"
-					dropdownFrameUIPadding.PaddingTop = UDim.new(0, 38)
-					dropdownFrameUIPadding.PaddingBottom = UDim.new(0, 10)
+					dropdownFrameUIPadding.PaddingTop = scaleUDim(0, 38)
+					dropdownFrameUIPadding.PaddingBottom = scaleUDim(0, 10)
 					dropdownFrameUIPadding.Parent = dropdownFrame
 
 					local dropdownFrameUIListLayout = Instance.new("UIListLayout")
@@ -2587,7 +2595,7 @@ function MacLib:Window(Settings)
 
 					local uIPadding = Instance.new("UIPadding")
 					uIPadding.Name = "UIPadding"
-					uIPadding.PaddingLeft = UDim.new(0, 15)
+					uIPadding.PaddingLeft = scaleUDim(0, 15)
 					uIPadding.Parent = search
 
 					local searchBox = Instance.new("TextBox")
@@ -2602,7 +2610,7 @@ function MacLib:Window(Settings)
 					searchBox.PlaceholderText = "Search..."
 					searchBox.Text = ""
 					searchBox.TextColor3 = Color3.fromRGB(200, 200, 200)
-					searchBox.TextSize = 14
+					searchBox.TextSize = scaleSize(14)
 					searchBox.TextXAlignment = Enum.TextXAlignment.Left
 					searchBox.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 					searchBox.BackgroundTransparency = 1
@@ -2646,7 +2654,7 @@ function MacLib:Window(Settings)
 
 					local uIPadding1 = Instance.new("UIPadding")
 					uIPadding1.Name = "UIPadding"
-					uIPadding1.PaddingLeft = UDim.new(0, 23)
+					uIPadding1.PaddingLeft = scaleUDim(0, 23)
 					uIPadding1.Parent = searchBox
 
 					searchBox.Parent = search
@@ -2769,7 +2777,7 @@ function MacLib:Window(Settings)
 						option.FontFace = Font.new("rbxasset://fonts/families/SourceSansPro.json")
 						option.Text = ""
 						option.TextColor3 = Color3.fromRGB(0, 0, 0)
-						option.TextSize = 14
+						option.TextSize = scaleSize(14)
 						option.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 						option.BackgroundTransparency = 1
 						option.BorderColor3 = Color3.fromRGB(0, 0, 0)
@@ -2778,7 +2786,7 @@ function MacLib:Window(Settings)
 
 						local optionUIPadding = Instance.new("UIPadding")
 						optionUIPadding.Name = "OptionUIPadding"
-						optionUIPadding.PaddingLeft = UDim.new(0, 15)
+						optionUIPadding.PaddingLeft = scaleUDim(0, 15)
 						optionUIPadding.Parent = option
 
 						local optionName = Instance.new("TextLabel")
@@ -2787,7 +2795,7 @@ function MacLib:Window(Settings)
 						optionName.Text = v
 						optionName.RichText = true
 						optionName.TextColor3 = Color3.fromRGB(255, 255, 255)
-						optionName.TextSize = 13
+						optionName.TextSize = scaleSize(13)
 						optionName.TextTransparency = 0.5
 						optionName.TextTruncate = Enum.TextTruncate.AtEnd
 						optionName.TextXAlignment = Enum.TextXAlignment.Left
@@ -2814,7 +2822,7 @@ function MacLib:Window(Settings)
 						checkmark.FontFace = Font.new(assets.interFont)
 						checkmark.Text = "✓"
 						checkmark.TextColor3 = Color3.fromRGB(255, 255, 255)
-						checkmark.TextSize = 13
+						checkmark.TextSize = scaleSize(13)
 						checkmark.TextTransparency = 1
 						checkmark.TextXAlignment = Enum.TextXAlignment.Left
 						checkmark.TextYAlignment = Enum.TextYAlignment.Top
@@ -3051,7 +3059,7 @@ function MacLib:Window(Settings)
 					colorpickerName.FontFace = Font.new(assets.interFont)
 					colorpickerName.Text = Settings.Name
 					colorpickerName.TextColor3 = Color3.fromRGB(255, 255, 255)
-					colorpickerName.TextSize = 13
+					colorpickerName.TextSize = scaleSize(13)
 					colorpickerName.TextTransparency = 0.5
 					colorpickerName.RichText = true
 					colorpickerName.TextTruncate = Enum.TextTruncate.AtEnd
@@ -3090,7 +3098,7 @@ function MacLib:Window(Settings)
 
 					local uICorner = Instance.new("UICorner")
 					uICorner.Name = "UICorner"
-					uICorner.CornerRadius = UDim.new(0, 6)
+					uICorner.CornerRadius = scaleUDim(0, 6)
 					uICorner.Parent = colorC
 
 					local interact = Instance.new("TextButton")
@@ -3098,7 +3106,7 @@ function MacLib:Window(Settings)
 					interact.FontFace = Font.new("rbxasset://fonts/families/SourceSansPro.json")
 					interact.Text = ""
 					interact.TextColor3 = Color3.fromRGB(0, 0, 0)
-					interact.TextSize = 14
+					interact.TextSize = scaleSize(14)
 					interact.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 					interact.BackgroundTransparency = 1
 					interact.BorderColor3 = Color3.fromRGB(0, 0, 0)
@@ -3110,7 +3118,7 @@ function MacLib:Window(Settings)
 
 					local uICorner1 = Instance.new("UICorner")
 					uICorner1.Name = "UICorner"
-					uICorner1.CornerRadius = UDim.new(0, 8)
+					uICorner1.CornerRadius = scaleUDim(0, 8)
 					uICorner1.Parent = colorCbg
 
 					colorCbg.Parent = colorpicker
@@ -3126,7 +3134,7 @@ function MacLib:Window(Settings)
 
 					local baseUICorner = Instance.new("UICorner")
 					baseUICorner.Name = "BaseUICorner"
-					baseUICorner.CornerRadius = UDim.new(0, 10)
+					baseUICorner.CornerRadius = scaleUDim(0, 10)
 					baseUICorner.Parent = colorPicker
 
 					local prompt = Instance.new("Frame")
@@ -3153,7 +3161,7 @@ function MacLib:Window(Settings)
 
 					local globalSettingsUICorner = Instance.new("UICorner")
 					globalSettingsUICorner.Name = "GlobalSettingsUICorner"
-					globalSettingsUICorner.CornerRadius = UDim.new(0, 10)
+					globalSettingsUICorner.CornerRadius = scaleUDim(0, 10)
 					globalSettingsUICorner.Parent = prompt
 
 					local uIListLayout = Instance.new("UIListLayout")
@@ -3178,7 +3186,7 @@ function MacLib:Window(Settings)
 					value.FontFace = Font.new("rbxasset://fonts/families/SourceSansPro.json")
 					value.Text = ""
 					value.TextColor3 = Color3.fromRGB(0, 0, 0)
-					value.TextSize = 14
+					value.TextSize = scaleSize(14)
 					value.AutoButtonColor = false
 					value.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 					value.BorderColor3 = Color3.fromRGB(0, 0, 0)
@@ -3202,7 +3210,7 @@ function MacLib:Window(Settings)
 					slide.BorderColor3 = Color3.fromRGB(27, 42, 53)
 					slide.BorderSizePixel = 0
 					slide.Position = UDim2.fromScale(0, 0.5)
-					slide.Size = UDim2.new(0, 13, 1, 8)
+					slide.Size = UDim2.new(0, scaleSize(13), 1, scaleSize(8))
 
 					local uICorner = Instance.new("UICorner")
 					uICorner.Name = "UICorner"
@@ -3219,7 +3227,7 @@ function MacLib:Window(Settings)
 
 					local uICorner1 = Instance.new("UICorner")
 					uICorner1.Name = "UICorner"
-					uICorner1.CornerRadius = UDim.new(0, 6)
+					uICorner1.CornerRadius = scaleUDim(0, 6)
 					uICorner1.Parent = value
 
 					local uIStroke1 = Instance.new("UIStroke")
@@ -3315,7 +3323,7 @@ function MacLib:Window(Settings)
 					inputName.FontFace = Font.new(assets.interFont)
 					inputName.Text = "Red"
 					inputName.TextColor3 = Color3.fromRGB(255, 255, 255)
-					inputName.TextSize = 13
+					inputName.TextSize = scaleSize(13)
 					inputName.TextTransparency = 0.5
 					inputName.TextTruncate = Enum.TextTruncate.AtEnd
 					inputName.TextXAlignment = Enum.TextXAlignment.Left
@@ -3345,7 +3353,7 @@ function MacLib:Window(Settings)
 					inputBox.FontFace = Font.new(assets.interFont)
 					inputBox.Text = "255"
 					inputBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-					inputBox.TextSize = 12
+					inputBox.TextSize = scaleSize(12)
 					inputBox.TextTransparency = 0.1
 					inputBox.TextXAlignment = Enum.TextXAlignment.Left
 					inputBox.AnchorPoint = Vector2.new(1, 0.5)
@@ -3360,7 +3368,7 @@ function MacLib:Window(Settings)
 
 					local inputBoxUICorner = Instance.new("UICorner")
 					inputBoxUICorner.Name = "InputBoxUICorner"
-					inputBoxUICorner.CornerRadius = UDim.new(0, 4)
+					inputBoxUICorner.CornerRadius = scaleUDim(0, 4)
 					inputBoxUICorner.Parent = inputBox
 
 					local inputBoxUIStroke = Instance.new("UIStroke")
@@ -3376,8 +3384,8 @@ function MacLib:Window(Settings)
 
 					local inputBoxUIPadding = Instance.new("UIPadding")
 					inputBoxUIPadding.Name = "InputBoxUIPadding"
-					inputBoxUIPadding.PaddingLeft = UDim.new(0, 8)
-					inputBoxUIPadding.PaddingRight = UDim.new(0, 10)
+					inputBoxUIPadding.PaddingLeft = scaleUDim(0, 8)
+					inputBoxUIPadding.PaddingRight = scaleUDim(0, 10)
 					inputBoxUIPadding.Parent = inputBox
 
 					inputBox.Parent = red
@@ -3399,7 +3407,7 @@ function MacLib:Window(Settings)
 					inputName1.FontFace = Font.new(assets.interFont)
 					inputName1.Text = "Green"
 					inputName1.TextColor3 = Color3.fromRGB(255, 255, 255)
-					inputName1.TextSize = 13
+					inputName1.TextSize = scaleSize(13)
 					inputName1.TextTransparency = 0.5
 					inputName1.TextTruncate = Enum.TextTruncate.AtEnd
 					inputName1.TextXAlignment = Enum.TextXAlignment.Left
@@ -3428,7 +3436,7 @@ function MacLib:Window(Settings)
 					inputBox1.FontFace = Font.new(assets.interFont)
 					inputBox1.Text = "255"
 					inputBox1.TextColor3 = Color3.fromRGB(255, 255, 255)
-					inputBox1.TextSize = 12
+					inputBox1.TextSize = scaleSize(12)
 					inputBox1.TextTransparency = 0.1
 					inputBox1.TextXAlignment = Enum.TextXAlignment.Left
 					inputBox1.AnchorPoint = Vector2.new(1, 0.5)
@@ -3443,7 +3451,7 @@ function MacLib:Window(Settings)
 
 					local inputBoxUICorner1 = Instance.new("UICorner")
 					inputBoxUICorner1.Name = "InputBoxUICorner"
-					inputBoxUICorner1.CornerRadius = UDim.new(0, 4)
+					inputBoxUICorner1.CornerRadius = scaleUDim(0, 4)
 					inputBoxUICorner1.Parent = inputBox1
 
 					local inputBoxUIStroke1 = Instance.new("UIStroke")
@@ -3459,8 +3467,8 @@ function MacLib:Window(Settings)
 
 					local inputBoxUIPadding1 = Instance.new("UIPadding")
 					inputBoxUIPadding1.Name = "InputBoxUIPadding"
-					inputBoxUIPadding1.PaddingLeft = UDim.new(0, 8)
-					inputBoxUIPadding1.PaddingRight = UDim.new(0, 10)
+					inputBoxUIPadding1.PaddingLeft = scaleUDim(0, 8)
+					inputBoxUIPadding1.PaddingRight = scaleUDim(0, 10)
 					inputBoxUIPadding1.Parent = inputBox1
 
 					inputBox1.Parent = green
@@ -3482,7 +3490,7 @@ function MacLib:Window(Settings)
 					inputName2.FontFace = Font.new(assets.interFont)
 					inputName2.Text = "Blue"
 					inputName2.TextColor3 = Color3.fromRGB(255, 255, 255)
-					inputName2.TextSize = 13
+					inputName2.TextSize = scaleSize(13)
 					inputName2.TextTransparency = 0.5
 					inputName2.TextTruncate = Enum.TextTruncate.AtEnd
 					inputName2.TextXAlignment = Enum.TextXAlignment.Left
@@ -3511,7 +3519,7 @@ function MacLib:Window(Settings)
 					inputBox2.FontFace = Font.new(assets.interFont)
 					inputBox2.Text = "255"
 					inputBox2.TextColor3 = Color3.fromRGB(255, 255, 255)
-					inputBox2.TextSize = 12
+					inputBox2.TextSize = scaleSize(12)
 					inputBox2.TextTransparency = 0.1
 					inputBox2.TextXAlignment = Enum.TextXAlignment.Left
 					inputBox2.AnchorPoint = Vector2.new(1, 0.5)
@@ -3526,7 +3534,7 @@ function MacLib:Window(Settings)
 
 					local inputBoxUICorner2 = Instance.new("UICorner")
 					inputBoxUICorner2.Name = "InputBoxUICorner"
-					inputBoxUICorner2.CornerRadius = UDim.new(0, 4)
+					inputBoxUICorner2.CornerRadius = scaleUDim(0, 4)
 					inputBoxUICorner2.Parent = inputBox2
 
 					local inputBoxUIStroke2 = Instance.new("UIStroke")
@@ -3542,8 +3550,8 @@ function MacLib:Window(Settings)
 
 					local inputBoxUIPadding2 = Instance.new("UIPadding")
 					inputBoxUIPadding2.Name = "InputBoxUIPadding"
-					inputBoxUIPadding2.PaddingLeft = UDim.new(0, 8)
-					inputBoxUIPadding2.PaddingRight = UDim.new(0, 10)
+					inputBoxUIPadding2.PaddingLeft = scaleUDim(0, 8)
+					inputBoxUIPadding2.PaddingRight = scaleUDim(0, 10)
 					inputBoxUIPadding2.Parent = inputBox2
 
 					inputBox2.Parent = blue
@@ -3566,7 +3574,7 @@ function MacLib:Window(Settings)
 					inputName3.FontFace = Font.new(assets.interFont)
 					inputName3.Text = "Alpha"
 					inputName3.TextColor3 = Color3.fromRGB(255, 255, 255)
-					inputName3.TextSize = 13
+					inputName3.TextSize = scaleSize(13)
 					inputName3.TextTransparency = 0.5
 					inputName3.TextTruncate = Enum.TextTruncate.AtEnd
 					inputName3.TextXAlignment = Enum.TextXAlignment.Left
@@ -3595,7 +3603,7 @@ function MacLib:Window(Settings)
 					inputBox3.FontFace = Font.new(assets.interFont)
 					inputBox3.Text = "0"
 					inputBox3.TextColor3 = Color3.fromRGB(255, 255, 255)
-					inputBox3.TextSize = 12
+					inputBox3.TextSize = scaleSize(12)
 					inputBox3.TextTransparency = 0.1
 					inputBox3.TextXAlignment = Enum.TextXAlignment.Left
 					inputBox3.AnchorPoint = Vector2.new(1, 0.5)
@@ -3610,7 +3618,7 @@ function MacLib:Window(Settings)
 
 					local inputBoxUICorner3 = Instance.new("UICorner")
 					inputBoxUICorner3.Name = "InputBoxUICorner"
-					inputBoxUICorner3.CornerRadius = UDim.new(0, 4)
+					inputBoxUICorner3.CornerRadius = scaleUDim(0, 4)
 					inputBoxUICorner3.Parent = inputBox3
 
 					local inputBoxUIStroke3 = Instance.new("UIStroke")
@@ -3626,8 +3634,8 @@ function MacLib:Window(Settings)
 
 					local inputBoxUIPadding3 = Instance.new("UIPadding")
 					inputBoxUIPadding3.Name = "InputBoxUIPadding"
-					inputBoxUIPadding3.PaddingLeft = UDim.new(0, 8)
-					inputBoxUIPadding3.PaddingRight = UDim.new(0, 10)
+					inputBoxUIPadding3.PaddingLeft = scaleUDim(0, 8)
+					inputBoxUIPadding3.PaddingRight = scaleUDim(0, 10)
 					inputBoxUIPadding3.Parent = inputBox3
 
 					inputBox3.Parent = alpha
@@ -3648,7 +3656,7 @@ function MacLib:Window(Settings)
 					inputName4.FontFace = Font.new(assets.interFont)
 					inputName4.Text = "Hex"
 					inputName4.TextColor3 = Color3.fromRGB(255, 255, 255)
-					inputName4.TextSize = 13
+					inputName4.TextSize = scaleSize(13)
 					inputName4.TextTransparency = 0.5
 					inputName4.TextTruncate = Enum.TextTruncate.AtEnd
 					inputName4.TextXAlignment = Enum.TextXAlignment.Left
@@ -3678,7 +3686,7 @@ function MacLib:Window(Settings)
 					inputBox4.FontFace = Font.new(assets.interFont)
 					inputBox4.Text = "255"
 					inputBox4.TextColor3 = Color3.fromRGB(255, 255, 255)
-					inputBox4.TextSize = 12
+					inputBox4.TextSize = scaleSize(12)
 					inputBox4.TextTransparency = 0.1
 					inputBox4.TextXAlignment = Enum.TextXAlignment.Left
 					inputBox4.AnchorPoint = Vector2.new(1, 0.5)
@@ -3693,7 +3701,7 @@ function MacLib:Window(Settings)
 
 					local inputBoxUICorner4 = Instance.new("UICorner")
 					inputBoxUICorner4.Name = "InputBoxUICorner"
-					inputBoxUICorner4.CornerRadius = UDim.new(0, 4)
+					inputBoxUICorner4.CornerRadius = scaleUDim(0, 4)
 					inputBoxUICorner4.Parent = inputBox4
 
 					local inputBoxUIStroke4 = Instance.new("UIStroke")
@@ -3709,8 +3717,8 @@ function MacLib:Window(Settings)
 
 					local inputBoxUIPadding4 = Instance.new("UIPadding")
 					inputBoxUIPadding4.Name = "InputBoxUIPadding"
-					inputBoxUIPadding4.PaddingLeft = UDim.new(0, 8)
-					inputBoxUIPadding4.PaddingRight = UDim.new(0, 10)
+					inputBoxUIPadding4.PaddingLeft = scaleUDim(0, 8)
+					inputBoxUIPadding4.PaddingRight = scaleUDim(0, 10)
 					inputBoxUIPadding4.Parent = inputBox4
 
 					inputBox4.Parent = hex
@@ -3721,7 +3729,7 @@ function MacLib:Window(Settings)
 
 					local uIPadding = Instance.new("UIPadding")
 					uIPadding.Name = "UIPadding"
-					uIPadding.PaddingRight = UDim.new(0, 5)
+					uIPadding.PaddingRight = scaleUDim(0, 5)
 					uIPadding.Parent = wheel
 
 					wheel.Parent = colorOptions
@@ -3835,7 +3843,7 @@ function MacLib:Window(Settings)
 					)
 					confirm.Text = "Confirm"
 					confirm.TextColor3 = Color3.fromRGB(255, 255, 255)
-					confirm.TextSize = 15
+					confirm.TextSize = scaleSize(15)
 					confirm.TextTransparency = 0.5
 					confirm.TextTruncate = Enum.TextTruncate.AtEnd
 					confirm.AutoButtonColor = false
@@ -3847,15 +3855,15 @@ function MacLib:Window(Settings)
 
 					local uIPadding1 = Instance.new("UIPadding")
 					uIPadding1.Name = "UIPadding"
-					uIPadding1.PaddingBottom = UDim.new(0, 9)
-					uIPadding1.PaddingLeft = UDim.new(0, 10)
-					uIPadding1.PaddingRight = UDim.new(0, 10)
-					uIPadding1.PaddingTop = UDim.new(0, 9)
+					uIPadding1.PaddingBottom = scaleUDim(0, 9)
+					uIPadding1.PaddingLeft = scaleUDim(0, 10)
+					uIPadding1.PaddingRight = scaleUDim(0, 10)
+					uIPadding1.PaddingTop = scaleUDim(0, 9)
 					uIPadding1.Parent = confirm
 
 					local baseUICorner = Instance.new("UICorner")
 					baseUICorner.Name = "BaseUICorner"
-					baseUICorner.CornerRadius = UDim.new(0, 10)
+					baseUICorner.CornerRadius = scaleUDim(0, 10)
 					baseUICorner.Parent = confirm
 
 					confirm.Parent = interactions
@@ -3869,7 +3877,7 @@ function MacLib:Window(Settings)
 					)
 					cancel.Text = "Cancel"
 					cancel.TextColor3 = Color3.fromRGB(255, 255, 255)
-					cancel.TextSize = 15
+					cancel.TextSize = scaleSize(15)
 					cancel.TextTransparency = 0.5
 					cancel.TextTruncate = Enum.TextTruncate.AtEnd
 					cancel.AutoButtonColor = false
@@ -3881,32 +3889,32 @@ function MacLib:Window(Settings)
 
 					local baseUICorner1 = Instance.new("UICorner")
 					baseUICorner1.Name = "BaseUICorner"
-					baseUICorner1.CornerRadius = UDim.new(0, 10)
+					baseUICorner1.CornerRadius = scaleUDim(0, 10)
 					baseUICorner1.Parent = cancel
 
 					local uIPadding2 = Instance.new("UIPadding")
 					uIPadding2.Name = "UIPadding"
-					uIPadding2.PaddingBottom = UDim.new(0, 9)
-					uIPadding2.PaddingLeft = UDim.new(0, 10)
-					uIPadding2.PaddingRight = UDim.new(0, 10)
-					uIPadding2.PaddingTop = UDim.new(0, 9)
+					uIPadding2.PaddingBottom = scaleUDim(0, 9)
+					uIPadding2.PaddingLeft = scaleUDim(0, 10)
+					uIPadding2.PaddingRight = scaleUDim(0, 10)
+					uIPadding2.PaddingTop = scaleUDim(0, 9)
 					uIPadding2.Parent = cancel
 
 					cancel.Parent = interactions
 
 					local uIPadding3 = Instance.new("UIPadding")
 					uIPadding3.Name = "UIPadding"
-					uIPadding3.PaddingTop = UDim.new(0, 10)
+					uIPadding3.PaddingTop = scaleUDim(0, 10)
 					uIPadding3.Parent = interactions
 
 					interactions.Parent = prompt
 
 					local globalSettingsUIPadding = Instance.new("UIPadding")
 					globalSettingsUIPadding.Name = "GlobalSettingsUIPadding"
-					globalSettingsUIPadding.PaddingBottom = UDim.new(0, 20)
-					globalSettingsUIPadding.PaddingLeft = UDim.new(0, 20)
-					globalSettingsUIPadding.PaddingRight = UDim.new(0, 20)
-					globalSettingsUIPadding.PaddingTop = UDim.new(0, 20)
+					globalSettingsUIPadding.PaddingBottom = scaleUDim(0, 20)
+					globalSettingsUIPadding.PaddingLeft = scaleUDim(0, 20)
+					globalSettingsUIPadding.PaddingRight = scaleUDim(0, 20)
+					globalSettingsUIPadding.PaddingTop = scaleUDim(0, 20)
 					globalSettingsUIPadding.Parent = prompt
 
 					local paragraph = Instance.new("Frame")
@@ -3928,7 +3936,7 @@ function MacLib:Window(Settings)
 					paragraphHeader.RichText = true
 					paragraphHeader.Text = ColorpickerFunctions.Settings.Name
 					paragraphHeader.TextColor3 = Color3.fromRGB(255, 255, 255)
-					paragraphHeader.TextSize = 18
+					paragraphHeader.TextSize = scaleSize(18)
 					paragraphHeader.TextTransparency = 0.4
 					paragraphHeader.TextWrapped = true
 					paragraphHeader.TextYAlignment = Enum.TextYAlignment.Top
@@ -3949,7 +3957,7 @@ function MacLib:Window(Settings)
 
 					local uIPadding4 = Instance.new("UIPadding")
 					uIPadding4.Name = "UIPadding"
-					uIPadding4.PaddingBottom = UDim.new(0, 15)
+					uIPadding4.PaddingBottom = scaleUDim(0, 15)
 					uIPadding4.Parent = paragraph
 
 					local line = Instance.new("Frame")
@@ -4329,7 +4337,7 @@ function MacLib:Window(Settings)
 
 					local uIPadding = Instance.new("UIPadding")
 					uIPadding.Name = "UIPadding"
-					uIPadding.PaddingBottom = UDim.new(0, 5)
+					uIPadding.PaddingBottom = scaleUDim(0, 5)
 					uIPadding.Parent = header
 
 					local headerText = Instance.new("TextLabel")
@@ -4342,7 +4350,7 @@ function MacLib:Window(Settings)
 					headerText.RichText = true
 					headerText.Text = HeaderFunctions.Settings.Text or HeaderFunctions.Settings.Name
 					headerText.TextColor3 = Color3.fromRGB(255, 255, 255)
-					headerText.TextSize = 16
+					headerText.TextSize = scaleSize(16)
 					headerText.TextTransparency = 0.3
 					headerText.TextWrapped = true
 					headerText.TextXAlignment = Enum.TextXAlignment.Left
@@ -4386,7 +4394,7 @@ function MacLib:Window(Settings)
 					labelText.RichText = true
 					labelText.Text = LabelFunctions.Settings.Text or LabelFunctions.Settings.Name -- Settings.Name Deprecated use Settings.Text
 					labelText.TextColor3 = Color3.fromRGB(255, 255, 255)
-					labelText.TextSize = 13
+					labelText.TextSize = scaleSize(13)
 					labelText.TextTransparency = 0.5
 					labelText.TextWrapped = true
 					labelText.TextXAlignment = Enum.TextXAlignment.Left
@@ -4430,7 +4438,7 @@ function MacLib:Window(Settings)
 					subLabelText.RichText = true
 					subLabelText.Text = SubLabelFunctions.Settings.Text or SubLabelFunctions.Settings.Name -- Settings.Name Deprecated use Settings.Text
 					subLabelText.TextColor3 = Color3.fromRGB(255, 255, 255)
-					subLabelText.TextSize = 12
+					subLabelText.TextSize = scaleSize(12)
 					subLabelText.TextTransparency = 0.7
 					subLabelText.TextWrapped = true
 					subLabelText.TextXAlignment = Enum.TextXAlignment.Left
@@ -4478,7 +4486,7 @@ function MacLib:Window(Settings)
 					paragraphHeader.RichText = true
 					paragraphHeader.Text = ParagraphFunctions.Settings.Header
 					paragraphHeader.TextColor3 = Color3.fromRGB(255, 255, 255)
-					paragraphHeader.TextSize = 15
+					paragraphHeader.TextSize = scaleSize(15)
 					paragraphHeader.TextTransparency = 0.4
 					paragraphHeader.TextWrapped = true
 					paragraphHeader.TextXAlignment = Enum.TextXAlignment.Left
@@ -4502,7 +4510,7 @@ function MacLib:Window(Settings)
 					paragraphBody.RichText = true
 					paragraphBody.Text = ParagraphFunctions.Settings.Body
 					paragraphBody.TextColor3 = Color3.fromRGB(255, 255, 255)
-					paragraphBody.TextSize = 13
+					paragraphBody.TextSize = scaleSize(13)
 					paragraphBody.TextTransparency = 0.5
 					paragraphBody.TextWrapped = true
 					paragraphBody.TextXAlignment = Enum.TextXAlignment.Left
@@ -4548,8 +4556,8 @@ function MacLib:Window(Settings)
 
 					local uIPadding = Instance.new("UIPadding")
 					uIPadding.Name = "UIPadding"
-					uIPadding.PaddingBottom = UDim.new(0, 8)
-					uIPadding.PaddingTop = UDim.new(0, 8)
+					uIPadding.PaddingBottom = scaleUDim(0, 8)
+					uIPadding.PaddingTop = scaleUDim(0, 8)
 					uIPadding.Parent = divider
 
 					local uIListLayout = Instance.new("UIListLayout")
@@ -4809,7 +4817,7 @@ function MacLib:Window(Settings)
 
 		local notificationUICorner = Instance.new("UICorner")
 		notificationUICorner.Name = "NotificationUICorner"
-		notificationUICorner.CornerRadius = UDim.new(0, 10)
+		notificationUICorner.CornerRadius = scaleUDim(0, 10)
 		notificationUICorner.Parent = notification
 
 		local notificationUIScale = Instance.new("UIScale")
@@ -4836,7 +4844,7 @@ function MacLib:Window(Settings)
 		notificationTitle.RichText = true
 		notificationTitle.Text = Settings.Title
 		notificationTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
-		notificationTitle.TextSize = 13
+		notificationTitle.TextSize = scaleSize(13)
 		notificationTitle.TextTransparency = 0.2
 		notificationTitle.TextTruncate = Enum.TextTruncate.SplitWord
 		notificationTitle.TextXAlignment = Enum.TextXAlignment.Left
@@ -4850,7 +4858,7 @@ function MacLib:Window(Settings)
 
 		local notificationTitleUIPadding = Instance.new("UIPadding")
 		notificationTitleUIPadding.Name = "NotificationTitleUIPadding"
-		notificationTitleUIPadding.PaddingRight = UDim.new(0, 25)
+		notificationTitleUIPadding.PaddingRight = scaleUDim(0, 25)
 		notificationTitleUIPadding.Parent = notificationTitle
 
 		notificationTitle.Parent = notificationInformation
@@ -4864,7 +4872,7 @@ function MacLib:Window(Settings)
 		)
 		notificationDescription.Text = Settings.Description
 		notificationDescription.TextColor3 = Color3.fromRGB(255, 255, 255)
-		notificationDescription.TextSize = 11
+		notificationDescription.TextSize = scaleSize(11)
 		notificationDescription.TextTransparency = 0.5
 		notificationDescription.TextWrapped = true
 		notificationDescription.RichText = true
@@ -4879,18 +4887,18 @@ function MacLib:Window(Settings)
 
 		local notificationDescriptionUIPadding = Instance.new("UIPadding")
 		notificationDescriptionUIPadding.Name = "NotificationDescriptionUIPadding"
-		notificationDescriptionUIPadding.PaddingRight = UDim.new(0, 25)
-		notificationDescriptionUIPadding.PaddingTop = UDim.new(0, 17)
+		notificationDescriptionUIPadding.PaddingRight = scaleUDim(0, 25)
+		notificationDescriptionUIPadding.PaddingTop = scaleUDim(0, 17)
 		notificationDescriptionUIPadding.Parent = notificationDescription
 
 		notificationDescription.Parent = notificationInformation
 
 		local notificationUIPadding = Instance.new("UIPadding")
 		notificationUIPadding.Name = "NotificationUIPadding"
-		notificationUIPadding.PaddingBottom = UDim.new(0, 12)
-		notificationUIPadding.PaddingLeft = UDim.new(0, 10)
-		notificationUIPadding.PaddingRight = UDim.new(0, 10)
-		notificationUIPadding.PaddingTop = UDim.new(0, 10)
+		notificationUIPadding.PaddingBottom = scaleUDim(0, 12)
+		notificationUIPadding.PaddingLeft = scaleUDim(0, 10)
+		notificationUIPadding.PaddingRight = scaleUDim(0, 10)
+		notificationUIPadding.PaddingTop = scaleUDim(0, 10)
 		notificationUIPadding.Parent = notificationInformation
 
 		notificationInformation.Parent = notification
@@ -4909,7 +4917,7 @@ function MacLib:Window(Settings)
 		interactable.FontFace = Font.new(assets.interFont)
 		interactable.Text = "✓"
 		interactable.TextColor3 = Color3.fromRGB(255, 255, 255)
-		interactable.TextSize = 17
+		interactable.TextSize = scaleSize(17)
 		interactable.TextTransparency = 0.2
 		interactable.AnchorPoint = Vector2.new(1, 0.5)
 		interactable.AutomaticSize = Enum.AutomaticSize.XY
@@ -4923,9 +4931,9 @@ function MacLib:Window(Settings)
 
 		local uIPadding = Instance.new("UIPadding")
 		uIPadding.Name = "UIPadding"
-		uIPadding.PaddingBottom = UDim.new(0, 6)
-		uIPadding.PaddingRight = UDim.new(0, 13)
-		uIPadding.PaddingTop = UDim.new(0, 6)
+		uIPadding.PaddingBottom = scaleUDim(0, 6)
+		uIPadding.PaddingRight = scaleUDim(0, 13)
+		uIPadding.PaddingTop = scaleUDim(0, 6)
 		uIPadding.Parent = notificationControls
 
 		notificationControls.Parent = notification
@@ -5020,7 +5028,7 @@ function MacLib:Window(Settings)
 
 		local dialogUICorner = Instance.new("UICorner")
 		dialogUICorner.Name = "BaseUICorner"
-		dialogUICorner.CornerRadius = UDim.new(0, 10)
+		dialogUICorner.CornerRadius = scaleUDim(0, 10)
 		dialogUICorner.Parent = dialog
 
 		local prompt = Instance.new("Frame")
@@ -5047,15 +5055,15 @@ function MacLib:Window(Settings)
 
 		local globalSettingsUICorner = Instance.new("UICorner")
 		globalSettingsUICorner.Name = "GlobalSettingsUICorner"
-		globalSettingsUICorner.CornerRadius = UDim.new(0, 10)
+		globalSettingsUICorner.CornerRadius = scaleUDim(0, 10)
 		globalSettingsUICorner.Parent = prompt
 
 		local globalSettingsUIPadding = Instance.new("UIPadding")
 		globalSettingsUIPadding.Name = "GlobalSettingsUIPadding"
-		globalSettingsUIPadding.PaddingBottom = UDim.new(0, 20)
-		globalSettingsUIPadding.PaddingLeft = UDim.new(0, 20)
-		globalSettingsUIPadding.PaddingRight = UDim.new(0, 20)
-		globalSettingsUIPadding.PaddingTop = UDim.new(0, 20)
+		globalSettingsUIPadding.PaddingBottom = scaleUDim(0, 20)
+		globalSettingsUIPadding.PaddingLeft = scaleUDim(0, 20)
+		globalSettingsUIPadding.PaddingRight = scaleUDim(0, 20)
+		globalSettingsUIPadding.PaddingTop = scaleUDim(0, 20)
 		globalSettingsUIPadding.Parent = prompt
 
 		local paragraph = Instance.new("Frame")
@@ -5077,7 +5085,7 @@ function MacLib:Window(Settings)
 		paragraphHeader.RichText = true
 		paragraphHeader.Text = Settings.Title
 		paragraphHeader.TextColor3 = Color3.fromRGB(255, 255, 255)
-		paragraphHeader.TextSize = 18
+		paragraphHeader.TextSize = scaleSize(18)
 		paragraphHeader.TextTransparency = 0.4
 		paragraphHeader.TextWrapped = true
 		paragraphHeader.AutomaticSize = Enum.AutomaticSize.Y
@@ -5100,7 +5108,7 @@ function MacLib:Window(Settings)
 		paragraphBody.RichText = true
 		paragraphBody.Text = Settings.Description
 		paragraphBody.TextColor3 = Color3.fromRGB(255, 255, 255)
-		paragraphBody.TextSize = 14
+		paragraphBody.TextSize = scaleSize(14)
 		paragraphBody.TextTransparency = 0.5
 		paragraphBody.TextWrapped = true
 		paragraphBody.AutomaticSize = Enum.AutomaticSize.Y
@@ -5132,7 +5140,7 @@ function MacLib:Window(Settings)
 
 		local uIPadding = Instance.new("UIPadding")
 		uIPadding.Name = "UIPadding"
-		uIPadding.PaddingTop = UDim.new(0, 20)
+		uIPadding.PaddingTop = scaleUDim(0, 20)
 		uIPadding.Parent = interactions
 
 		interactions.Parent = prompt
@@ -5174,7 +5182,7 @@ function MacLib:Window(Settings)
 			button.FontFace = Font.new(assets.interFont)
 			button.Text = v.Name
 			button.TextColor3 = Color3.fromRGB(255, 255, 255)
-			button.TextSize = 15
+			button.TextSize = scaleSize(15)
 			button.TextTransparency = 0.5
 			button.TextTruncate = Enum.TextTruncate.AtEnd
 			button.AutoButtonColor = false
@@ -5186,15 +5194,15 @@ function MacLib:Window(Settings)
 
 			local uIPadding1 = Instance.new("UIPadding")
 			uIPadding1.Name = "UIPadding"
-			uIPadding1.PaddingBottom = UDim.new(0, 9)
-			uIPadding1.PaddingLeft = UDim.new(0, 10)
-			uIPadding1.PaddingRight = UDim.new(0, 10)
-			uIPadding1.PaddingTop = UDim.new(0, 9)
+			uIPadding1.PaddingBottom = scaleUDim(0, 9)
+			uIPadding1.PaddingLeft = scaleUDim(0, 10)
+			uIPadding1.PaddingRight = scaleUDim(0, 10)
+			uIPadding1.PaddingTop = scaleUDim(0, 9)
 			uIPadding1.Parent = button
 
 			local baseUICorner1 = Instance.new("UICorner")
 			baseUICorner1.Name = "BaseUICorner"
-			baseUICorner1.CornerRadius = UDim.new(0, 10)
+			baseUICorner1.CornerRadius = scaleUDim(0, 10)
 			baseUICorner1.Parent = button
 
 			button.Parent = interactions
@@ -5888,3 +5896,7 @@ function MacLib:Demo()
 end
 
 return MacLib
+
+
+
+
