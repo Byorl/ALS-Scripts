@@ -1415,9 +1415,9 @@ task.spawn(function()
         if not getgenv().WebhookEnabled then return end
         if isProcessing then return end
         
-        if hasRun then
+        if hasRun > 0 then
             local timeSinceLastRun = tick() - hasRun
-            if timeSinceLastRun < 3 then
+            if timeSinceLastRun < 5 then
                 return
             end
         end
@@ -1425,7 +1425,7 @@ task.spawn(function()
         isProcessing = true
         hasRun = tick()
         
-        task.wait(0.1)
+        task.wait(0.5)
         
         local clientData = getClientData()
         if not clientData then 
@@ -1536,7 +1536,7 @@ task.spawn(function()
     
     LocalPlayer.PlayerGui.ChildRemoved:Connect(function(child)
         if child.Name == "EndGameUI" then
-            task.wait(1)
+            task.wait(2)
             isProcessing = false
         end
     end)
