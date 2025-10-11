@@ -2416,19 +2416,19 @@ task.spawn(function()
                     pcall(function()
                         PurchaseEvent:InvokeServer(1, 100)
                     end)
-                    task.wait(1)
+                    task.wait(0)
                 elseif candyBasket >= 10000 then
                     print("[Auto Capsules] Buying 10 capsules (" .. candyBasket .. " candy)")
                     pcall(function()
                         PurchaseEvent:InvokeServer(1, 10)
                     end)
-                    task.wait(1)
+                    task.wait(0)
                 elseif candyBasket >= 1000 then
                     print("[Auto Capsules] Buying 1 capsule (" .. candyBasket .. " candy)")
                     pcall(function()
                         PurchaseEvent:InvokeServer(1, 1)
                     end)
-                    task.wait(1)
+                    task.wait(0)
                 end
                 
                 task.wait(0.5)
@@ -2442,7 +2442,7 @@ task.spawn(function()
                     pcall(function()
                         OpenCapsuleEvent:FireServer("HalloweenCapsule2025", capsuleAmount)
                     end)
-                    task.wait(1)
+                    task.wait(0)
                 end
             end
         end
