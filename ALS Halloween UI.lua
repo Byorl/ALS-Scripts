@@ -137,7 +137,7 @@ local Tabs = {
     BossRush = Window:AddTab({ Title = "Boss Rush", Icon = "shield" }),
     Webhook = Window:AddTab({ Title = "Webhook", Icon = "send" }),
     SeamlessFix = Window:AddTab({ Title = "Seamless Fix", Icon = "refresh-cw" }),
-    Tabs.Event = Window:AddTab({ Title = "Event", Icon = "gift" })
+    Event = Window:AddTab({ Title = "Event", Icon = "gift" }),
     Misc = Window:AddTab({ Title = "Misc", Icon = "wrench" }),
     Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
 }
