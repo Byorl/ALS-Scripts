@@ -778,13 +778,6 @@ Tabs.Misc:AddParagraph({ Title = "🔒 Safety & UI", Content = "" })
 addToggle(Tabs.Misc, "AutoHideUIToggle", "Auto Hide UI on Start", getgenv().Config.toggles.AutoHideUIToggle or false, function(v)
     getgenv().Config.toggles.AutoHideUIToggle = v
     saveConfig(getgenv().Config)
-    if getgenv().Config.toggles.AutoHideUIToggle then
-        task.wait(0.5)
-        local VIM = game:GetService("VirtualInputManager")
-        VIM:SendKeyEvent(true, Enum.KeyCode.LeftControl, false, game)
-        task.wait(0.05)
-        VIM:SendKeyEvent(false, Enum.KeyCode.LeftControl, false, game)
-    end
     notify("Auto Hide UI", v and "Enabled - Auto Hide UI" or "Disabled", 3)
 end)
 
@@ -834,12 +827,14 @@ notify("ALS Halloween Event", "Script loaded successfully!", 5)
 
 if getgenv().Config.toggles.AutoHideUIToggle then
     task.spawn(function()
-        task.wait(2)
-        local VIM = game:GetService("VirtualInputManager")
-        VIM:SendKeyEvent(true, Enum.KeyCode.LeftControl, false, game)
-        task.wait(0.05)
-        VIM:SendKeyEvent(false, Enum.KeyCode.LeftControl, false, game)
-        notify("Auto Hide", "UI minimized", 2)
+        task.wait(0.2)
+        if Window and not Fluent.Unloaded then
+            local VIM = game:GetService("VirtualInputManager")
+            VIM:SendKeyEvent(true, Enum.KeyCode.LeftControl, false, game)
+            task.wait(0.05)
+            VIM:SendKeyEvent(false, Enum.KeyCode.LeftControl, false, game)
+            print("[Auto Hide] UI minimized after 3 seconds")
+        end
     end)
 end
 
