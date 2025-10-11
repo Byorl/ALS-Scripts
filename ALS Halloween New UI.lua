@@ -1,6 +1,18 @@
 repeat task.wait() until game:IsLoaded()
 
-local MacLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/Byorl/ALS-Scripts/refs/heads/main/maclib.txt"))()
+local MacLib
+local ok, err = pcall(function()
+    MacLib = loadstring(readfile("maclib.txt"))()
+end)
+if not ok then
+    warn("[ALS] Failed to load local maclib.txt, trying GitHub...")
+    ok, err = pcall(function()
+        MacLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/Byorl/ALS-Scripts/refs/heads/main/maclib.lua"))()
+    end)
+    if not ok then
+        error("[ALS] Failed to load MacLib: " .. tostring(err))
+    end
+end
 
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
