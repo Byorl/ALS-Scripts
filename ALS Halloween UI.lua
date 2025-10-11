@@ -836,6 +836,7 @@ task.spawn(function()
         bossSpawnTime = nil
         bossInRangeTracker = {}
         generalBossSpawnTime = nil
+        abilityCooldowns = {}
     end
     
     local function getTowerInfoCached(towerName)
@@ -1072,8 +1073,14 @@ task.spawn(function()
             
             if currentWave < lastWave then
                 resetRoundTrackers()
-                print("[Auto Ability] Round reset detected (Wave " .. currentWave .. " < " .. lastWave .. ")")
+                print("[Auto Ability] Round reset detected (Wave " .. currentWave .. " < " .. lastWave .. ") - Resetting all ability trackers")
             end
+            
+            if getgenv().SeamlessLimiterEnabled and lastWave >= 50 and currentWave < 50 then
+                resetRoundTrackers()
+                print("[Auto Ability] Seamless mode new round detected (50 -> " .. currentWave .. ") - Resetting all ability trackers")
+            end
+            
             lastWave = currentWave
             
             for unitName, abilitiesConfig in pairs(getgenv().UnitAbilities) do
@@ -1428,15 +1435,20 @@ task.spawn(function()
         if #rewards > 0 then
             for _, reward in ipairs(rewards) do
                 local totalAmount = 0
-                if clientData.Items and clientData.Items[reward.name] then
-                    totalAmount = clientData.Items[reward.name].Amount or 0
-                elseif clientData[reward.name] then
-                    totalAmount = clientData[reward.name]
+                
+                if reward.name == "CandyBasket" then
+                    local currentAmount = clientData.CandyBasket or 0
+                    totalAmount = currentAmount + reward.amount
                 elseif reward.name == "HallowenBingoStamp" or reward.name:find("Bingo Stamp") then
                     if clientData.ItemData and clientData.ItemData.HallowenBingoStamp then
                         totalAmount = clientData.ItemData.HallowenBingoStamp.Amount or 0
                     end
+                elseif clientData.Items and clientData.Items[reward.name] then
+                    totalAmount = clientData.Items[reward.name].Amount or 0
+                elseif clientData[reward.name] then
+                    totalAmount = clientData[reward.name]
                 end
+                
                 rewardsText = rewardsText .. "+" .. formatNumber(reward.amount) .. " " .. reward.name .. " [ Total: " .. formatNumber(totalAmount) .. " ]\n"
             end
         else
