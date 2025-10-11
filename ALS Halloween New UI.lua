@@ -921,24 +921,36 @@ task.spawn(function()
 end)
 
 task.spawn(function()
-    local hasRestarted = false
-    LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
-        if child.Name == "EndGameUI" and getgenv().AutoFastRetryEnabled and not hasRestarted then
-            if child:FindFirstChild("BG") then
-                hasRestarted = true
-                task.wait(2)
-                pcall(function()
-                    RS.Remotes.RestartMatch:FireServer()
-                    print("[Auto Fast Retry] Restarted match")
-                end)
-            end
+    local GuiService = game:GetService("GuiService")
+    local function press(key)
+        VIM:SendKeyEvent(true, key, false, game)
+        task.wait(0.1)
+        VIM:SendKeyEvent(false, key, false, game)
+    end
+    
+    while true do
+        task.wait(2)
+        if getgenv().AutoFastRetryEnabled then
+            pcall(function()
+                local endGameUI = LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
+                if endGameUI and endGameUI:FindFirstChild("BG") then
+                    local retryButton = endGameUI.BG.Buttons:FindFirstChild("Retry")
+                    if retryButton then
+                        GuiService.SelectedObject = retryButton
+                        repeat 
+                            press(Enum.KeyCode.Return) 
+                            task.wait(0.5) 
+                        until not LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
+                        GuiService.SelectedObject = nil
+                        print("[Auto Fast Retry] Clicked retry button")
+                    end
+                elseif GuiService.SelectedObject ~= nil then 
+                    GuiService.SelectedObject = nil 
+                end
+            end)
         end
-    end)
-    LocalPlayer.PlayerGui.ChildRemoved:Connect(function(child)
-        if child.Name == "EndGameUI" then
-            hasRestarted = false
-        end
-    end)
+        if isUnloaded then break end
+    end
 end)
 
 task.spawn(function()
