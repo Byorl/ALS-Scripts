@@ -1710,7 +1710,8 @@ task.spawn(function()
                                 print("[Webhook] -> Parsed amount:", rewardAmount)
                             end
                         else
-                            print("[Webhook] -> No Amount label found")
+                            print("[Webhook] -> No Amount label found, defaulting to 1 (unit reward)")
+                            rewardAmount = 1
                         end
                         
                         if rewardAmount then
@@ -1736,25 +1737,56 @@ task.spawn(function()
     end
     local function getMatchResult()
         local ok, time, wave, result = pcall(function()
-            local ui = LocalPlayer.PlayerGui:FindFirstChild("EndGameUI") if not ui then return "00:00:00","0","Unknown" end
-            local c = ui:FindFirstChild("BG") if c then c=c:FindFirstChild("Container") if c then
-                local stats = c:FindFirstChild("Stats")
-                if stats then
-                    local resultText = stats:FindFirstChild("Result")
-                    local timeText = stats:FindFirstChild("ElapsedTime")
-                    local waveText = stats:FindFirstChild("EndWave")
-                    local r = resultText and resultText.Text or "Unknown"
-                    local t = timeText and timeText.Text or "00:00:00"
-                    local w = waveText and waveText.Text or "0"
-                    if t:find("Total Time:") then local m,s = t:match("Total Time:%s*(%d+):(%d+)") if m and s then t = string.format("%02d:%02d:%02d", 0, tonumber(m) or 0, tonumber(s) or 0) end end
-                    if w:find("Wave Reached:") then local wm = w:match("Wave Reached:%s*(%d+)") if wm then w = wm end end
-                    if r:lower():find("win") or r:lower():find("victory") then r = "VICTORY" elseif r:lower():find("defeat") or r:lower():find("lose") or r:lower():find("loss") then r = "DEFEAT" end
-                    return t, w, r
-                end
-            end end
-            return "00:00:00", "0", "Unknown"
+            local ui = LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
+            if not ui then 
+                print("[Webhook] getMatchResult: No EndGameUI")
+                return "00:00:00","0","Unknown" 
+            end
+            
+            local stats = ui:FindFirstChild("BG") and ui.BG:FindFirstChild("Container") and ui.BG.Container:FindFirstChild("Stats")
+            if not stats then
+                print("[Webhook] getMatchResult: No Stats found")
+                return "00:00:00", "0", "Unknown"
+            end
+            
+            local resultText = stats:FindFirstChild("Result")
+            local timeText = stats:FindFirstChild("ElapsedTime")
+            local waveText = stats:FindFirstChild("EndWave")
+            
+            local r = resultText and resultText.Text or "Unknown"
+            local t = timeText and timeText.Text or "00:00:00"
+            local w = waveText and waveText.Text or "0"
+            
+            print("[Webhook] Raw stats - Result:", r, "Time:", t, "Wave:", w)
+            
+            if t:find("Total Time:") then 
+                local m,s = t:match("Total Time:%s*(%d+):(%d+)") 
+                if m and s then 
+                    t = string.format("%02d:%02d:%02d", 0, tonumber(m) or 0, tonumber(s) or 0) 
+                end 
+            end
+            
+            if w:find("Wave Reached:") then 
+                local wm = w:match("Wave Reached:%s*(%d+)") 
+                if wm then w = wm end 
+            end
+            
+            if r:lower():find("win") or r:lower():find("victory") then 
+                r = "VICTORY" 
+            elseif r:lower():find("defeat") or r:lower():find("lose") or r:lower():find("loss") then 
+                r = "DEFEAT" 
+            end
+            
+            print("[Webhook] Parsed stats - Result:", r, "Time:", t, "Wave:", w)
+            return t, w, r
         end)
-        if ok then return time, wave, result else return "00:00:00","0","Unknown" end
+        
+        if ok then 
+            return time, wave, result 
+        else 
+            warn("[Webhook] Error in getMatchResult:", time)
+            return "00:00:00","0","Unknown" 
+        end
     end
     local function getMapInfo()
         local ok, name, difficulty = pcall(function()
@@ -1765,6 +1797,7 @@ task.spawn(function()
         end)
         if ok then return name, difficulty else return "Unknown Map","Unknown" end
     end
+    local lastWebhookHash = ""
     local function sendWebhook()
         pcall(function()
             if not getgenv().WebhookEnabled then 
@@ -1860,13 +1893,24 @@ task.spawn(function()
             { name="Units", value=(unitsText ~= "" and unitsText or "No units"), inline=false },
             { name="Match Result", value=(matchTime or "00:00:00") .. " - Wave " .. tostring(matchWave or "0") .. "\n" .. (mapName or "Unknown Map") .. ((mapDifficulty and mapDifficulty ~= "Unknown") and (" ["..mapDifficulty.."]") or "") .. " - " .. (matchResult or "Unknown"), inline=false }
             }, footer={ text="Halloween Hook" } }
+            
+            local webhookHash = LocalPlayer.Name .. "_" .. matchTime .. "_" .. matchWave .. "_" .. rewardsText
+            if webhookHash == lastWebhookHash then
+                print("[Webhook] Duplicate detected (same hash), skipping send")
+                isProcessing = false
+                return
+            end
+            lastWebhookHash = webhookHash
+            
             SendMessageEMBED(getgenv().WebhookURL, embed)
+            print("[Webhook] Successfully sent!")
             isProcessing=false
         end)
     end
     LocalPlayer.PlayerGui.ChildAdded:Connect(function(child) 
         if child.Name == "EndGameUI" and getgenv().WebhookEnabled then 
-            print("[Webhook] EndGameUI detected, sending webhook...")
+            print("[Webhook] EndGameUI detected")
+            task.wait(0.1)
             sendWebhook() 
         end 
     end)
