@@ -1670,39 +1670,61 @@ task.spawn(function()
             print("[Webhook] Found Holder, scanning all children...")
             
             local children = holder:GetChildren()
+            print("[Webhook] Total children in Holder:", #children)
+            
             for _, item in pairs(children) do
+                print("[Webhook] Child:", item.Name, "Type:", item.ClassName)
+                
                 if item:IsA("TextButton") then
-                    print("[Webhook] Checking TextButton:", item.Name)
+                    print("[Webhook] -> Is TextButton, checking for reward data...")
                     
                     local rewardName = nil
                     local rewardAmount = nil
                     
                     local unitName = item:FindFirstChild("UnitName")
-                    if unitName and unitName.Text and unitName.Text ~= "" then
-                        rewardName = unitName.Text
+                    if unitName then
+                        print("[Webhook] -> Found UnitName, Text:", unitName.Text or "nil")
+                        if unitName.Text and unitName.Text ~= "" then
+                            rewardName = unitName.Text
+                            print("[Webhook] -> Set rewardName to:", rewardName)
+                        end
                     end
                     
                     local itemName = item:FindFirstChild("ItemName")
-                    if itemName and itemName.Text and itemName.Text ~= "" then
-                        rewardName = itemName.Text
+                    if itemName then
+                        print("[Webhook] -> Found ItemName, Text:", itemName.Text or "nil")
+                        if itemName.Text and itemName.Text ~= "" then
+                            rewardName = itemName.Text
+                            print("[Webhook] -> Set rewardName to:", rewardName)
+                        end
                     end
                     
                     if rewardName then
                         local amountLabel = item:FindFirstChild("Amount")
-                        if amountLabel and amountLabel.Text then
-                            local amountText = amountLabel.Text
-                            local clean = string.gsub(string.gsub(string.gsub(amountText, "x", ""), "+", ""), ",", "")
-                            rewardAmount = tonumber(clean)
+                        if amountLabel then
+                            print("[Webhook] -> Found Amount, Text:", amountLabel.Text or "nil")
+                            if amountLabel.Text then
+                                local amountText = amountLabel.Text
+                                local clean = string.gsub(string.gsub(string.gsub(amountText, "x", ""), "+", ""), ",", "")
+                                rewardAmount = tonumber(clean)
+                                print("[Webhook] -> Parsed amount:", rewardAmount)
+                            end
+                        else
+                            print("[Webhook] -> No Amount label found")
                         end
                         
                         if rewardAmount then
                             table.insert(rewards, { name = rewardName, amount = rewardAmount })
-                            print("[Webhook] Added reward:", rewardName, rewardAmount)
+                            print("[Webhook] ✓ Added reward:", rewardName, "x" .. rewardAmount)
+                        else
+                            print("[Webhook] ✗ Skipped (no valid amount):", rewardName)
                         end
+                    else
+                        print("[Webhook] -> No UnitName or ItemName found")
                     end
                 end
             end
-            print("[Webhook] Total children:", #children, "Rewards found:", #rewards)
+            print("[Webhook] === SCAN COMPLETE === Total rewards found:", #rewards)
             return rewards
         end)
         
@@ -1745,17 +1767,27 @@ task.spawn(function()
     end
     local function sendWebhook()
         pcall(function()
-            if not getgenv().WebhookEnabled then return end
-            if getgenv()._webhookLock and (tick() - getgenv()._webhookLock) < 3 then return end
-            if isProcessing then return end
+            if not getgenv().WebhookEnabled then 
+                print("[Webhook] Webhook disabled, skipping")
+                return 
+            end
             
+            if isProcessing then 
+                print("[Webhook] Already processing, skipping duplicate")
+                return 
+            end
+            
+            if getgenv()._webhookLock and (tick() - getgenv()._webhookLock) < 10 then 
+                print("[Webhook] Lock active, skipping duplicate (last sent:", tick() - getgenv()._webhookLock, "seconds ago)")
+                return 
+            end
+            
+            print("[Webhook] Starting webhook process...")
             getgenv()._webhookLock = tick()
             isProcessing = true
             hasRun = tick()
             
-            print("[Webhook] Starting webhook process...")
-            
-            task.wait(2)
+            task.wait(2.5)
             
             print("[Webhook] Capturing rewards...")
             local rewards = getRewards()
