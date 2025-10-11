@@ -1422,9 +1422,7 @@ task.spawn(function()
         if clientData.ItemData and clientData.ItemData.HallowenBingoStamp then
             bingoStamps = clientData.ItemData.HallowenBingoStamp.Amount or 0
         end
-        if bingoStamps > 0 then
-            playerStatsText = playerStatsText .. "\n+3 Spooky Bingo Stamp [ Total: " .. formatNumber(bingoStamps) .. " ]"
-        end
+        playerStatsText = playerStatsText .. "\n<:bingostamp:1426362482141954068> " .. formatNumber(bingoStamps)
         
         local rewardsText = ""
         if #rewards > 0 then
@@ -1434,6 +1432,10 @@ task.spawn(function()
                     totalAmount = clientData.Items[reward.name].Amount or 0
                 elseif clientData[reward.name] then
                     totalAmount = clientData[reward.name]
+                elseif reward.name == "HallowenBingoStamp" or reward.name:find("Bingo Stamp") then
+                    if clientData.ItemData and clientData.ItemData.HallowenBingoStamp then
+                        totalAmount = clientData.ItemData.HallowenBingoStamp.Amount or 0
+                    end
                 end
                 rewardsText = rewardsText .. "+" .. formatNumber(reward.amount) .. " " .. reward.name .. " [ Total: " .. formatNumber(totalAmount) .. " ]\n"
             end
