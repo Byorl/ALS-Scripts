@@ -9,6 +9,9 @@ local HttpService = game:GetService("HttpService")
 local RS = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
 
+local LOBBY_PLACEID = 12886143095
+local isInLobby = game.PlaceId == LOBBY_PLACEID
+
 local CONFIG_FOLDER = "ALSHalloweenEvent"
 local CONFIG_FILE = "config.json"
 
@@ -115,10 +118,13 @@ local Tabs = {
     BossRush = Window:AddTab({ Title = "Boss Rush", Icon = "trophy" }),
     Webhook = Window:AddTab({ Title = "Webhook", Icon = "send" }),
     SeamlessFix = Window:AddTab({ Title = "Seamless Fix", Icon = "refresh-cw" }),
-    Event = Window:AddTab({ Title = "Event", Icon = "grid" }),
     Misc = Window:AddTab({ Title = "Misc", Icon = "sliders" }),
     Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
 }
+
+if not isInLobby then
+    Tabs.Event = Window:AddTab({ Title = "Event", Icon = "grid" })
+end
 
 local Options = Fluent.Options
 
@@ -865,75 +871,93 @@ SeamlessToggle:OnChanged(function()
 end)
 
 
-Tabs.Event:AddParagraph({
-    Title = "Halloween 2025 Event Automation",
-    Content = "Automatically manages bingo stamps, buys capsules, and opens them."
-})
+if not isInLobby then
+    Tabs.Event:AddParagraph({
+        Title = "Halloween 2025 Event Automation",
+        Content = "Automatically manages bingo stamps, buys capsules, and opens them."
+    })
+end
 
-Tabs.Event:AddParagraph({
-    Title = "━━━━━ Auto Bingo ━━━━━",
-    Content = "Automatically use stamps, claim rewards, and complete boards."
-})
+if not isInLobby then
+    Tabs.Event:AddParagraph({
+        Title = "━━━━━ Auto Bingo ━━━━━",
+        Content = "Automatically use stamps, claim rewards, and complete boards."
+    })
+end
 
-local BingoToggle = Tabs.Event:AddToggle("BingoToggle", {
-    Title = "Enable Auto Bingo",
-    Description = "Automatically manage bingo stamps and rewards",
-    Default = getgenv().Config.toggles.BingoToggle or false
-})
+local BingoToggle
+if not isInLobby then
+    BingoToggle = Tabs.Event:AddToggle("BingoToggle", {
+        Title = "Enable Auto Bingo",
+        Description = "Automatically manage bingo stamps and rewards",
+        Default = getgenv().Config.toggles.BingoToggle or false
+    })
+end
 
-BingoToggle:OnChanged(function()
-    getgenv().BingoEnabled = Options.BingoToggle.Value
-    getgenv().Config.toggles.BingoToggle = Options.BingoToggle.Value
-    saveConfig(getgenv().Config)
-    if getgenv().BingoEnabled then
-        Fluent:Notify({
-            Title = "Auto Bingo",
-            Content = "Auto bingo enabled!",
-            Duration = 3
-        })
-    else
-        Fluent:Notify({
-            Title = "Auto Bingo",
-            Content = "Auto bingo disabled!",
-            Duration = 3
-        })
-    end
-end)
+if BingoToggle then
+    BingoToggle:OnChanged(function()
+        getgenv().BingoEnabled = Options.BingoToggle.Value
+        getgenv().Config.toggles.BingoToggle = Options.BingoToggle.Value
+        saveConfig(getgenv().Config)
+        if getgenv().BingoEnabled then
+            Fluent:Notify({
+                Title = "Auto Bingo",
+                Content = "Auto bingo enabled!",
+                Duration = 3
+            })
+        else
+            Fluent:Notify({
+                Title = "Auto Bingo",
+                Content = "Auto bingo disabled!",
+                Duration = 3
+            })
+        end
+    end)
+end
 
-Tabs.Event:AddParagraph({
-    Title = "━━━━━ Auto Capsules ━━━━━",
-    Content = "Automatically buy and open Halloween capsules based on Candy Basket."
-})
+if not isInLobby then
+    Tabs.Event:AddParagraph({
+        Title = "━━━━━ Auto Capsules ━━━━━",
+        Content = "Automatically buy and open Halloween capsules based on Candy Basket."
+    })
+end
 
-local CapsuleToggle = Tabs.Event:AddToggle("CapsuleToggle", {
-    Title = "Enable Auto Capsules",
-    Description = "Auto-buy and auto-open Halloween capsules",
-    Default = getgenv().Config.toggles.CapsuleToggle or false
-})
+local CapsuleToggle
+if not isInLobby then
+    CapsuleToggle = Tabs.Event:AddToggle("CapsuleToggle", {
+        Title = "Enable Auto Capsules",
+        Description = "Auto-buy and auto-open Halloween capsules",
+        Default = getgenv().Config.toggles.CapsuleToggle or false
+    })
+end
 
-CapsuleToggle:OnChanged(function()
-    getgenv().CapsuleEnabled = Options.CapsuleToggle.Value
-    getgenv().Config.toggles.CapsuleToggle = Options.CapsuleToggle.Value
-    saveConfig(getgenv().Config)
-    if getgenv().CapsuleEnabled then
-        Fluent:Notify({
-            Title = "Auto Capsules",
-            Content = "Auto capsules enabled!",
-            Duration = 3
-        })
-    else
-        Fluent:Notify({
-            Title = "Auto Capsules",
-            Content = "Auto capsules disabled!",
-            Duration = 3
-        })
-    end
-end)
+if CapsuleToggle then
+    CapsuleToggle:OnChanged(function()
+        getgenv().CapsuleEnabled = Options.CapsuleToggle.Value
+        getgenv().Config.toggles.CapsuleToggle = Options.CapsuleToggle.Value
+        saveConfig(getgenv().Config)
+        if getgenv().CapsuleEnabled then
+            Fluent:Notify({
+                Title = "Auto Capsules",
+                Content = "Auto capsules enabled!",
+                Duration = 3
+            })
+        else
+            Fluent:Notify({
+                Title = "Auto Capsules",
+                Content = "Auto capsules disabled!",
+                Duration = 3
+            })
+        end
+    end)
+end
 
-Tabs.Event:AddParagraph({
-    Title = "How It Works",
-    Content = "Bingo: Uses stamps (25x), claims rewards (25x), completes board\nCapsules: Buys 100/10/1 based on candy, opens all capsules"
-})
+if not isInLobby then
+    Tabs.Event:AddParagraph({
+        Title = "How It Works",
+        Content = "Bingo: Uses stamps (25x), claims rewards (25x), completes board\nCapsules: Buys 100/10/1 based on candy, opens all capsules"
+    })
+end
 
 Tabs.Misc:AddParagraph({
     Title = "Miscellaneous Features",
@@ -965,31 +989,36 @@ RemoveEnemiesToggle:OnChanged(function()
     end
 end)
 
-local FPSBoostToggle = Tabs.Misc:AddToggle("FPSBoostToggle", {
-	Title = "FPS Boost",
-	Description = "Removes lighting, textures, and non-model objects for better performance",
-	Default = getgenv().Config.toggles.FPSBoostToggle or false
-})
+local FPSBoostToggle
+if not isInLobby then
+	FPSBoostToggle = Tabs.Misc:AddToggle("FPSBoostToggle", {
+		Title = "FPS Boost",
+		Description = "Removes lighting, textures, and non-model objects for better performance",
+		Default = getgenv().Config.toggles.FPSBoostToggle or false
+	})
 
-FPSBoostToggle:OnChanged(function()
-	getgenv().FPSBoostEnabled = Options.FPSBoostToggle.Value
-	getgenv().Config.toggles.FPSBoostToggle = Options.FPSBoostToggle.Value
-	saveConfig(getgenv().Config)
+	FPSBoostToggle:OnChanged(function()
+		getgenv().FPSBoostEnabled = Options.FPSBoostToggle.Value
+		getgenv().Config.toggles.FPSBoostToggle = Options.FPSBoostToggle.Value
+		saveConfig(getgenv().Config)
 
-	if getgenv().FPSBoostEnabled then
-		Fluent:Notify({
-			Title = "FPS Boost",
-			Content = "Optimization enabled!",
-			Duration = 3
-		})
-	else
-		Fluent:Notify({
-			Title = "FPS Boost",
-			Content = "Optimization disabled!",
-			Duration = 3
-		})
-	end
-end)
+		if getgenv().FPSBoostEnabled then
+			Fluent:Notify({
+				Title = "FPS Boost",
+				Content = "Optimization enabled!",
+				Duration = 3
+			})
+		else
+			Fluent:Notify({
+				Title = "FPS Boost",
+				Content = "Optimization disabled!",
+				Duration = 3
+			})
+		end
+	end)
+else
+	getgenv().FPSBoostEnabled = false
+end
 
 local AntiAFKToggle = Tabs.Misc:AddToggle("AntiAFKToggle", {
 	Title = "Anti-AFK",
@@ -1227,7 +1256,7 @@ task.spawn(function()
 	while true do
 		task.wait(10)
 
-		if getgenv().FPSBoostEnabled then
+		if not isInLobby and getgenv().FPSBoostEnabled then
 			pcall(function()
 				local lighting = game:GetService("Lighting")
 				for _, child in ipairs(lighting:GetChildren()) do
@@ -2305,6 +2334,8 @@ task.spawn(function()
 end)
 
 task.spawn(function()
+    if isInLobby then return end
+    
     task.wait(2)
     
     local BingoEvents = RS:WaitForChild("Events"):WaitForChild("Bingo")
@@ -2358,6 +2389,8 @@ task.spawn(function()
 end)
 
 task.spawn(function()
+    if isInLobby then return end
+    
     task.wait(2)
     
     local PurchaseEvent = RS:WaitForChild("Events"):WaitForChild("Hallowen2025"):WaitForChild("Purchase")
