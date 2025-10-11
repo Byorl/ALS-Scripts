@@ -134,7 +134,7 @@ local Window = Fluent:CreateWindow({
     Title = "ALS Halloween Event",
     SubTitle = "Anime Last Stand Script",
     TabWidth = 100,
-    Size = UDim2.fromOffset(680, 440),
+    Size = UDim2.fromOffset(720, 480),
     Acrylic = true,
     Theme = "Dark",
     MinimizeKey = Enum.KeyCode.LeftControl
@@ -254,14 +254,6 @@ local function addToggle(tab, key, title, default, onChanged)
     end)
     return t
 end
-
-Tabs.Main:AddParagraph({ Title = "🎃 Halloween Event", Content = "Automatically join and participate in the Halloween 2025 event" })
-addToggle(Tabs.Main, "AutoEventToggle", "Auto Event Join", getgenv().AutoEventEnabled, function(val)
-    getgenv().AutoEventEnabled = val
-    getgenv().Config.toggles.AutoEventToggle = val
-    saveConfig(getgenv().Config)
-    notify("Auto Event", val and "Enabled" or "Disabled", 3)
-end)
 
 Tabs.Main:AddParagraph({ Title = "⚡ Game Automation", Content = "Streamline your gameplay with automatic actions" })
 addToggle(Tabs.Main, "AutoFastRetryToggle", "Auto Replay", getgenv().Config.toggles.AutoFastRetryToggle or false, function(val)
@@ -722,10 +714,17 @@ Tabs.SeamlessFix:AddInput("SeamlessRounds", {
     end
 })
 
-if not isInLobby and Tabs.Event then
-    Tabs.Event:AddParagraph({ Title = "🎃 Halloween Event Automation", Content = "Automate bingo stamps and capsule management" })
-    
-    Tabs.Event:AddParagraph({ Title = "🎲 Auto Bingo", Content = "" })
+Tabs.Event:AddParagraph({ Title = "🎃 Halloween 2025 Event", Content = "Automatically join and participate in the Halloween event" })
+
+addToggle(Tabs.Event, "AutoEventToggle", "Auto Event Join", getgenv().AutoEventEnabled, function(val)
+    getgenv().AutoEventEnabled = val
+    getgenv().Config.toggles.AutoEventToggle = val
+    saveConfig(getgenv().Config)
+    notify("Auto Event", val and "Enabled" or "Disabled", 3)
+end)
+
+if not isInLobby then
+    Tabs.Event:AddParagraph({ Title = "� AAuto Bingo", Content = "" })
     addToggle(Tabs.Event, "BingoToggle", "Enable Auto Bingo", getgenv().BingoEnabled, function(v)
         getgenv().BingoEnabled = v
         getgenv().Config.toggles.BingoToggle = v
@@ -742,6 +741,8 @@ if not isInLobby and Tabs.Event then
     end)
 
     Tabs.Event:AddParagraph({ Title = "ℹ️ Info", Content = "Bingo: Uses stamps (25x), claims rewards, completes board\nCapsules: Buys 100/10/1 based on candy, opens all" })
+else
+    Tabs.Event:AddParagraph({ Title = "ℹ️ Lobby Only", Content = "Bingo and Capsule features are only available outside the lobby." })
 end
 
 Tabs.Misc:AddParagraph({ Title = "🛠️ Utility Features", Content = "Performance and quality of life improvements" })
@@ -1661,7 +1662,7 @@ task.spawn(function()
 end)
 
 task.spawn(function()
-    if isInLobby then return end
+    if not isInLobby then return end
     task.wait(1)
     
     local BingoEvents = RS:FindFirstChild("Events") and RS.Events:FindFirstChild("Bingo")
@@ -1699,7 +1700,7 @@ task.spawn(function()
 end)
 
 task.spawn(function()
-    if isInLobby then return end
+    if not isInLobby then return end
     task.wait()
     local PurchaseEvent = RS:WaitForChild("Events"):WaitForChild("Hallowen2025"):WaitForChild("Purchase")
     local OpenCapsuleEvent = RS:WaitForChild("Remotes"):WaitForChild("OpenCapsule")
