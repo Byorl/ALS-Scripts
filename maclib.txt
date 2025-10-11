@@ -365,7 +365,7 @@ function MacLib:Window(Settings)
 	globalSettingsButton.BorderColor3 = Color3.fromRGB(0, 0, 0)
 	globalSettingsButton.BorderSizePixel = 0
 	globalSettingsButton.Position = UDim2.fromScale(1, 0.5)
-	globalSettingsButton.Size = UDim2.fromOffset(16,16)
+	globalSettingsButton.Size = scaleOffset(16, 16)
 	globalSettingsButton.Parent = informationHolder
 
 	local function ChangeGlobalSettingsButtonState(State)
@@ -507,7 +507,7 @@ function MacLib:Window(Settings)
 	headshot.BackgroundTransparency = 1
 	headshot.BorderColor3 = Color3.fromRGB(0, 0, 0)
 	headshot.BorderSizePixel = 0
-	headshot.Size = UDim2.fromOffset(32, 32)
+	headshot.Size = scaleOffset(32, 32)
 	headshot.Image = (isReady and headshotImage) or "rbxassetid://0"
 
 	local uICorner3 = Instance.new("UICorner")
@@ -758,7 +758,7 @@ function MacLib:Window(Settings)
 	moveIcon.BorderColor3 = Color3.fromRGB(0, 0, 0)
 	moveIcon.BorderSizePixel = 0
 	moveIcon.Position = UDim2.fromScale(1, 0.5)
-	moveIcon.Size = UDim2.fromOffset(15, 15)
+	moveIcon.Size = scaleOffset(15, 15)
 	moveIcon.Parent = elements
 	moveIcon.Visible = not Settings.DragStyle or Settings.DragStyle == 1
 
@@ -774,7 +774,7 @@ function MacLib:Window(Settings)
 	interact.BorderColor3 = Color3.fromRGB(0, 0, 0)
 	interact.BorderSizePixel = 0
 	interact.Position = UDim2.fromScale(0.5, 0.5)
-	interact.Size = UDim2.fromOffset(40, 40)
+	interact.Size = scaleOffset(40, 40)
 	interact.Parent = moveIcon
 
 	local function ChangemoveIconState(State)
@@ -1445,7 +1445,7 @@ function MacLib:Window(Settings)
 				tabImage.BackgroundTransparency = 1
 				tabImage.BorderColor3 = Color3.fromRGB(0, 0, 0)
 				tabImage.BorderSizePixel = 0
-				tabImage.Size = UDim2.fromOffset(18, 18)
+				tabImage.Size = scaleOffset(18, 18)
 				tabImage.Parent = tabSwitcher
 			end
 
@@ -1488,7 +1488,7 @@ function MacLib:Window(Settings)
 			elements1.BackgroundTransparency = 1
 			elements1.BorderColor3 = Color3.fromRGB(0, 0, 0)
 			elements1.BorderSizePixel = 0
-			elements1.Position = UDim2.fromOffset(0, 63)
+			elements1.Position = scaleOffset(0, 63)
 			elements1.Size = UDim2.new(1, 0, 1, -63)
 			elements1.ClipsDescendants = true
 
@@ -1646,7 +1646,7 @@ function MacLib:Window(Settings)
 					buttonImage.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					buttonImage.BorderSizePixel = 0
 					buttonImage.Position = UDim2.fromScale(1, 0.5)
-					buttonImage.Size = UDim2.fromOffset(15, 15)
+					buttonImage.Size = scaleOffset(15, 15)
 					buttonImage.Parent = button
 
 					local TweenSettings = {
@@ -1895,7 +1895,7 @@ function MacLib:Window(Settings)
 					sliderValue.BorderSizePixel = 0
 					sliderValue.LayoutOrder = 1
 					sliderValue.Position = UDim2.fromScale(-0.0789, 0.171)
-					sliderValue.Size = UDim2.fromOffset(41, 21)
+					sliderValue.Size = scaleOffset(41, 21)
 					sliderValue.ClipsDescendants = true
 
 					local sliderValueUICorner = Instance.new("UICorner")
@@ -1936,7 +1936,7 @@ function MacLib:Window(Settings)
 					sliderBar.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					sliderBar.BorderSizePixel = 0
 					sliderBar.Position = UDim2.fromScale(0.219, 0.457)
-					sliderBar.Size = UDim2.fromOffset(123, 3)
+					sliderBar.Size = scaleOffset(123, 3)
 
 					local sliderHead = Instance.new("ImageButton")
 					sliderHead.Name = "SliderHead"
@@ -1947,7 +1947,7 @@ function MacLib:Window(Settings)
 					sliderHead.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					sliderHead.BorderSizePixel = 0
 					sliderHead.Position = UDim2.fromScale(1, 0.5)
-					sliderHead.Size = UDim2.fromOffset(12, 12)
+					sliderHead.Size = scaleOffset(12, 12)
 					sliderHead.Parent = sliderBar
 
 					sliderBar.Parent = sliderElements
@@ -2149,7 +2149,7 @@ function MacLib:Window(Settings)
 					inputBox.ClipsDescendants = true
 					inputBox.LayoutOrder = 1
 					inputBox.Position = UDim2.fromScale(1, 0.5)
-					inputBox.Size = UDim2.fromOffset(21, 21)
+					inputBox.Size = scaleOffset(21, 21)
 					inputBox.TextXAlignment = Enum.TextXAlignment.Right
 
 					local inputBoxUICorner = Instance.new("UICorner")
@@ -2327,7 +2327,7 @@ function MacLib:Window(Settings)
 					binderBox.ClipsDescendants = true
 					binderBox.LayoutOrder = 1
 					binderBox.Position = UDim2.fromScale(1, 0.5)
-					binderBox.Size = UDim2.fromOffset(21, 21)
+					binderBox.Size = scaleOffset(21, 21)
 
 					local binderBoxUICorner = Instance.new("UICorner")
 					binderBoxUICorner.Name = "BinderBoxUICorner"
@@ -2531,7 +2531,7 @@ function MacLib:Window(Settings)
 					dropdownImage.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					dropdownImage.BorderSizePixel = 0
 					dropdownImage.Position = UDim2.new(1, 0, 0, 12)
-					dropdownImage.Size = UDim2.fromOffset(14, 14)
+					dropdownImage.Size = scaleOffset(14, 14)
 					dropdownImage.Parent = dropdown
 
 					local dropdownFrame = Instance.new("Frame")
@@ -2582,7 +2582,7 @@ function MacLib:Window(Settings)
 					searchIcon.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					searchIcon.BorderSizePixel = 0
 					searchIcon.Position = UDim2.fromScale(0, 0.5)
-					searchIcon.Size = UDim2.fromOffset(12, 12)
+					searchIcon.Size = scaleOffset(12, 12)
 					searchIcon.Parent = search
 
 					local uIPadding = Instance.new("UIPadding")
@@ -3070,14 +3070,14 @@ function MacLib:Window(Settings)
 					colorCbg.Name = "NewColor"
 					colorCbg.Image = assets.grid
 					colorCbg.ScaleType = Enum.ScaleType.Tile
-					colorCbg.TileSize = UDim2.fromOffset(500, 500)
+					colorCbg.TileSize = scaleOffset(500, 500)
 					colorCbg.AnchorPoint = Vector2.new(1, 0.5)
 					colorCbg.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 					colorCbg.BackgroundTransparency = 1
 					colorCbg.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					colorCbg.BorderSizePixel = 0
 					colorCbg.Position = UDim2.fromScale(1, 0.5)
-					colorCbg.Size = UDim2.fromOffset(21, 21)
+					colorCbg.Size = scaleOffset(21, 21)
 
 					local colorC = Instance.new("Frame")
 					colorC.Name = "Color"
@@ -3137,7 +3137,7 @@ function MacLib:Window(Settings)
 					prompt.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					prompt.BorderSizePixel = 0
 					prompt.Position = UDim2.fromScale(0.5, 0.5)
-					prompt.Size = UDim2.fromOffset(420, 0)
+					prompt.Size = scaleOffset(420, 0)
 
 					local promptUIScale = Instance.new("UIScale")
 					promptUIScale.Name = "BaseUIScale"
@@ -3265,7 +3265,7 @@ function MacLib:Window(Settings)
 					wheel1.BackgroundTransparency = 1
 					wheel1.BorderColor3 = Color3.fromRGB(27, 42, 53)
 					wheel1.Selectable = false
-					wheel1.Size = UDim2.fromOffset(220, 220)
+					wheel1.Size = scaleOffset(220, 220)
 					wheel1.SizeConstraint = Enum.SizeConstraint.RelativeYY
 
 					local target = Instance.new("ImageLabel")
@@ -3277,7 +3277,7 @@ function MacLib:Window(Settings)
 					target.BackgroundTransparency = 1
 					target.BorderColor3 = Color3.fromRGB(27, 42, 53)
 					target.Position = UDim2.fromScale(0.5, 0.5)
-					target.Size = UDim2.fromOffset(22, 22)
+					target.Size = scaleOffset(22, 22)
 					target.SizeConstraint = Enum.SizeConstraint.RelativeYY
 					target.Parent = wheel1
 
@@ -3308,7 +3308,7 @@ function MacLib:Window(Settings)
 					red.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					red.BorderSizePixel = 0
 					red.LayoutOrder = 1
-					red.Size = UDim2.fromOffset(0, 38)
+					red.Size = scaleOffset(0, 38)
 
 					local inputName = Instance.new("TextLabel")
 					inputName.Name = "InputName"
@@ -3356,7 +3356,7 @@ function MacLib:Window(Settings)
 					inputBox.ClipsDescendants = true
 					inputBox.LayoutOrder = 1
 					inputBox.Position = UDim2.fromScale(1, 0.5)
-					inputBox.Size = UDim2.fromOffset(75, 25)
+					inputBox.Size = scaleOffset(75, 25)
 
 					local inputBoxUICorner = Instance.new("UICorner")
 					inputBoxUICorner.Name = "InputBoxUICorner"
@@ -3392,7 +3392,7 @@ function MacLib:Window(Settings)
 					green.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					green.BorderSizePixel = 0
 					green.LayoutOrder = 2
-					green.Size = UDim2.fromOffset(0, 38)
+					green.Size = scaleOffset(0, 38)
 
 					local inputName1 = Instance.new("TextLabel")
 					inputName1.Name = "InputName"
@@ -3439,7 +3439,7 @@ function MacLib:Window(Settings)
 					inputBox1.ClipsDescendants = true
 					inputBox1.LayoutOrder = 1
 					inputBox1.Position = UDim2.fromScale(1, 0.5)
-					inputBox1.Size = UDim2.fromOffset(75, 25)
+					inputBox1.Size = scaleOffset(75, 25)
 
 					local inputBoxUICorner1 = Instance.new("UICorner")
 					inputBoxUICorner1.Name = "InputBoxUICorner"
@@ -3475,7 +3475,7 @@ function MacLib:Window(Settings)
 					blue.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					blue.BorderSizePixel = 0
 					blue.LayoutOrder = 3
-					blue.Size = UDim2.fromOffset(0, 38)
+					blue.Size = scaleOffset(0, 38)
 
 					local inputName2 = Instance.new("TextLabel")
 					inputName2.Name = "InputName"
@@ -3522,7 +3522,7 @@ function MacLib:Window(Settings)
 					inputBox2.ClipsDescendants = true
 					inputBox2.LayoutOrder = 1
 					inputBox2.Position = UDim2.fromScale(1, 0.5)
-					inputBox2.Size = UDim2.fromOffset(75, 25)
+					inputBox2.Size = scaleOffset(75, 25)
 
 					local inputBoxUICorner2 = Instance.new("UICorner")
 					inputBoxUICorner2.Name = "InputBoxUICorner"
@@ -3558,7 +3558,7 @@ function MacLib:Window(Settings)
 					alpha.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					alpha.BorderSizePixel = 0
 					alpha.LayoutOrder = 4
-					alpha.Size = UDim2.fromOffset(0, 38)
+					alpha.Size = scaleOffset(0, 38)
 					alpha.Visible = isAlpha
 
 					local inputName3 = Instance.new("TextLabel")
@@ -3606,7 +3606,7 @@ function MacLib:Window(Settings)
 					inputBox3.ClipsDescendants = true
 					inputBox3.LayoutOrder = 1
 					inputBox3.Position = UDim2.fromScale(1, 0.5)
-					inputBox3.Size = UDim2.fromOffset(75, 25)
+					inputBox3.Size = scaleOffset(75, 25)
 
 					local inputBoxUICorner3 = Instance.new("UICorner")
 					inputBoxUICorner3.Name = "InputBoxUICorner"
@@ -3641,7 +3641,7 @@ function MacLib:Window(Settings)
 					hex.BackgroundTransparency = 1
 					hex.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					hex.BorderSizePixel = 0
-					hex.Size = UDim2.fromOffset(0, 38)
+					hex.Size = scaleOffset(0, 38)
 
 					local inputName4 = Instance.new("TextLabel")
 					inputName4.Name = "InputName"
@@ -3689,7 +3689,7 @@ function MacLib:Window(Settings)
 					inputBox4.ClipsDescendants = true
 					inputBox4.LayoutOrder = 1
 					inputBox4.Position = UDim2.fromScale(1, 0.5)
-					inputBox4.Size = UDim2.fromOffset(75, 25)
+					inputBox4.Size = scaleOffset(75, 25)
 
 					local inputBoxUICorner4 = Instance.new("UICorner")
 					inputBoxUICorner4.Name = "InputBoxUICorner"
@@ -3738,7 +3738,7 @@ function MacLib:Window(Settings)
 
 					local uIGridLayout = Instance.new("UIGridLayout")
 					uIGridLayout.Name = "UIGridLayout"
-					uIGridLayout.CellPadding = UDim2.fromOffset(10, 0)
+					uIGridLayout.CellPadding = scaleOffset(10, 0)
 					uIGridLayout.CellSize = UDim2.new(0.5, -5, 0, 30)
 					uIGridLayout.SortOrder = Enum.SortOrder.LayoutOrder
 					uIGridLayout.Parent = colorWells
@@ -3747,12 +3747,12 @@ function MacLib:Window(Settings)
 					newColor.Name = "NewColor"
 					newColor.Image = assets.grid
 					newColor.ScaleType = Enum.ScaleType.Tile
-					newColor.TileSize = UDim2.fromOffset(500, 500)
+					newColor.TileSize = scaleOffset(500, 500)
 					newColor.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 					newColor.BackgroundTransparency = 1
 					newColor.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					newColor.BorderSizePixel = 0
-					newColor.Size = UDim2.fromOffset(100, 100)
+					newColor.Size = scaleOffset(100, 100)
 
 					local uICorner2 = Instance.new("UICorner")
 					uICorner2.Name = "UICorner"
@@ -3778,13 +3778,13 @@ function MacLib:Window(Settings)
 					oldColor.Name = "OldColor"
 					oldColor.Image = assets.grid
 					oldColor.ScaleType = Enum.ScaleType.Tile
-					oldColor.TileSize = UDim2.fromOffset(500, 500)
+					oldColor.TileSize = scaleOffset(500, 500)
 					oldColor.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 					oldColor.BackgroundTransparency = 1
 					oldColor.BorderColor3 = Color3.fromRGB(0, 0, 0)
 					oldColor.BorderSizePixel = 0
 					oldColor.LayoutOrder = 1
-					oldColor.Size = UDim2.fromOffset(100, 100)
+					oldColor.Size = scaleOffset(100, 100)
 
 					local uICorner4 = Instance.new("UICorner")
 					uICorner4.Name = "UICorner"
@@ -5031,7 +5031,7 @@ function MacLib:Window(Settings)
 		prompt.BorderColor3 = Color3.fromRGB(0, 0, 0)
 		prompt.BorderSizePixel = 0
 		prompt.Position = UDim2.fromScale(0.5, 0.5)
-		prompt.Size = UDim2.fromOffset(280, 0)
+		prompt.Size = scaleOffset(280, 0)
 
 		local promptUIScale = Instance.new("UIScale")
 		promptUIScale.Name = "BaseUIScale"
@@ -5628,7 +5628,7 @@ function MacLib:Demo()
 	local Window = MacLib:Window({
 		Title = "Maclib Demo",
 		Subtitle = "This is a subtitle.",
-		Size = UDim2.fromOffset(868, 650),
+		Size = scaleOffset(868, 650),
 		DragStyle = 1,
 		DisabledWindowControls = {},
 		ShowUserInfo = true,
