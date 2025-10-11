@@ -1448,8 +1448,11 @@ task.spawn(function()
 end)
 
 task.spawn(function()
+    if not getgenv().SeamlessLimiterEnabled then return end
+    
     local endgameCount = 0
     local hasRun = false
+    
     repeat task.wait(0.5) until not LocalPlayer.PlayerGui:FindFirstChild("TeleportUI")
     print("[Seamless Fix] Waiting for Settings GUI...")
     repeat task.wait(0.5) until LocalPlayer.PlayerGui:FindFirstChild("Settings")
@@ -1484,9 +1487,11 @@ task.spawn(function()
     end
 
     print("[Seamless Fix] Checking initial seamless state...")
-    local currentSeamless = getSeamlessValue()
-    if endgameCount < (getgenv().MaxSeamlessRounds or 4) then
-        if not currentSeamless and getgenv().SeamlessLimiterEnabled then
+    local maxSeamlessRounds = getgenv().MaxSeamlessRounds or 4
+    
+    if endgameCount < maxSeamlessRounds then
+        local currentSeamless = getSeamlessValue()
+        if not currentSeamless then
             setSeamlessRetry()
             task.wait(0.5)
             print("[Seamless Fix] Enabled Seamless Retry")
@@ -1497,15 +1502,12 @@ task.spawn(function()
 
     LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
         if child.Name == "EndGameUI" and not hasRun then
-            if not getgenv().SeamlessLimiterEnabled then return end
             hasRun = true
             endgameCount = endgameCount + 1
-            local maxRounds = getgenv().MaxSeamlessRounds or 4
-            print("[Seamless Fix] Endgame detected. Current seamless rounds: " .. endgameCount .. "/" .. maxRounds)
+            print("[Seamless Fix] Endgame detected. Current seamless rounds: " .. endgameCount .. "/" .. maxSeamlessRounds)
             
-            if endgameCount >= maxRounds and getSeamlessValue() then
+            if endgameCount >= maxSeamlessRounds and getSeamlessValue() then
                 task.wait(0.5)
-                print("[Seamless Fix] Max rounds reached, disabling seamless retry to restart match...")
                 setSeamlessRetry()
                 print("[Seamless Fix] Disabled Seamless Retry")
                 task.wait(0.5)
@@ -1523,6 +1525,11 @@ task.spawn(function()
             print("[Seamless Fix] EndgameUI removed, ready for next round")
         end
     end)
+    
+    while true do
+        task.wait(1)
+        if isUnloaded then break end
+    end
 end)
 
 task.spawn(function()
