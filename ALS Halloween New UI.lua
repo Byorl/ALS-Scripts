@@ -57,6 +57,7 @@ getgenv().AutoEventEnabled = false
 getgenv().AutoAbilitiesEnabled = false
 getgenv().AutoReadyEnabled = false
 getgenv().CardSelectionEnabled = false
+getgenv().SlowerCardSelectionEnabled = false
 getgenv().BossRushEnabled = false
 getgenv().WebhookEnabled = false
 getgenv().SeamlessLimiterEnabled = false
@@ -454,16 +455,36 @@ end)
 
 Sections.CardSelection.Left:Paragraph({ Header = "Card Priority System", Body = "Set priority values for each card (lower number = higher priority). Cards with priority 999 will be avoided." })
 Sections.CardSelection.Left:Toggle({
-    Name = "Enable Card Selection",
+    Name = "Enable Card Selection (Fast)",
     Default = getgenv().Config.toggles.CardSelectionToggle or false,
     Callback = function(v)
         getgenv().CardSelectionEnabled = v
         getgenv().Config.toggles.CardSelectionToggle = v
+        if v and getgenv().SlowerCardSelectionEnabled then
+            getgenv().SlowerCardSelectionEnabled = false
+            getgenv().Config.toggles.SlowerCardSelectionToggle = false
+        end
         saveConfig(getgenv().Config)
-        notify("Card Selection", v and "Card selection enabled!" or "Card selection disabled!", 3)
+        notify("Card Selection", v and "Fast card selection enabled!" or "Fast card selection disabled!", 3)
     end
 }, "CardSelectionToggle")
 getgenv().CardSelectionEnabled = getgenv().Config.toggles.CardSelectionToggle or false
+
+Sections.CardSelection.Left:Toggle({
+    Name = "Enable Card Selection (Slower)",
+    Default = getgenv().Config.toggles.SlowerCardSelectionToggle or false,
+    Callback = function(v)
+        getgenv().SlowerCardSelectionEnabled = v
+        getgenv().Config.toggles.SlowerCardSelectionToggle = v
+        if v and getgenv().CardSelectionEnabled then
+            getgenv().CardSelectionEnabled = false
+            getgenv().Config.toggles.CardSelectionToggle = false
+        end
+        saveConfig(getgenv().Config)
+        notify("Card Selection", v and "Slower card selection enabled!" or "Slower card selection disabled!", 3)
+    end
+}, "SlowerCardSelectionToggle")
+getgenv().SlowerCardSelectionEnabled = getgenv().Config.toggles.SlowerCardSelectionToggle or false
 
 Sections.CardSelection.Left:Header({ Text = "━━━━━ Candy Cards ━━━━━" })
 local candyNames = {}
@@ -1250,7 +1271,55 @@ task.spawn(function()
         pressConfirm()
         return true
     end
-    while true do task.wait(1) if getgenv().CardSelectionEnabled then selectCard() end if isUnloaded then break end end
+    
+    local function selectCardSlower()
+        if not getgenv().SlowerCardSelectionEnabled then return false end
+        local list = getAvailableCards() if not list then return false end
+        local _, best = findBestCard(list)
+        local button = best.button
+        
+        local GuiService = game:GetService("GuiService")
+        local function press(key)
+            VIM:SendKeyEvent(true, key, false, game)
+            task.wait(0.1)
+            VIM:SendKeyEvent(false, key, false, game)
+        end
+        
+        GuiService.SelectedObject = button
+        task.wait(0.2)
+        press(Enum.KeyCode.Return)
+        task.wait(0.3)
+        
+        local ok, confirmButton = pcall(function()
+            local prompt = LocalPlayer.PlayerGui:FindFirstChild("Prompt") if not prompt then return nil end
+            local frame = prompt:FindFirstChild("Frame") if not frame then return nil end
+            local inner = frame:FindFirstChild("Frame") if not inner then return nil end
+            local children = inner:GetChildren() if #children < 5 then return nil end
+            local button = children[5]:FindFirstChild("TextButton") if not button then return nil end
+            local label = button:FindFirstChild("TextLabel") if label and label.Text == "Confirm" then return button end
+            return nil
+        end)
+        
+        if ok and confirmButton then
+            GuiService.SelectedObject = confirmButton
+            task.wait(0.2)
+            press(Enum.KeyCode.Return)
+            task.wait(0.3)
+        end
+        
+        GuiService.SelectedObject = nil
+        return true
+    end
+    
+    while true do 
+        task.wait(1) 
+        if getgenv().CardSelectionEnabled then 
+            selectCard() 
+        elseif getgenv().SlowerCardSelectionEnabled then 
+            selectCardSlower() 
+        end 
+        if isUnloaded then break end 
+    end
 end)
 
 task.spawn(function()
