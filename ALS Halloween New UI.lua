@@ -1056,8 +1056,25 @@ task.spawn(function()
         if u and u:IsA("ValueBase") then return u.Value or 0 end
         return 0
     end
+    
+    local function fixAbilityName(abilityName)
+        local fixed = abilityName
+        
+        fixed = fixed:gsub("!!+", "!")
+        
+        fixed = fixed:gsub("%?%?+", "?")
+        
+        return fixed
+    end
+    
     local function useAbility(tower, abilityName)
-        if tower then pcall(function() RS.Remotes.Ability:InvokeServer(tower, abilityName) end) end
+        if tower then 
+            local correctedName = fixAbilityName(abilityName)
+            pcall(function() 
+                RS.Remotes.Ability:InvokeServer(tower, correctedName) 
+                print("[Auto Ability] Used: " .. correctedName .. " on " .. tower.Name)
+            end) 
+        end
     end
     local function isOnCooldown(towerName, abilityName)
         local d = getAbilityData(towerName, abilityName) if not d or not d.cooldown then return false end
