@@ -1476,35 +1476,71 @@ task.spawn(function()
     local function getRewards()
         local rewards = {}
         local ok, res = pcall(function()
-            local ui = LocalPlayer.PlayerGui:FindFirstChild("EndGameUI") if not ui then return {} end
+            local ui = LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
+            if not ui then 
+                print("[Webhook] No EndGameUI found")
+                return {} 
+            end
+            
             local rewardsHolder = ui:FindFirstChild("BG")
-            if rewardsHolder then
-                rewardsHolder = rewardsHolder:FindFirstChild("Container")
-                if rewardsHolder then
-                    rewardsHolder = rewardsHolder:FindFirstChild("Rewards")
-                    if rewardsHolder then
-                        rewardsHolder = rewardsHolder:FindFirstChild("Holder")
-                        if rewardsHolder then
-                            for _, item in pairs(rewardsHolder:GetChildren()) do
-                                if item:IsA("GuiObject") and not item:IsA("UIListLayout") then
-                                    local amountLabel = item:FindFirstChild("Amount")
-                                    local nameLabel = item:FindFirstChild("ItemName")
-                                    if amountLabel and nameLabel then
-                                        local amountText = amountLabel.Text
-                                        local itemName = nameLabel.Text
-                                        local clean = string.gsub(string.gsub(amountText, "x", ""), "+", "")
-                                        clean = string.gsub(clean, ",", "")
-                                        local n = tonumber(clean)
-                                        if n and itemName ~= "" then table.insert(rewards, { name=itemName, amount=n }) end
-                                    end
-                                end
-                            end
+            if not rewardsHolder then 
+                print("[Webhook] No BG found")
+                return {} 
+            end
+            
+            rewardsHolder = rewardsHolder:FindFirstChild("Container")
+            if not rewardsHolder then 
+                print("[Webhook] No Container found")
+                return {} 
+            end
+            
+            rewardsHolder = rewardsHolder:FindFirstChild("Rewards")
+            if not rewardsHolder then 
+                print("[Webhook] No Rewards found")
+                return {} 
+            end
+            
+            rewardsHolder = rewardsHolder:FindFirstChild("Holder")
+            if not rewardsHolder then 
+                print("[Webhook] No Holder found")
+                return {} 
+            end
+            
+            print("[Webhook] Found Holder, scanning children...")
+            local childCount = 0
+            for _, item in pairs(rewardsHolder:GetChildren()) do
+                childCount = childCount + 1
+                if item:IsA("GuiObject") and not item:IsA("UIListLayout") then
+                    print("[Webhook] Checking item:", item.Name, item.ClassName)
+                    local amountLabel = item:FindFirstChild("Amount")
+                    local nameLabel = item:FindFirstChild("ItemName")
+                    
+                    if amountLabel and nameLabel then
+                        local amountText = amountLabel.Text
+                        local itemName = nameLabel.Text
+                        print("[Webhook] Found reward:", itemName, "Amount text:", amountText)
+                        
+                        local clean = string.gsub(string.gsub(amountText, "x", ""), "+", "")
+                        clean = string.gsub(clean, ",", "")
+                        local n = tonumber(clean)
+                        
+                        if n and itemName ~= "" then 
+                            table.insert(rewards, { name=itemName, amount=n })
+                            print("[Webhook] Added reward:", itemName, n)
                         end
+                    else
+                        print("[Webhook] Missing labels - Amount:", amountLabel ~= nil, "ItemName:", nameLabel ~= nil)
                     end
                 end
             end
+            print("[Webhook] Total children:", childCount, "Rewards found:", #rewards)
             return rewards
         end)
+        
+        if not ok then
+            warn("[Webhook] Error in getRewards:", res)
+        end
+        
         return ok and res or {}
     end
     local function getMatchResult()
@@ -1548,14 +1584,22 @@ task.spawn(function()
             isProcessing = true
             hasRun = tick()
             
+            print("[Webhook] Starting webhook process...")
+            
+            task.wait(0.5)
+            
+            print("[Webhook] Capturing rewards...")
             local rewards = getRewards()
+            print("[Webhook] Rewards captured:", #rewards)
+            
             local matchTime, matchWave, matchResult = getMatchResult()
             local mapName, mapDifficulty = getMapInfo()
             
-            task.wait(0.2)
+            task.wait(0.3)
             
             local clientData = getClientData()
             if not clientData then 
+                print("[Webhook] Failed to get ClientData")
                 isProcessing = false
                 return
             end
@@ -1876,9 +1920,7 @@ task.spawn(function()
         
         local currentlyInLobby = checkIsInLobby()
         
-        if not currentlyInLobby then
-            print("[Breach Auto-Join] Not in lobby, skipping this loop")
-        elseif getgenv().BreachEnabled then
+        if getgenv().BreachEnabled then
             local availableBreaches = getAvailableBreaches()
             
             print("[Breach Auto-Join] Available breaches:", #availableBreaches)
