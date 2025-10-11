@@ -1,9 +1,6 @@
 repeat task.wait() until game:IsLoaded()
 
-local uiSizePercent = getgenv().size or 100
-local sizeMult = uiSizePercent / 100
-
-local MacLib = loadstring(game:HttpGet("https://github.com/biggaboy212/Maclib/releases/latest/download/maclib.txt"))()
+local MacLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/Byorl/ALS-Scripts/refs/heads/main/maclib.txt"))()
 
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
@@ -81,17 +78,6 @@ local Window = MacLib:Window({
     AcrylicBlur = true,
 })
 
-task.spawn(function()
-    task.wait(0.1)
-    local screenGui = LocalPlayer.PlayerGui:FindFirstChild("macLib") or (gethui and gethui():FindFirstChild("macLib"))
-    if screenGui then
-        local uiScale = Instance.new("UIScale")
-        uiScale.Scale = sizeMult
-        uiScale.Parent = screenGui
-        print("[UI Scale] Applied " .. uiSizePercent .. "% scaling to UI")
-    end
-end)
-
 local function notify(title, desc, time)
     Window:Notify({ Title = title or "ALS", Description = desc or "", Lifetime = time or 3 })
 end
@@ -105,7 +91,7 @@ ToggleGui.Parent = game:GetService("CoreGui")
 
 local ToggleButton = Instance.new("ImageButton")
 ToggleButton.Name = "ToggleButton"
-ToggleButton.Size = UDim2.new(0, math.floor(72 * sizeMult), 0, math.floor(72 * sizeMult))
+ToggleButton.Size = UDim2.new(0, 72, 0, 72)
 ToggleButton.Position = UDim2.new(0, 24, 0, 24)
 ToggleButton.AnchorPoint = Vector2.new(0, 0)
 ToggleButton.BackgroundTransparency = 1
