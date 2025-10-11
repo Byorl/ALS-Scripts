@@ -2399,7 +2399,7 @@ task.spawn(function()
     print("[Auto Capsules] Capsule automation loaded!")
     
     while true do
-        task.wait(2)
+        task.wait(0)
         
         if getgenv().CapsuleEnabled then
             local clientData = getClientData()
