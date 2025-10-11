@@ -2391,7 +2391,7 @@ end)
 task.spawn(function()
     if isInLobby then return end
     
-    task.wait(2)
+    task.wait(0)
     
     local PurchaseEvent = RS:WaitForChild("Events"):WaitForChild("Hallowen2025"):WaitForChild("Purchase")
     local OpenCapsuleEvent = RS:WaitForChild("Remotes"):WaitForChild("OpenCapsule")
@@ -2431,7 +2431,7 @@ task.spawn(function()
                     task.wait(0)
                 end
                 
-                task.wait(0.5)
+                task.wait(0)
                 clientData = getClientData()
                 if clientData and clientData.ItemData and clientData.ItemData.HalloweenCapsule2025 then
                     capsuleAmount = clientData.ItemData.HalloweenCapsule2025.Amount or 0
