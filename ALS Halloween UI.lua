@@ -23,15 +23,60 @@ local isInLobby = checkIsInLobby()
 
 local CONFIG_FOLDER = "ALSHalloweenEvent"
 local CONFIG_FILE = "config.json"
+local USER_ID = tostring(LocalPlayer.UserId)
 
 local function getConfigPath()
+    return CONFIG_FOLDER .. "/" .. USER_ID .. "/" .. CONFIG_FILE
+end
+
+local function getUserFolder()
+    return CONFIG_FOLDER .. "/" .. USER_ID
+end
+
+local function getOldConfigPath()
     return CONFIG_FOLDER .. "/" .. CONFIG_FILE
+end
+
+local function migrateOldConfig()
+    local oldConfigPath = getOldConfigPath()
+    local newConfigPath = getConfigPath()
+    
+    -- Check if old config exists and new one doesn't
+    if isfile(oldConfigPath) and not isfile(newConfigPath) then
+        print("[Config] Migrating old config to user-specific folder...")
+        local ok, oldData = pcall(function()
+            return readfile(oldConfigPath)
+        end)
+        
+        if ok and oldData then
+            -- Create user folder
+            local userFolder = getUserFolder()
+            if not isfolder(userFolder) then
+                makefolder(userFolder)
+            end
+            
+            -- Copy old config to new location
+            pcall(function()
+                writefile(newConfigPath, oldData)
+                print("[Config] Migration successful! Config moved to: " .. newConfigPath)
+            end)
+        end
+    end
 end
 
 local function loadConfig()
     if not isfolder(CONFIG_FOLDER) then
         makefolder(CONFIG_FOLDER)
     end
+    
+    local userFolder = getUserFolder()
+    if not isfolder(userFolder) then
+        makefolder(userFolder)
+    end
+    
+    -- Migrate old config if it exists
+    migrateOldConfig()
+    
     local configPath = getConfigPath()
     if isfile(configPath) then
         local ok, data = pcall(function()
@@ -49,9 +94,14 @@ local function loadConfig()
 end
 
 local function saveConfig(config)
+    local userFolder = getUserFolder()
     if not isfolder(CONFIG_FOLDER) then
         makefolder(CONFIG_FOLDER)
     end
+    if not isfolder(userFolder) then
+        makefolder(userFolder)
+    end
+    
     local ok, err = pcall(function()
         local json = HttpService:JSONEncode(config)
         local path = getConfigPath()
@@ -64,7 +114,8 @@ local function saveConfig(config)
 end
 
 getgenv().Config = loadConfig()
-print("[Config] Loaded config from: " .. getConfigPath())
+print("[Config] Loaded config for User ID: " .. USER_ID)
+print("[Config] Config path: " .. getConfigPath())
 print("[Config] Config keys: toggles=" .. tostring(getgenv().Config.toggles ~= nil) .. ", inputs=" .. tostring(getgenv().Config.inputs ~= nil) .. ", abilities=" .. tostring(getgenv().Config.abilities ~= nil))
 
 getgenv().AutoEventEnabled = getgenv().Config.toggles.AutoEventToggle or false
