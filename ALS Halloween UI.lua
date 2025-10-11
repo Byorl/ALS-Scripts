@@ -1264,7 +1264,7 @@ task.spawn(function()
 end)
 
 task.spawn(function()
-    local hasRun = false
+    local hasRun = 0
     local isProcessing = false
     
     local function formatNumber(num)
@@ -1360,6 +1360,22 @@ task.spawn(function()
                         local result = resultText and resultText.Text or "Unknown"
                         local time = timeText and timeText.Text or "00:00:00"
                         local wave = waveText and waveText.Text or "0"
+                        
+                        if time:find("Total Time:") then
+                            local timeMatch = time:match("Total Time:%s*(%d+):(%d+)")
+                            if timeMatch then
+                                local minutes, seconds = time:match("Total Time:%s*(%d+):(%d+)")
+                                time = string.format("%02d:%02d:%02d", 0, tonumber(minutes) or 0, tonumber(seconds) or 0)
+                            end
+                        end
+                        
+                        if wave:find("Wave Reached:") then
+                            local waveMatch = wave:match("Wave Reached:%s*(%d+)")
+                            if waveMatch then
+                                wave = waveMatch
+                            end
+                        end
+                        
                         if result:lower():find("win") or result:lower():find("victory") then
                             result = "VICTORY"
                         elseif result:lower():find("defeat") or result:lower():find("lose") or result:lower():find("loss") then
@@ -1397,10 +1413,17 @@ task.spawn(function()
     
     local function sendGameCompletionWebhook()
         if not getgenv().WebhookEnabled then return end
-        if hasRun or isProcessing then return end
+        if isProcessing then return end
+        
+        if hasRun then
+            local timeSinceLastRun = tick() - hasRun
+            if timeSinceLastRun < 3 then
+                return
+            end
+        end
         
         isProcessing = true
-        hasRun = true
+        hasRun = tick()
         
         task.wait(0.1)
         
@@ -1514,7 +1537,6 @@ task.spawn(function()
     LocalPlayer.PlayerGui.ChildRemoved:Connect(function(child)
         if child.Name == "EndGameUI" then
             task.wait(1)
-            hasRun = false
             isProcessing = false
         end
     end)
