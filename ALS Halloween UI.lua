@@ -145,7 +145,7 @@ ToggleGui.Parent = game:GetService("CoreGui")
 
 local ToggleButton = Instance.new("ImageButton")
 ToggleButton.Name = "ToggleButton"
-ToggleButton.Size = UDim2.new(0, 72, 0, 72)
+ToggleButton.Size = UDim2.new(0, 75, 0, 75)
 ToggleButton.Position = UDim2.new(0, 24, 0, 24)
 ToggleButton.AnchorPoint = Vector2.new(0, 0)
 ToggleButton.BackgroundTransparency = 1
