@@ -270,6 +270,118 @@ addToggle(Tabs.Main, "AutoReadyToggle", "Auto Ready", getgenv().Config.toggles.A
     notify("Auto Ready", val and "Enabled" or "Disabled", 3)
 end)
 
+Tabs.Main:AddParagraph({ Title = "🚀 Auto Join System", Content = "Automatically join maps and start games" })
+
+getgenv().AutoJoinConfig = getgenv().AutoJoinConfig or {
+    enabled = false,
+    autoStart = false,
+    friendsOnly = false,
+    mode = "Story",
+    map = "",
+    act = 1,
+    difficulty = "Normal"
+}
+
+local MapData = nil
+pcall(function()
+    local mapDataModule = RS:FindFirstChild("Modules") and RS.Modules:FindFirstChild("MapData")
+    if mapDataModule and mapDataModule:IsA("ModuleScript") then
+        MapData = require(mapDataModule)
+    end
+end)
+
+local function getMapsByMode(mode)
+    if not MapData then return {} end
+    
+    if mode == "ElementalCaverns" then
+        return {"Light", "Nature", "Fire", "Dark", "Water"}
+    end
+    
+    local maps = {}
+    for mapName, mapInfo in pairs(MapData) do
+        if mapInfo.Type and type(mapInfo.Type) == "table" then
+            for _, mapType in ipairs(mapInfo.Type) do
+                if mapType == mode then
+                    table.insert(maps, mapName)
+                    break
+                end
+            end
+        end
+    end
+    table.sort(maps)
+    return maps
+end
+
+local function mapHasAct(mapName)
+    if not MapData or not MapData[mapName] then return false end
+    return MapData[mapName].HasAct == true
+end
+
+local modeDropdown = Tabs.Main:AddDropdown("AutoJoinMode", {
+    Title = "Mode",
+    Values = {"Story", "Infinite", "Raids", "ElementalCaverns", "LegendaryStages", "Dungeon", "Survival", "Challenge"},
+    Default = getgenv().AutoJoinConfig.mode or "Story",
+})
+
+local mapDropdown = Tabs.Main:AddDropdown("AutoJoinMap", {
+    Title = "Map",
+    Values = getMapsByMode(getgenv().AutoJoinConfig.mode),
+    Default = getgenv().AutoJoinConfig.map or "",
+})
+
+local actDropdown = Tabs.Main:AddDropdown("AutoJoinAct", {
+    Title = "Act",
+    Values = {"1", "2", "3", "4", "5", "6"},
+    Default = tostring(getgenv().AutoJoinConfig.act or 1),
+})
+
+local difficultyDropdown = Tabs.Main:AddDropdown("AutoJoinDifficulty", {
+    Title = "Difficulty",
+    Values = {"Normal", "Nightmare", "Purgatory", "Insanity"},
+    Default = getgenv().AutoJoinConfig.difficulty or "Normal",
+})
+
+modeDropdown:OnChanged(function(value)
+    getgenv().AutoJoinConfig.mode = value
+    
+    local newMaps = getMapsByMode(value)
+    mapDropdown:SetValues(newMaps)
+    if #newMaps > 0 then
+        mapDropdown:SetValue(newMaps[1])
+        getgenv().AutoJoinConfig.map = newMaps[1]
+    end
+end)
+
+mapDropdown:OnChanged(function(value)
+    getgenv().AutoJoinConfig.map = value
+end)
+
+actDropdown:OnChanged(function(value)
+    getgenv().AutoJoinConfig.act = tonumber(value) or 1
+end)
+
+difficultyDropdown:OnChanged(function(value)
+    getgenv().AutoJoinConfig.difficulty = value
+end)
+
+addToggle(Tabs.Main, "AutoJoinToggle", "Auto Join Map", false, function(val)
+    getgenv().AutoJoinConfig.enabled = val
+    notify("Auto Join", val and "Enabled" or "Disabled", 3)
+end)
+
+addToggle(Tabs.Main, "AutoJoinStartToggle", "Auto Start", false, function(val)
+    getgenv().AutoJoinConfig.autoStart = val
+    notify("Auto Start", val and "Enabled" or "Disabled", 3)
+end)
+
+addToggle(Tabs.Main, "FriendsOnlyToggle", "Friends Only", false, function(val)
+    getgenv().AutoJoinConfig.friendsOnly = val
+    pcall(function()
+        RS.Remotes.Teleporter.InteractEvent:FireServer("FriendsOnly")
+    end)
+    notify("Friends Only", val and "Enabled" or "Disabled", 3)
+end)
+
 Tabs.Ability:AddParagraph({ Title = "⚔️ Auto Ability System", Content = "Automatically trigger tower abilities based on conditions you set" })
 addToggle(Tabs.Ability, "AutoAbilityToggle", "Enable Auto Abilities", getgenv().AutoAbilitiesEnabled, function(val)
     getgenv().AutoAbilitiesEnabled = val
@@ -1954,6 +2066,93 @@ task.spawn(function()
             end
         end
 
+    end
+end)
+
+task.spawn(function()
+    print("[Auto Join] Auto Join system loaded!")
+    
+    while true do
+        task.wait(2)
+        
+        if getgenv().AutoJoinConfig and getgenv().AutoJoinConfig.enabled then
+            pcall(function()
+                local mode = getgenv().AutoJoinConfig.mode
+                local map = getgenv().AutoJoinConfig.map
+                local act = getgenv().AutoJoinConfig.act
+                local difficulty = getgenv().AutoJoinConfig.difficulty
+                
+                if not map or map == "" then return end
+                
+                local teleporterRemote = RS.Remotes.Teleporter.InteractEvent
+                
+                if mode == "Story" then
+                    teleporterRemote:FireServer("Select", map, act, difficulty, "Story")
+                    print("[Auto Join] Joined Story:", map, "Act", act, difficulty)
+                    
+                elseif mode == "Infinite" then
+                    teleporterRemote:FireServer("Select", map, act, difficulty, "Infinite")
+                    print("[Auto Join] Joined Infinite:", map, "Act", act, difficulty)
+                    
+                elseif mode == "Raids" then
+                    teleporterRemote:FireServer("Select", map, act)
+                    print("[Auto Join] Joined Raid:", map, "Act", act)
+                    
+                elseif mode == "Dungeon" then
+                    teleporterRemote:FireServer("Select", map)
+                    print("[Auto Join] Joined Dungeon:", map)
+                    
+                elseif mode == "Survival" then
+                    teleporterRemote:FireServer("Select", map)
+                    print("[Auto Join] Joined Survival:", map)
+                    
+                elseif mode == "ElementalCaverns" then
+                    teleporterRemote:FireServer("Select", map, difficulty)
+                    print("[Auto Join] Joined Elemental Cavern:", map, difficulty)
+                    
+                elseif mode == "Challenge" then
+                    teleporterRemote:FireServer("Select", "Challenge", act)
+                    print("[Auto Join] Joined Challenge Act", act)
+                    
+                elseif mode == "LegendaryStages" then
+                    teleporterRemote:FireServer("Select", map, act, difficulty, "LegendaryStages")
+                    print("[Auto Join] Joined Legendary Stage:", map, "Act", act, difficulty)
+                end
+                
+                task.wait(1)
+            end)
+        end
+        
+        if getgenv().AutoJoinConfig and getgenv().AutoJoinConfig.autoStart then
+            pcall(function()
+                local bottomGui = LocalPlayer.PlayerGui:FindFirstChild("Bottom")
+                if bottomGui then
+                    local frame = bottomGui:FindFirstChild("Frame")
+                    if frame then
+                        local children = frame:GetChildren()
+                        if children[2] then
+                            local subChildren = children[2]:GetChildren()
+                            if subChildren[6] then
+                                local textButton = subChildren[6]:FindFirstChild("TextButton")
+                                if textButton then
+                                    local textLabel = textButton:FindFirstChild("TextLabel")
+                                    if textLabel and textLabel.Text == "Start" then
+                                        local remotes = RS:FindFirstChild("Remotes")
+                                        local playerReady = remotes and remotes:FindFirstChild("PlayerReady")
+                                        if playerReady then
+                                            playerReady:FireServer()
+                                            print("[Auto Join] Auto Start fired")
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+        
+        if isUnloaded then break end
     end
 end)
 
