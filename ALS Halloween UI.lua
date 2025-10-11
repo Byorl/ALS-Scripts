@@ -44,13 +44,21 @@ local function saveConfig(config)
     if not isfolder(CONFIG_FOLDER) then
         makefolder(CONFIG_FOLDER)
     end
-    local ok = pcall(function()
-        writefile(getConfigPath(), HttpService:JSONEncode(config))
+    local ok, err = pcall(function()
+        local json = HttpService:JSONEncode(config)
+        local path = getConfigPath()
+        writefile(path, json)
+        print("[Config] Saved to: " .. path)
     end)
+    if not ok then
+        warn("[Config] Save failed: " .. tostring(err))
+    end
     return ok
 end
 
 getgenv().Config = loadConfig()
+print("[Config] Loaded config from: " .. getConfigPath())
+print("[Config] Config keys: toggles=" .. tostring(getgenv().Config.toggles ~= nil) .. ", inputs=" .. tostring(getgenv().Config.inputs ~= nil) .. ", abilities=" .. tostring(getgenv().Config.abilities ~= nil))
 
 getgenv().AutoEventEnabled = getgenv().Config.toggles.AutoEventToggle or false
 getgenv().AutoAbilitiesEnabled = getgenv().Config.toggles.AutoAbilityToggle or false
@@ -123,18 +131,16 @@ local Window = Fluent:CreateWindow({
 })
 
 local Tabs = {
-    AutoEvent = Window:AddTab({ Title = "Auto Event", Icon = "zap" }),
-    AutoAbility = Window:AddTab({ Title = "Auto Ability", Icon = "box" }),
-    CardSelection = Window:AddTab({ Title = "Card Selection", Icon = "list" }),
-    BossRush = Window:AddTab({ Title = "Boss Rush", Icon = "swords" }),
-    Webhook = Window:AddTab({ Title = "Webhook", Icon = "webhook" }),
-    SeamlessFix = Window:AddTab({ Title = "Seamless Fix", Icon = "repeat" }),
+    Main = Window:AddTab({ Title = "Main", Icon = "home" }),
+    Ability = Window:AddTab({ Title = "Ability", Icon = "cube" }),
+    CardSelection = Window:AddTab({ Title = "Card Selection", Icon = "layout-grid" }),
+    BossRush = Window:AddTab({ Title = "Boss Rush", Icon = "shield" }),
+    Webhook = Window:AddTab({ Title = "Webhook", Icon = "send" }),
+    SeamlessFix = Window:AddTab({ Title = "Seamless Fix", Icon = "refresh-cw" }),
+    Tabs.Event = Window:AddTab({ Title = "Event", Icon = "gift" })
     Misc = Window:AddTab({ Title = "Misc", Icon = "wrench" }),
     Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
 }
-if not isInLobby then
-    Tabs.Event = Window:AddTab({ Title = "Event", Icon = "ghost" })
-end
 
 local ToggleGui = Instance.new("ScreenGui")
 ToggleGui.Name = "ALS_Fluent_Toggle"
@@ -229,8 +235,6 @@ local function getAllAbilities(unitName)
     return abilities
 end
 
-Tabs.AutoEvent:AddParagraph({ Title = "Halloween 2025 Event Auto Join", Content = "Automatically joins and starts the Halloween event." })
-
 local function addToggle(tab, key, title, default, onChanged)
     local t = tab:AddToggle(key, { Title = title, Default = default })
     t:OnChanged(function()
@@ -240,33 +244,35 @@ local function addToggle(tab, key, title, default, onChanged)
     return t
 end
 
-addToggle(Tabs.AutoEvent, "AutoEventToggle", "Enable Auto Event Join", getgenv().AutoEventEnabled, function(val)
+Tabs.Main:AddParagraph({ Title = "🎃 Halloween Event", Content = "Automatically join and participate in the Halloween 2025 event" })
+addToggle(Tabs.Main, "AutoEventToggle", "Auto Event Join", getgenv().AutoEventEnabled, function(val)
     getgenv().AutoEventEnabled = val
     getgenv().Config.toggles.AutoEventToggle = val
     saveConfig(getgenv().Config)
-    notify("Auto Event", val and "Auto event join enabled!" or "Auto event join disabled!", 3)
+    notify("Auto Event", val and "Enabled" or "Disabled", 3)
 end)
 
-addToggle(Tabs.AutoEvent, "AutoFastRetryToggle", "Auto Fast Retry", getgenv().Config.toggles.AutoFastRetryToggle or false, function(val)
+Tabs.Main:AddParagraph({ Title = "⚡ Game Automation", Content = "Streamline your gameplay with automatic actions" })
+addToggle(Tabs.Main, "AutoFastRetryToggle", "Auto Replay", getgenv().Config.toggles.AutoFastRetryToggle or false, function(val)
     getgenv().AutoFastRetryEnabled = val
     getgenv().Config.toggles.AutoFastRetryToggle = val
     saveConfig(getgenv().Config)
-    notify("Auto Fast Retry", val and "Enabled!" or "Disabled!", 3)
+    notify("Auto Replay", val and "Enabled" or "Disabled", 3)
 end)
 
-addToggle(Tabs.AutoEvent, "AutoReadyToggle", "Auto Ready", getgenv().Config.toggles.AutoReadyToggle or false, function(val)
+addToggle(Tabs.Main, "AutoReadyToggle", "Auto Ready", getgenv().Config.toggles.AutoReadyToggle or false, function(val)
     getgenv().AutoReadyEnabled = val
     getgenv().Config.toggles.AutoReadyToggle = val
     saveConfig(getgenv().Config)
-    notify("Auto Ready", val and "Enabled!" or "Disabled!", 3)
+    notify("Auto Ready", val and "Enabled" or "Disabled", 3)
 end)
 
-Tabs.AutoAbility:AddParagraph({ Title = "Auto Ability System", Content = "Automatically uses tower abilities based on your equipped units." })
-addToggle(Tabs.AutoAbility, "AutoAbilityToggle", "Enable Auto Abilities", getgenv().AutoAbilitiesEnabled, function(val)
+Tabs.Ability:AddParagraph({ Title = "⚔️ Auto Ability System", Content = "Automatically trigger tower abilities based on conditions you set" })
+addToggle(Tabs.Ability, "AutoAbilityToggle", "Enable Auto Abilities", getgenv().AutoAbilitiesEnabled, function(val)
     getgenv().AutoAbilitiesEnabled = val
     getgenv().Config.toggles.AutoAbilityToggle = val
     saveConfig(getgenv().Config)
-    notify("Auto Ability", val and "Auto abilities enabled!" or "Auto abilities disabled!", 3)
+    notify("Auto Ability", val and "Enabled" or "Disabled", 3)
 end)
 
 local function buildAutoAbilityUI()
@@ -284,12 +290,9 @@ local function buildAutoAbilityUI()
             local unitName = slotData.Value
             local abilities = getAllAbilities(unitName)
             if next(abilities) then
-                if unitCount > 0 then
-                    Tabs.AutoAbility:AddParagraph({ Title = "", Content = "" })
-                end
                 unitCount = unitCount + 1
 
-                Tabs.AutoAbility:AddParagraph({ Title = "━━━ " .. unitName .. " ━━━", Content = slotName .. " • Level " .. tostring(slotData.Level or 0) })
+                local unitSection = Tabs.Ability:AddSection(unitName .. " (" .. slotName .. " • Lvl " .. tostring(slotData.Level or 0) .. ")")
 
                 if not getgenv().UnitAbilities[unitName] then getgenv().UnitAbilities[unitName] = {} end
 
@@ -318,10 +321,11 @@ local function buildAutoAbilityUI()
                         cfg.useOnWave = saved.useOnWave or false
                     end
 
-                    local abilityInfo = " - Lvl " .. abilityData.requiredLevel .. " | CD: " .. tostring(abilityData.cooldown) .. "s"
-                    if abilityData.isAttribute then abilityInfo = abilityInfo .. " | 🔒 Attribute" end
+                    local abilityInfo = abilityName .. " (Lvl " .. abilityData.requiredLevel .. " • CD: " .. tostring(abilityData.cooldown) .. "s"
+                    if abilityData.isAttribute then abilityInfo = abilityInfo .. " • 🔒 Attribute" end
+                    abilityInfo = abilityInfo .. ")"
 
-                    addToggle(Tabs.AutoAbility, unitName .. "_" .. abilityName .. "_Toggle", abilityName .. abilityInfo, defaultToggle, function(v)
+                    addToggle(Tabs.Ability, unitName .. "_" .. abilityName .. "_Toggle", abilityInfo, defaultToggle, function(v)
                         cfg.enabled = v
                         getgenv().Config.abilities[unitName] = getgenv().Config.abilities[unitName] or {}
                         getgenv().Config.abilities[unitName][abilityName] = getgenv().Config.abilities[unitName][abilityName] or {}
@@ -340,8 +344,8 @@ local function buildAutoAbilityUI()
                     local defaultList = {}
                     for k,v in pairs(defaultModifiers) do if v then table.insert(defaultList, k) end end
 
-                    local dd = Tabs.AutoAbility:AddDropdown(unitName .. "_" .. abilityName .. "_Modifiers", {
-                        Title = "Conditions",
+                    local dd = Tabs.Ability:AddDropdown(unitName .. "_" .. abilityName .. "_Modifiers", {
+                        Title = "  > Conditions",
                         Values = {"Only On Boss","Boss In Range","Delay After Boss Spawn","On Wave"},
                         Multi = true,
                         Default = defaultList,
@@ -371,10 +375,10 @@ local function buildAutoAbilityUI()
                         saveConfig(getgenv().Config)
                     end)
 
-                    local input = Tabs.AutoAbility:AddInput(unitName .. "_" .. abilityName .. "_Wave", {
-                        Title = "Wave Number (if 'On Wave' selected)",
+                    local input = Tabs.Ability:AddInput(unitName .. "_" .. abilityName .. "_Wave", {
+                        Title = "  > Wave Number",
                         Default = (saved and saved.specificWave and tostring(saved.specificWave)) or "",
-                        Placeholder = "Enter wave number",
+                        Placeholder = "Required if 'On Wave' selected",
                         Numeric = true,
                         Finished = true,
                         Callback = function(text)
@@ -413,13 +417,13 @@ task.spawn(function()
     end
     if not ok then
         pcall(function()
-            Tabs.AutoAbility:AddParagraph({ Title = "❌ Failed to Load Units", Content = "Could not load your equipped units from ClientData. Rejoin or reload the script." })
+            Tabs.Ability:AddParagraph({ Title = "❌ Failed to Load Units", Content = "Could not load your equipped units from ClientData. Rejoin or reload the script." })
         end)
     end
 end)
 
-Tabs.CardSelection:AddParagraph({ Title = "Card Priority System", Content = "Set priority values for each card (lower number = higher priority). Cards with priority 999 will be avoided." })
-addToggle(Tabs.CardSelection, "CardSelectionToggle", "Enable Card Selection (Fast)", getgenv().CardSelectionEnabled, function(v)
+Tabs.CardSelection:AddParagraph({ Title = "🃏 Card Priority System", Content = "Lower number = higher priority • Set to 999 to avoid a card" })
+addToggle(Tabs.CardSelection, "CardSelectionToggle", "Fast Mode", getgenv().CardSelectionEnabled, function(v)
     getgenv().CardSelectionEnabled = v
     getgenv().Config.toggles.CardSelectionToggle = v
     if v and getgenv().SlowerCardSelectionEnabled then
@@ -427,9 +431,9 @@ addToggle(Tabs.CardSelection, "CardSelectionToggle", "Enable Card Selection (Fas
         getgenv().Config.toggles.SlowerCardSelectionToggle = false
     end
     saveConfig(getgenv().Config)
-    notify("Card Selection", v and "Fast card selection enabled!" or "Fast card selection disabled!", 3)
+    notify("Card Selection", v and "Fast Mode Enabled" or "Disabled", 3)
 end)
-addToggle(Tabs.CardSelection, "SlowerCardSelectionToggle", "Enable Card Selection (Slower)", getgenv().SlowerCardSelectionEnabled, function(v)
+addToggle(Tabs.CardSelection, "SlowerCardSelectionToggle", "Slower Mode (More Reliable)", getgenv().SlowerCardSelectionEnabled, function(v)
     getgenv().SlowerCardSelectionEnabled = v
     getgenv().Config.toggles.SlowerCardSelectionToggle = v
     if v and getgenv().CardSelectionEnabled then
@@ -437,10 +441,10 @@ addToggle(Tabs.CardSelection, "SlowerCardSelectionToggle", "Enable Card Selectio
         getgenv().Config.toggles.CardSelectionToggle = false
     end
     saveConfig(getgenv().Config)
-    notify("Card Selection", v and "Slower card selection enabled!" or "Slower card selection disabled!", 3)
+    notify("Card Selection", v and "Slower Mode Enabled" or "Disabled", 3)
 end)
 
-Tabs.CardSelection:AddParagraph({ Title = "━━━━━ Candy Cards ━━━━━", Content = "" })
+Tabs.CardSelection:AddParagraph({ Title = "🍬 Candy Cards", Content = "" })
 local candyNames = {}
 for k in pairs(CandyCards) do table.insert(candyNames, k) end
 table.sort(candyNames, function(a,b) return (CandyCards[a] or 999) < (CandyCards[b] or 999) end)
@@ -465,7 +469,7 @@ for _, cardName in ipairs(candyNames) do
     getgenv().CardPriority[cardName] = tonumber(defaultValue) or CandyCards[cardName]
 end
 
-Tabs.CardSelection:AddParagraph({ Title = "━━━━━ Devil's Sacrifice ━━━━━", Content = "" })
+Tabs.CardSelection:AddParagraph({ Title = "😈 Devil's Sacrifice", Content = "" })
 for cardName,priority in pairs(DevilSacrifice) do
     local key = "Card_"..cardName
     local defaultValue = getgenv().Config.inputs[key] or tostring(priority)
@@ -487,7 +491,7 @@ for cardName,priority in pairs(DevilSacrifice) do
     getgenv().CardPriority[cardName] = tonumber(defaultValue) or priority
 end
 
-Tabs.CardSelection:AddParagraph({ Title = "━━━━━ Other Cards ━━━━━", Content = "" })
+Tabs.CardSelection:AddParagraph({ Title = "📋 Other Cards", Content = "" })
 local otherNames = {}
 for k in pairs(OtherCards) do table.insert(otherNames, k) end
 table.sort(otherNames)
@@ -512,15 +516,15 @@ for _, cardName in ipairs(otherNames) do
     getgenv().CardPriority[cardName] = tonumber(defaultValue) or OtherCards[cardName]
 end
 
-Tabs.BossRush:AddParagraph({ Title = "Boss Rush Card System", Content = "Set priority for Boss Rush cards (lower = better). Cards with 999 will be avoided." })
-addToggle(Tabs.BossRush, "BossRushToggle", "Enable Boss Rush Cards", getgenv().BossRushEnabled, function(v)
+Tabs.BossRush:AddParagraph({ Title = "⚔️ Boss Rush Cards", Content = "Lower number = higher priority • Set to 999 to avoid" })
+addToggle(Tabs.BossRush, "BossRushToggle", "Enable Boss Rush Card Selection", getgenv().BossRushEnabled, function(v)
     getgenv().BossRushEnabled = v
     getgenv().Config.toggles.BossRushToggle = v
     saveConfig(getgenv().Config)
-    notify("Boss Rush", v and "Boss Rush card selection enabled!" or "Boss Rush card selection disabled!", 3)
+    notify("Boss Rush", v and "Enabled" or "Disabled", 3)
 end)
 
-Tabs.BossRush:AddParagraph({ Title = "━━━━━ Boss Rush ━━━━━", Content = "" })
+Tabs.BossRush:AddParagraph({ Title = "🎯 General Cards", Content = "" })
 local brNames = {}
 for k in pairs(BossRushGeneral) do table.insert(brNames, k) end
 table.sort(brNames)
@@ -553,7 +557,7 @@ for _, cardName in ipairs(brNames) do
     getgenv().BossRushCardPriority[cardName] = tonumber(defaultValue) or BossRushGeneral[cardName]
 end
 
-Tabs.BossRush:AddParagraph({ Title = "━━━━━ Babylonia Castle ━━━━━", Content = "" })
+Tabs.BossRush:AddParagraph({ Title = "🏰 Babylonia Castle", Content = "" })
 pcall(function()
     local babyloniaModule = RS:FindFirstChild("Modules"):FindFirstChild("CardHandler"):FindFirstChild("BossRushCards"):FindFirstChild("Babylonia Castle")
     if babyloniaModule then
@@ -584,7 +588,25 @@ pcall(function()
     end
 end)
 
-Tabs.Webhook:AddParagraph({ Title = "Discord Webhook Integration", Content = "Send game completion stats to Discord when you finish a match." })
+Tabs.Webhook:AddParagraph({ Title = "🔔 Discord Notifications", Content = "Get match completion stats sent directly to your Discord server" })
+addToggle(Tabs.Webhook, "WebhookToggle", "Enable Webhook Notifications", getgenv().WebhookEnabled, function(v)
+    getgenv().WebhookEnabled = v
+    getgenv().Config.toggles.WebhookToggle = v
+    saveConfig(getgenv().Config)
+    if v then
+        if (getgenv().WebhookURL == "" or not string.match(getgenv().WebhookURL, "^https://discord%.com/api/webhooks/")) then
+            notify("Webhook", "Please enter a valid webhook URL first", 5)
+            getgenv().WebhookEnabled = false
+            getgenv().Config.toggles.WebhookToggle = false
+            saveConfig(getgenv().Config)
+        else
+            notify("Webhook", "Enabled", 3)
+        end
+    else
+        notify("Webhook", "Disabled", 3)
+    end
+end)
+
 Tabs.Webhook:AddInput("WebhookURL", {
     Title = "Webhook URL",
     Default = getgenv().WebhookURL or "",
@@ -598,29 +620,19 @@ Tabs.Webhook:AddInput("WebhookURL", {
     end
 })
 
-addToggle(Tabs.Webhook, "WebhookToggle", "Enable Webhook", getgenv().WebhookEnabled, function(v)
-    getgenv().WebhookEnabled = v
-    getgenv().Config.toggles.WebhookToggle = v
+Tabs.SeamlessFix:AddParagraph({ Title = "🔄 Seamless Retry Fix", Content = "Prevents lag by restarting after a set number of rounds" })
+addToggle(Tabs.SeamlessFix, "SeamlessToggle", "Enable Seamless Fix", getgenv().SeamlessLimiterEnabled, function(v)
+    getgenv().SeamlessLimiterEnabled = v
+    getgenv().Config.toggles.SeamlessToggle = v
     saveConfig(getgenv().Config)
-    if v then
-        if (getgenv().WebhookURL == "" or not string.match(getgenv().WebhookURL, "^https://discord%.com/api/webhooks/")) then
-            notify("Webhook Error", "Please enter a valid webhook URL first!", 5)
-            getgenv().WebhookEnabled = false
-            getgenv().Config.toggles.WebhookToggle = false
-            saveConfig(getgenv().Config)
-        else
-            notify("Webhook", "Webhook enabled!", 3)
-        end
-    else
-        notify("Webhook", "Webhook disabled!", 3)
-    end
+    notify("Seamless Fix", v and "Enabled" or "Disabled", 3)
+    print("[Seamless Fix] " .. (v and "Enabled" or "Disabled"))
 end)
 
-Tabs.SeamlessFix:AddParagraph({ Title = "Seamless Retry Bug Fix", Content = "Automatically disables seamless retry after X rounds to prevent lag and restart the match." })
 Tabs.SeamlessFix:AddInput("SeamlessRounds", {
-    Title = "Maximum Rounds",
+    Title = "Max Rounds Before Restart",
     Default = getgenv().Config.inputs.SeamlessRounds or "4",
-    Placeholder = "Number of rounds (default: 4)",
+    Placeholder = "Default: 4",
     Numeric = true,
     Finished = true,
     Callback = function(Value)
@@ -634,72 +646,88 @@ Tabs.SeamlessFix:AddInput("SeamlessRounds", {
         end
     end
 })
-addToggle(Tabs.SeamlessFix, "SeamlessToggle", "Enable Seamless Bug Fix", getgenv().SeamlessLimiterEnabled, function(v)
-    getgenv().SeamlessLimiterEnabled = v
-    getgenv().Config.toggles.SeamlessToggle = v
-    saveConfig(getgenv().Config)
-    if v then
-        notify("Seamless Fix", "Seamless bug fix enabled!", 3)
-        print("[Seamless Fix] Seamless bug fix enabled!")
-    else
-        notify("Seamless Fix", "Seamless bug fix disabled!", 3)
-        print("[Seamless Fix] Seamless bug fix disabled!")
-    end
-end)
 
 if not isInLobby and Tabs.Event then
-    Tabs.Event:AddParagraph({ Title = "Halloween 2025 Event Automation", Content = "Automatically manages bingo stamps, buys capsules, and opens them." })
-    Tabs.Event:AddParagraph({ Title = "━━━━━ Auto Bingo ━━━━━", Content = "" })
+    Tabs.Event:AddParagraph({ Title = "🎃 Halloween Event Automation", Content = "Automate bingo stamps and capsule management" })
+    
+    Tabs.Event:AddParagraph({ Title = "🎲 Auto Bingo", Content = "" })
     addToggle(Tabs.Event, "BingoToggle", "Enable Auto Bingo", getgenv().BingoEnabled, function(v)
         getgenv().BingoEnabled = v
         getgenv().Config.toggles.BingoToggle = v
         saveConfig(getgenv().Config)
-        notify("Auto Bingo", v and "Auto bingo enabled!" or "Auto bingo disabled!", 3)
+        notify("Auto Bingo", v and "Enabled" or "Disabled", 3)
     end)
 
-    Tabs.Event:AddParagraph({ Title = "━━━━━ Auto Capsules ━━━━━", Content = "" })
+    Tabs.Event:AddParagraph({ Title = "🎁 Auto Capsules", Content = "" })
     addToggle(Tabs.Event, "CapsuleToggle", "Enable Auto Capsules", getgenv().CapsuleEnabled, function(v)
         getgenv().CapsuleEnabled = v
         getgenv().Config.toggles.CapsuleToggle = v
         saveConfig(getgenv().Config)
-        notify("Auto Capsules", v and "Auto capsules enabled!" or "Auto capsules disabled!", 3)
+        notify("Auto Capsules", v and "Enabled" or "Disabled", 3)
     end)
 
-    Tabs.Event:AddParagraph({ Title = "How It Works", Content = "Bingo: Uses stamps (25x), claims rewards (25x), completes board\nCapsules: Buys 100/10/1 based on candy, opens all capsules" })
+    Tabs.Event:AddParagraph({ Title = "ℹ️ Info", Content = "Bingo: Uses stamps (25x), claims rewards, completes board\nCapsules: Buys 100/10/1 based on candy, opens all" })
 end
 
-Tabs.Misc:AddParagraph({ Title = "Miscellaneous Features", Content = "Additional utility features for the game." })
-addToggle(Tabs.Misc, "RemoveEnemiesToggle", "Remove Enemies/SpawnedUnits", getgenv().RemoveEnemiesEnabled, function(v)
-    getgenv().RemoveEnemiesEnabled = v
-    getgenv().Config.toggles.RemoveEnemiesToggle = v
-    saveConfig(getgenv().Config)
-    notify("Remove Enemies/SpawnedUnits", v and "Remove enabled!" or "Remove disabled!", 3)
-end)
+Tabs.Misc:AddParagraph({ Title = "🛠️ Utility Features", Content = "Performance and quality of life improvements" })
 
+Tabs.Misc:AddParagraph({ Title = "⚡ Performance", Content = "" })
 if not isInLobby then
     addToggle(Tabs.Misc, "FPSBoostToggle", "FPS Boost", getgenv().FPSBoostEnabled, function(v)
         getgenv().FPSBoostEnabled = v
         getgenv().Config.toggles.FPSBoostToggle = v
         saveConfig(getgenv().Config)
-        notify("FPS Boost", v and "Optimization enabled!" or "Optimization disabled!", 3)
+        notify("FPS Boost", v and "Enabled" or "Disabled", 3)
     end)
 else
     getgenv().FPSBoostEnabled = false
 end
 
+addToggle(Tabs.Misc, "RemoveEnemiesToggle", "Remove Enemies & Units", getgenv().RemoveEnemiesEnabled, function(v)
+    getgenv().RemoveEnemiesEnabled = v
+    getgenv().Config.toggles.RemoveEnemiesToggle = v
+    saveConfig(getgenv().Config)
+    notify("Remove Enemies", v and "Enabled" or "Disabled", 3)
+end)
+
+addToggle(Tabs.Misc, "BlackScreenToggle", "Black Screen Mode", getgenv().BlackScreenEnabled, function(v)
+    getgenv().BlackScreenEnabled = v
+    getgenv().Config.toggles.BlackScreenToggle = v
+    saveConfig(getgenv().Config)
+    notify("Black Screen", v and "Enabled" or "Disabled", 3)
+end)
+
+Tabs.Misc:AddParagraph({ Title = "🔒 Safety", Content = "" })
 addToggle(Tabs.Misc, "AntiAFKToggle", "Anti-AFK", getgenv().AntiAFKEnabled, function(v)
     getgenv().AntiAFKEnabled = v
     getgenv().Config.toggles.AntiAFKToggle = v
     saveConfig(getgenv().Config)
-    notify("Anti-AFK", v and "Anti-AFK enabled!" or "Anti-AFK disabled!", 3)
+    notify("Anti-AFK", v and "Enabled" or "Disabled", 3)
 end)
 
-addToggle(Tabs.Misc, "BlackScreenToggle", "Black Screen", getgenv().BlackScreenEnabled, function(v)
-    getgenv().BlackScreenEnabled = v
-    getgenv().Config.toggles.BlackScreenToggle = v
-    saveConfig(getgenv().Config)
-    notify("Black Screen", v and "Black screen enabled!" or "Black screen disabled!", 3)
-end)
+Tabs.Settings:AddParagraph({ Title = "💾 Config Management", Content = "Your settings are automatically saved to: " .. CONFIG_FOLDER .. "/" .. CONFIG_FILE })
+
+Tabs.Settings:AddButton({
+    Title = "Force Save Config Now",
+    Description = "Manually save all current settings",
+    Callback = function()
+        local success = saveConfig(getgenv().Config)
+        if success then
+            notify("Config", "Settings saved successfully!", 3)
+        else
+            notify("Config", "Failed to save settings!", 5)
+        end
+    end
+})
+
+Tabs.Settings:AddButton({
+    Title = "Open Config Folder",
+    Description = "Opens the folder where config is saved",
+    Callback = function()
+        notify("Config Location", CONFIG_FOLDER .. "/" .. CONFIG_FILE, 5)
+        print("[Config] Full path: " .. getConfigPath())
+    end
+})
 
 SaveManager:SetLibrary(Fluent)
 InterfaceManager:SetLibrary(Fluent)
@@ -711,7 +739,7 @@ InterfaceManager:BuildInterfaceSection(Tabs.Settings)
 SaveManager:BuildConfigSection(Tabs.Settings)
 
 Window:SelectTab(1)
-notify("ALS Halloween Event", "Fluent UI loaded successfully!", 5)
+notify("ALS Halloween Event", "Script loaded successfully!", 5)
 
 for inputKey, value in pairs(getgenv().Config.inputs) do
     if inputKey:match("^Card_") then
@@ -1407,8 +1435,8 @@ task.spawn(function()
         local matchTime, matchWave, matchResult = getMatchResult()
         local mapName, mapDifficulty = getMapInfo()
         local description = "**Username:** ||"..LocalPlayer.Name.."||\n**Level:** "..(clientData.Level or 0).." ["..formatNumber(clientData.EXP or 0).."/"..formatNumber(clientData.MaxEXP or 0).."]"
-        local stats = "<:gold:1265957290251522089> "..formatNumber(clientData.Jewels or 0)
-        stats = stats .. "\n<:jewel:1217525743408648253> " .. formatNumber(clientData.Gold or 0)
+        local stats = "<:gold:1265957290251522089> "..formatNumber(clientData.Gold or 0)
+        stats = stats .. "\n<:jewel:1217525743408648253> " .. formatNumber(clientData.Jewels or 0)
         stats = stats .. "\n<:emerald:1389165843966984192> " .. formatNumber(clientData.Emeralds or 0)
         stats = stats .. "\n<:rerollshard:1426315987019501598> " .. formatNumber(clientData.Rerolls or 0)
         stats = stats .. "\n<:candybasket:1426304615284084827> " .. formatNumber(clientData.CandyBasket or 0)
