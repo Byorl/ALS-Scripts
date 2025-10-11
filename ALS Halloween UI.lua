@@ -1544,16 +1544,17 @@ task.spawn(function()
             isProcessing = true
             hasRun = tick()
             
-            task.wait(1)
+            local rewards = getRewards()
+            local matchTime, matchWave, matchResult = getMatchResult()
+            local mapName, mapDifficulty = getMapInfo()
+            
+            task.wait(0.2)
             
             local clientData = getClientData()
             if not clientData then 
                 isProcessing = false
                 return
             end
-        local rewards = getRewards()
-        local matchTime, matchWave, matchResult = getMatchResult()
-        local mapName, mapDifficulty = getMapInfo()
         local description = "**Username:** ||"..LocalPlayer.Name.."||\n**Level:** "..(clientData.Level or 0).." ["..formatNumber(clientData.EXP or 0).."/"..formatNumber(clientData.MaxEXP or 0).."]"
         local stats = "<:gold:1265957290251522089> "..formatNumber(clientData.Gold or 0)
         stats = stats .. "\n<:jewel:1217525743408648253> " .. formatNumber(clientData.Jewels or 0)
