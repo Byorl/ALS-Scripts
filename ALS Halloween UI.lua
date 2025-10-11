@@ -1156,6 +1156,7 @@ task.spawn(function()
         VIM:SendKeyEvent(false, key, false, game)
     end
     local GuiService = game:GetService("GuiService")
+    local lastEndGameUICheck = 0
     while true do
         task.wait(2)
         pcall(function()
@@ -1166,12 +1167,21 @@ task.spawn(function()
                 local retryButton = buttons:FindFirstChild("Retry")
                 local leaveButton = buttons:FindFirstChild("Leave")
                 
-                if getgenv().WebhookEnabled and isProcessing then
-                    print("[EndGameUI] Waiting for webhook to send...")
-                    local maxWait = 0
-                    while isProcessing and maxWait < 5 do
-                        task.wait(0.5)
-                        maxWait = maxWait + 0.5
+                if getgenv().WebhookEnabled then
+                    if tick() - lastEndGameUICheck > 5 then
+                        print("[EndGameUI] First detection, waiting 3 seconds for webhook...")
+                        task.wait(1)
+                        lastEndGameUICheck = tick()
+                    end
+                    
+                    if isProcessing then
+                        print("[EndGameUI] Waiting for webhook to complete...")
+                        local maxWait = 0
+                        while isProcessing and maxWait < 10 do
+                            task.wait(0.5)
+                            maxWait = maxWait + 0.5
+                        end
+                        print("[EndGameUI] Webhook completed, proceeding...")
                     end
                 end
                 
@@ -1745,14 +1755,17 @@ task.spawn(function()
             
             print("[Webhook] Starting webhook process...")
             
-            task.wait(1.5)
+            task.wait(2)
             
             print("[Webhook] Capturing rewards...")
             local rewards = getRewards()
             print("[Webhook] Rewards captured:", #rewards)
             
             local matchTime, matchWave, matchResult = getMatchResult()
+            print("[Webhook] Match result:", matchTime, matchWave, matchResult)
+            
             local mapName, mapDifficulty = getMapInfo()
+            print("[Webhook] Map info:", mapName, mapDifficulty)
             
             task.wait(0.3)
             
