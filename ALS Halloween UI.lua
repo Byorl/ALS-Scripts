@@ -185,6 +185,7 @@ local function getTowerInfo(unitName)
 end
 
 local function getAllAbilities(unitName)
+    if not unitName or unitName == "" then return {} end
     local towerNameToCheck = unitName
     if unitName == "TuskSummon_Act4" then towerNameToCheck = "JohnnyGodly" end
     local towerInfo = getTowerInfo(towerNameToCheck)
@@ -270,7 +271,10 @@ end)
 
 local function buildAutoAbilityUI()
     local clientData = getClientData()
-    if not clientData or not clientData.Slots then return end
+    if not clientData or not clientData.Slots then 
+        notify("Auto Ability", "ClientData not available yet, retrying...", 3)
+        return 
+    end
     local sortedSlots = {"Slot1","Slot2","Slot3","Slot4","Slot5","Slot6"}
 
     local unitCount = 0
@@ -314,18 +318,16 @@ local function buildAutoAbilityUI()
                         cfg.useOnWave = saved.useOnWave or false
                     end
 
-                    local abilityInfo = "Lvl " .. abilityData.requiredLevel .. " | CD: " .. tostring(abilityData.cooldown) .. "s"
+                    local abilityInfo = " - Lvl " .. abilityData.requiredLevel .. " | CD: " .. tostring(abilityData.cooldown) .. "s"
                     if abilityData.isAttribute then abilityInfo = abilityInfo .. " | 🔒 Attribute" end
 
-                    addToggle(Tabs.AutoAbility, unitName .. "_" .. abilityName .. "_Toggle", abilityName, defaultToggle, function(v)
+                    addToggle(Tabs.AutoAbility, unitName .. "_" .. abilityName .. "_Toggle", abilityName .. abilityInfo, defaultToggle, function(v)
                         cfg.enabled = v
                         getgenv().Config.abilities[unitName] = getgenv().Config.abilities[unitName] or {}
                         getgenv().Config.abilities[unitName][abilityName] = getgenv().Config.abilities[unitName][abilityName] or {}
                         getgenv().Config.abilities[unitName][abilityName].enabled = v
                         saveConfig(getgenv().Config)
                     end)
-
-                    Tabs.AutoAbility:AddParagraph({ Title = "", Content = abilityInfo })
 
                     local defaultModifiers = {}
                     if saved then
@@ -390,23 +392,29 @@ local function buildAutoAbilityUI()
     end
 end
 
- task.spawn(function()
-    task.wait(1)
+task.spawn(function()
+    task.wait(2)
     local maxRetries, retryDelay = 10, 3
     local ok = false
     for i=1,maxRetries do
-        local cd = getClientData()
-        if cd and cd.Slots then
-            buildAutoAbilityUI()
-            ok = true
-            break
-        else
-            notify("Auto Ability", "ClientData loading failed, retrying... ("..i.."/"..maxRetries..")", 3)
-            task.wait(retryDelay)
-        end
+        pcall(function()
+            local cd = getClientData()
+            if cd and cd.Slots then
+                buildAutoAbilityUI()
+                ok = true
+            else
+                if i <= 3 then
+                    notify("Auto Ability", "Loading units... ("..i.."/"..maxRetries..")", 2)
+                end
+            end
+        end)
+        if ok then break end
+        task.wait(retryDelay)
     end
     if not ok then
-        Tabs.AutoAbility:AddParagraph({ Title = "❌ Failed to Load Units", Content = "Could not load your equipped units from ClientData. Rejoin or reload the script." })
+        pcall(function()
+            Tabs.AutoAbility:AddParagraph({ Title = "❌ Failed to Load Units", Content = "Could not load your equipped units from ClientData. Rejoin or reload the script." })
+        end)
     end
 end)
 
@@ -919,9 +927,13 @@ task.spawn(function()
                                 if textButton then
                                     local textLabel = textButton:FindFirstChild("TextLabel")
                                     if textLabel and textLabel.Text == "Start" then
-                                        RS.Remotes.PlayerReady:FireServer()
-                                        print("[Auto Ready] Player ready fired")
-                                        task.wait()
+                                        local remotes = RS:FindFirstChild("Remotes")
+                                        local playerReady = remotes and remotes:FindFirstChild("PlayerReady")
+                                        if playerReady then
+                                            playerReady:FireServer()
+                                            print("[Auto Ready] Player ready fired")
+                                            task.wait(1)
+                                        end
                                     end
                                 end
                             end
@@ -936,7 +948,7 @@ end)
 
 task.spawn(function()
     local GAME_SPEED = 3
-    local Towers = workspace.Towers
+    local Towers = workspace:WaitForChild("Towers", 10)
     local bossSpawnTime = nil
     local bossInRangeTracker = {}
     local abilityCooldowns = {}
@@ -1099,14 +1111,16 @@ task.spawn(function()
     while true do
         task.wait(0.5)
         if getgenv().AutoAbilitiesEnabled then
-            local currentWave = getCurrentWave()
-            local hasBoss = bossExists()
-            if currentWave < lastWave then resetRoundTrackers() end
-            if getgenv().SeamlessLimiterEnabled and lastWave >= 50 and currentWave < 50 then resetRoundTrackers() end
-            lastWave = currentWave
-            for unitName, abilitiesConfig in pairs(getgenv().UnitAbilities) do
-                local tower = Towers:FindFirstChild(unitName)
-                if tower then
+            pcall(function()
+                local currentWave = getCurrentWave()
+                local hasBoss = bossExists()
+                if currentWave < lastWave then resetRoundTrackers() end
+                if getgenv().SeamlessLimiterEnabled and lastWave >= 50 and currentWave < 50 then resetRoundTrackers() end
+                lastWave = currentWave
+                if not Towers then return end
+                for unitName, abilitiesConfig in pairs(getgenv().UnitAbilities) do
+                    local tower = Towers:FindFirstChild(unitName)
+                    if tower then
                     local infoName = getTowerInfoName(tower)
                     local towerLevel = getUpgradeLevel(tower)
                     for abilityName, cfg in pairs(abilitiesConfig) do
@@ -1122,7 +1136,8 @@ task.spawn(function()
                         end
                     end
                 end
-            end
+                end
+            end)
         end
         if isUnloaded then break end
     end
@@ -1130,22 +1145,25 @@ end)
 
 task.spawn(function()
     local function getAvailableCards()
-        local playerGui = LocalPlayer.PlayerGui
-        local prompt = playerGui:FindFirstChild("Prompt") if not prompt then return nil end
-        local frame = prompt:FindFirstChild("Frame") if not frame or not frame:FindFirstChild("Frame") then return nil end
-        local cards, cardButtons = {}, {}
-        for _, d in pairs(frame:GetDescendants()) do
-            if d:IsA("TextLabel") and d.Parent and d.Parent:IsA("Frame") then
-                local text = d.Text
-                if getgenv().CardPriority[text] then
-                    local button = d.Parent.Parent
-                    if button:IsA("GuiButton") or button:IsA("TextButton") or button:IsA("ImageButton") then table.insert(cardButtons, {text=text, button=button}) end
+        local ok, result = pcall(function()
+            local playerGui = LocalPlayer.PlayerGui
+            local prompt = playerGui:FindFirstChild("Prompt") if not prompt then return nil end
+            local frame = prompt:FindFirstChild("Frame") if not frame or not frame:FindFirstChild("Frame") then return nil end
+            local cards, cardButtons = {}, {}
+            for _, d in pairs(frame:GetDescendants()) do
+                if d:IsA("TextLabel") and d.Parent and d.Parent:IsA("Frame") then
+                    local text = d.Text
+                    if getgenv().CardPriority[text] then
+                        local button = d.Parent.Parent
+                        if button:IsA("GuiButton") or button:IsA("TextButton") or button:IsA("ImageButton") then table.insert(cardButtons, {text=text, button=button}) end
+                    end
                 end
             end
-        end
-        table.sort(cardButtons, function(a,b) return a.button.AbsolutePosition.X < b.button.AbsolutePosition.X end)
-        for i, c in ipairs(cardButtons) do cards[i] = { name=c.text, button=c.button } end
-        return #cards > 0 and cards or nil
+            table.sort(cardButtons, function(a,b) return a.button.AbsolutePosition.X < b.button.AbsolutePosition.X end)
+            for i, c in ipairs(cardButtons) do cards[i] = { name=c.text, button=c.button } end
+            return #cards > 0 and cards or nil
+        end)
+        return ok and result or nil
     end
     local function findBestCard(list)
         local bestIndex, bestPriority = 1, math.huge
@@ -1171,47 +1189,58 @@ task.spawn(function()
     end
     local function selectCard()
         if not getgenv().CardSelectionEnabled then return false end
-        local list = getAvailableCards() if not list then return false end
-        local _, best = findBestCard(list)
-        local button = best.button
-        local events = {"Activated","MouseButton1Click","MouseButton1Down","MouseButton1Up"}
-        for _, ev in ipairs(events) do pcall(function() for _, conn in ipairs(getconnections(button[ev])) do conn:Fire() end end) end
-        task.wait(0.2)
-        pressConfirm()
-        return true
+        local ok = pcall(function()
+            local list = getAvailableCards() if not list then return false end
+            local _, best = findBestCard(list)
+            if not best or not best.button then return false end
+            local button = best.button
+            local events = {"Activated","MouseButton1Click","MouseButton1Down","MouseButton1Up"}
+            for _, ev in ipairs(events) do pcall(function() for _, conn in ipairs(getconnections(button[ev])) do conn:Fire() end end) end
+            task.wait(0.2)
+            pressConfirm()
+        end)
+        return ok
     end
     local function selectCardSlower()
         if not getgenv().SlowerCardSelectionEnabled then return false end
-        local list = getAvailableCards() if not list then return false end
-        local _, best = findBestCard(list)
-        local button = best.button
-        local GuiService = game:GetService("GuiService")
-        local function press(key)
-            VIM:SendKeyEvent(true, key, false, game)
-            task.wait(0.1)
-            VIM:SendKeyEvent(false, key, false, game)
-        end
-        GuiService.SelectedObject = button
-        task.wait(0.2)
-        press(Enum.KeyCode.Return)
-        task.wait(0.3)
-        local ok, confirmButton = pcall(function()
-            local prompt = LocalPlayer.PlayerGui:FindFirstChild("Prompt") if not prompt then return nil end
-            local frame = prompt:FindFirstChild("Frame") if not frame then return nil end
-            local inner = frame:FindFirstChild("Frame") if not inner then return nil end
-            local children = inner:GetChildren() if #children < 5 then return nil end
-            local button = children[5]:FindFirstChild("TextButton") if not button then return nil end
-            local label = button:FindFirstChild("TextLabel") if label and label.Text == "Confirm" then return button end
-            return nil
-        end)
-        if ok and confirmButton then
-            GuiService.SelectedObject = confirmButton
+        local ok = pcall(function()
+            local list = getAvailableCards() if not list then return false end
+            local _, best = findBestCard(list)
+            if not best or not best.button then return false end
+            local button = best.button
+            
+            local GuiService = game:GetService("GuiService")
+            local function press(key)
+                VIM:SendKeyEvent(true, key, false, game)
+                task.wait(0.1)
+                VIM:SendKeyEvent(false, key, false, game)
+            end
+            
+            GuiService.SelectedObject = button
             task.wait(0.2)
             press(Enum.KeyCode.Return)
             task.wait(0.3)
-        end
-        GuiService.SelectedObject = nil
-        return true
+            
+            local ok2, confirmButton = pcall(function()
+                local prompt = LocalPlayer.PlayerGui:FindFirstChild("Prompt") if not prompt then return nil end
+                local frame = prompt:FindFirstChild("Frame") if not frame then return nil end
+                local inner = frame:FindFirstChild("Frame") if not inner then return nil end
+                local children = inner:GetChildren() if #children < 5 then return nil end
+                local button = children[5]:FindFirstChild("TextButton") if not button then return nil end
+                local label = button:FindFirstChild("TextLabel") if label and label.Text == "Confirm" then return button end
+                return nil
+            end)
+            
+            if ok2 and confirmButton then
+                GuiService.SelectedObject = confirmButton
+                task.wait(0.2)
+                press(Enum.KeyCode.Return)
+                task.wait(0.3)
+            end
+            
+            GuiService.SelectedObject = nil
+        end)
+        return ok
     end
     while true do 
         task.wait(1) 
@@ -1226,11 +1255,12 @@ end)
 
 task.spawn(function()
     local function getBossRushCards()
-        local playerGui = LocalPlayer.PlayerGui
-        local prompt = playerGui:FindFirstChild("Prompt") if not prompt then return nil end
-        local frame = prompt:FindFirstChild("Frame") if not frame or not frame:FindFirstChild("Frame") then return nil end
-        local cards, cardButtons = {}, {}
-        for _, d in pairs(frame:GetDescendants()) do
+        local ok, result = pcall(function()
+            local playerGui = LocalPlayer.PlayerGui
+            local prompt = playerGui:FindFirstChild("Prompt") if not prompt then return nil end
+            local frame = prompt:FindFirstChild("Frame") if not frame or not frame:FindFirstChild("Frame") then return nil end
+            local cards, cardButtons = {}, {}
+            for _, d in pairs(frame:GetDescendants()) do
             if d:IsA("TextLabel") and d.Parent and d.Parent:IsA("Frame") then
                 local text = d.Text
                 if getgenv().BossRushCardPriority[text] then
@@ -1239,9 +1269,11 @@ task.spawn(function()
                 end
             end
         end
-        table.sort(cardButtons, function(a,b) return a.button.AbsolutePosition.X < b.button.AbsolutePosition.X end)
-        for i, c in ipairs(cardButtons) do cards[i] = { name=c.text, button=c.button } end
-        return #cards > 0 and cards or nil
+            table.sort(cardButtons, function(a,b) return a.button.AbsolutePosition.X < b.button.AbsolutePosition.X end)
+            for i, c in ipairs(cardButtons) do cards[i] = { name=c.text, button=c.button } end
+            return #cards > 0 and cards or nil
+        end)
+        return ok and result or nil
     end
     local function best(list)
         local idx, bestPriority = 1, math.huge
@@ -1267,14 +1299,17 @@ task.spawn(function()
     end
     local function select()
         if not getgenv().BossRushEnabled then return false end
-        local list = getBossRushCards() if not list then return false end
-        local _, bc, pri = best(list)
-        if pri >= 999 then return false end
-        local events={"Activated","MouseButton1Click","MouseButton1Down","MouseButton1Up"}
-        for _,ev in ipairs(events) do pcall(function() for _,conn in ipairs(getconnections(bc.button[ev])) do conn:Fire() end end) end
-        task.wait(0.2)
-        confirm()
-        return true
+        local ok = pcall(function()
+            local list = getBossRushCards() if not list then return false end
+            local _, bc, pri = best(list)
+            if pri >= 999 then return false end
+            if not bc or not bc.button then return false end
+            local events={"Activated","MouseButton1Click","MouseButton1Down","MouseButton1Up"}
+            for _,ev in ipairs(events) do pcall(function() for _,conn in ipairs(getconnections(bc.button[ev])) do conn:Fire() end end) end
+            task.wait(0.2)
+            confirm()
+        end)
+        return ok
     end
     while true do task.wait(1) if getgenv().BossRushEnabled then select() end if isUnloaded then break end end
 end)
@@ -1360,13 +1395,14 @@ task.spawn(function()
         if ok then return name, difficulty else return "Unknown Map","Unknown" end
     end
     local function sendWebhook()
-        if not getgenv().WebhookEnabled then return end
-        if getgenv()._webhookLock and (tick() - getgenv()._webhookLock) < 10 then return end
-        if isProcessing then return end
-        if hasRun > 0 and (tick() - hasRun) < 5 then return end
-        getgenv()._webhookLock = tick() isProcessing = true hasRun = tick()
-        task.wait(0.5)
-        local clientData = getClientData() if not clientData then isProcessing=false return end
+        pcall(function()
+            if not getgenv().WebhookEnabled then return end
+            if getgenv()._webhookLock and (tick() - getgenv()._webhookLock) < 10 then return end
+            if isProcessing then return end
+            if hasRun > 0 and (tick() - hasRun) < 5 then return end
+            getgenv()._webhookLock = tick() isProcessing = true hasRun = tick()
+            task.wait(0.5)
+            local clientData = getClientData() if not clientData then isProcessing=false return end
         local rewards = getRewards()
         local matchTime, matchWave, matchResult = getMatchResult()
         local mapName, mapDifficulty = getMapInfo()
@@ -1410,9 +1446,10 @@ task.spawn(function()
             { name="Rewards", value=(rewardsText ~= "" and rewardsText or "No rewards found"), inline=true },
             { name="Units", value=(unitsText ~= "" and unitsText or "No units"), inline=false },
             { name="Match Result", value=(matchTime or "00:00:00") .. " - Wave " .. tostring(matchWave or "0") .. "\n" .. (mapName or "Unknown Map") .. ((mapDifficulty and mapDifficulty ~= "Unknown") and (" ["..mapDifficulty.."]") or "") .. " - " .. (matchResult or "Unknown"), inline=false }
-        }, footer={ text="Halloween Hook" } }
-        SendMessageEMBED(getgenv().WebhookURL, embed)
-        isProcessing=false
+            }, footer={ text="Halloween Hook" } }
+            SendMessageEMBED(getgenv().WebhookURL, embed)
+            isProcessing=false
+        end)
     end
     LocalPlayer.PlayerGui.ChildAdded:Connect(function(child) if child.Name=="EndGameUI" and getgenv().WebhookEnabled then sendWebhook() end end)
     LocalPlayer.PlayerGui.ChildRemoved:Connect(function(child) if child.Name=="EndGameUI" then task.wait(2) isProcessing=false end end)
@@ -1420,75 +1457,94 @@ end)
 
 task.spawn(function()
     if not getgenv().SeamlessLimiterEnabled then return end
-    local endgameCount = 0
-    local hasRun = false
-    local lastEndgameTime = 0
-    local DEBOUNCE_TIME = 5
-    repeat task.wait(0.5) until not LocalPlayer.PlayerGui:FindFirstChild("TeleportUI")
-    print("[Seamless Fix] Waiting for Settings GUI...")
-    repeat task.wait(0.5) until LocalPlayer.PlayerGui:FindFirstChild("Settings")
-    print("[Seamless Fix] Settings GUI found!")
-    local function getSeamlessValue()
-        local settings = LocalPlayer.PlayerGui:FindFirstChild("Settings")
-        if settings then
-            local seamless = settings:FindFirstChild("SeamlessRetry")
-            if seamless then 
-                print("[Seamless Fix] SeamlessRetry.Value =", seamless.Value)
-                return seamless.Value 
-            else
-                print("[Seamless Fix] SeamlessRetry not found in Settings")
-            end
-        else
-            print("[Seamless Fix] Settings not found")
-        end
-        return false
-    end
-    local function setSeamlessRetry()
-        pcall(function()
-            RS.Remotes.SetSettings:InvokeServer("SeamlessRetry")
-        end)
-    end
-    print("[Seamless Fix] Checking initial seamless state...")
-    local currentSeamless = getSeamlessValue()
-    if endgameCount < (getgenv().MaxSeamlessRounds or 4) then
-        if not currentSeamless then
-            setSeamlessRetry()
+    pcall(function()
+        local endgameCount = 0
+        local hasRun = false
+        local lastEndgameTime = 0
+        local DEBOUNCE_TIME = 5
+        local maxWait = 0
+        repeat 
+            task.wait(0.5) 
+            maxWait = maxWait + 0.5
+        until not LocalPlayer.PlayerGui:FindFirstChild("TeleportUI") or maxWait > 30
+        print("[Seamless Fix] Waiting for Settings GUI...")
+        maxWait = 0
+        repeat 
             task.wait(0.5)
-            print("[Seamless Fix] Enabled Seamless Retry")
-        else
-            print("[Seamless Fix] Seamless Retry already enabled")
-        end
-    end
-    LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
-        if child.Name == "EndGameUI" and not hasRun then
-            local currentTime = tick()
-            if currentTime - lastEndgameTime < DEBOUNCE_TIME then
-                print("[Seamless Fix] Debounced duplicate EndGameUI trigger")
-                return
-            end
-            hasRun = true
-            lastEndgameTime = currentTime
-            endgameCount = endgameCount + 1
-            local maxRounds = getgenv().MaxSeamlessRounds or 4
-            print("[Seamless Fix] Endgame detected. Current seamless rounds: " .. endgameCount .. "/" .. maxRounds)
-            if endgameCount >= maxRounds then
-                if getSeamlessValue() then
-                    task.wait(0.5)
-                    setSeamlessRetry()
-                    print("[Seamless Fix] Max rounds reached, disabling seamless retry to restart match...")
-                    task.wait(0.5)
-                    print("[Seamless Fix] Disabled Seamless Retry")
+            maxWait = maxWait + 0.5
+        until LocalPlayer.PlayerGui:FindFirstChild("Settings") or maxWait > 30
+        print("[Seamless Fix] Settings GUI found!")
+        local function getSeamlessValue()
+            local ok, result = pcall(function()
+                local settings = LocalPlayer.PlayerGui:FindFirstChild("Settings")
+                if settings then
+                    local seamless = settings:FindFirstChild("SeamlessRetry")
+                    if seamless then 
+                        print("[Seamless Fix] SeamlessRetry.Value =", seamless.Value)
+                        return seamless.Value 
+                    else
+                        print("[Seamless Fix] SeamlessRetry not found in Settings")
+                    end
                 else
-                    print("[Seamless Fix] Max rounds reached but seamless already disabled")
+                    print("[Seamless Fix] Settings not found")
                 end
+                return false
+            end)
+            return ok and result or false
+        end
+        local function setSeamlessRetry()
+            pcall(function()
+                local remotes = RS:FindFirstChild("Remotes")
+                local setSettings = remotes and remotes:FindFirstChild("SetSettings")
+                if setSettings then
+                    setSettings:InvokeServer("SeamlessRetry")
+                end
+            end)
+        end
+        print("[Seamless Fix] Checking initial seamless state...")
+        local currentSeamless = getSeamlessValue()
+        if endgameCount < (getgenv().MaxSeamlessRounds or 4) then
+            if not currentSeamless then
+                setSeamlessRetry()
+                task.wait(0.5)
+                print("[Seamless Fix] Enabled Seamless Retry")
+            else
+                print("[Seamless Fix] Seamless Retry already enabled")
             end
         end
-    end)
-    LocalPlayer.PlayerGui.ChildRemoved:Connect(function(child)
-        if child.Name == "EndGameUI" then
-            task.wait(2)
-            hasRun = false
-        end
+        LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
+            pcall(function()
+                if child.Name == "EndGameUI" and not hasRun then
+                    local currentTime = tick()
+                    if currentTime - lastEndgameTime < DEBOUNCE_TIME then
+                        print("[Seamless Fix] Debounced duplicate EndGameUI trigger")
+                        return
+                    end
+                    hasRun = true
+                    lastEndgameTime = currentTime
+                    endgameCount = endgameCount + 1
+                    local maxRounds = getgenv().MaxSeamlessRounds or 4
+                    print("[Seamless Fix] Endgame detected. Current seamless rounds: " .. endgameCount .. "/" .. maxRounds)
+                    if endgameCount >= maxRounds then
+                        if getSeamlessValue() then
+                            task.wait(0.5)
+                            setSeamlessRetry()
+                            print("[Seamless Fix] Max rounds reached, disabling seamless retry to restart match...")
+                            task.wait(0.5)
+                            print("[Seamless Fix] Disabled Seamless Retry")
+                        else
+                            print("[Seamless Fix] Max rounds reached but seamless already disabled")
+                        end
+                    end
+                end
+            end)
+        end)
+        LocalPlayer.PlayerGui.ChildRemoved:Connect(function(child)
+            if child.Name == "EndGameUI" then
+                task.wait(2)
+                hasRun = false
+            end
+        end)
     end)
 end)
 
