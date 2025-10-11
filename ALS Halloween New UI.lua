@@ -52,6 +52,7 @@ getgenv().Config = loadConfig()
 
 getgenv().AutoEventEnabled = false
 getgenv().AutoAbilitiesEnabled = false
+getgenv().AutoReadyEnabled = false
 getgenv().CardSelectionEnabled = false
 getgenv().BossRushEnabled = false
 getgenv().WebhookEnabled = false
@@ -262,6 +263,18 @@ Sections.AutoEvent.Left:Toggle({
     end,
 }, "AutoFastRetryToggle")
 getgenv().AutoFastRetryEnabled = getgenv().Config.toggles.AutoFastRetryToggle or false
+
+Sections.AutoEvent.Left:Toggle({
+    Name = "Auto Ready",
+    Default = getgenv().Config.toggles.AutoReadyToggle or false,
+    Callback = function(val)
+        getgenv().AutoReadyEnabled = val
+        getgenv().Config.toggles.AutoReadyToggle = val
+        saveConfig(getgenv().Config)
+        notify("Auto Ready", val and "Enabled!" or "Disabled!", 3)
+    end,
+}, "AutoReadyToggle")
+getgenv().AutoReadyEnabled = getgenv().Config.toggles.AutoReadyToggle or false
 
 Sections.AutoAbility.Left:Paragraph({ Header = "Auto Ability System", Body = "Automatically uses tower abilities based on your equipped units." })
 Sections.AutoAbility.Left:Toggle({
@@ -908,34 +921,52 @@ task.spawn(function()
 end)
 
 task.spawn(function()
-    local p = Players.LocalPlayer
-    local v = VIM
-    local g = game:GetService("GuiService")
-    local rs = RS
-    local seen = false
-    local function press(k)
-        v:SendKeyEvent(true, k, false, game)
-        task.wait(0.1)
-        v:SendKeyEvent(false, k, false, game)
-    end
+    local hasRestarted = false
+    LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
+        if child.Name == "EndGameUI" and getgenv().AutoFastRetryEnabled and not hasRestarted then
+            if child:FindFirstChild("BG") then
+                hasRestarted = true
+                task.wait(2)
+                pcall(function()
+                    RS.Remotes.RestartMatch:FireServer()
+                    print("[Auto Fast Retry] Restarted match")
+                end)
+            end
+        end
+    end)
+    LocalPlayer.PlayerGui.ChildRemoved:Connect(function(child)
+        if child.Name == "EndGameUI" then
+            hasRestarted = false
+        end
+    end)
+end)
+
+task.spawn(function()
     while true do
-        task.wait(1)
-        if getgenv().AutoFastRetryEnabled then
+        task.wait(0.5)
+        if getgenv().AutoReadyEnabled then
             pcall(function()
-                local s = p:WaitForChild("PlayerGui"):WaitForChild("Settings")
-                local a = s:WaitForChild("AutoReady")
-                if a.Value == true then rs.Remotes.SetSettings:InvokeServer("AutoReady") end
-                local e = p.PlayerGui:FindFirstChild("EndGameUI")
-                if e and e:FindFirstChild("BG") then
-                    seen = true
-                    local r = e.BG.Buttons:FindFirstChild("Retry")
-                    if r then
-                        g.SelectedObject = r
-                        repeat press(Enum.KeyCode.Return) task.wait(0.5) until not p.PlayerGui:FindFirstChild("EndGameUI")
-                        g.SelectedObject = nil
+                local bottomGui = LocalPlayer.PlayerGui:FindFirstChild("Bottom")
+                if bottomGui then
+                    local frame = bottomGui:FindFirstChild("Frame")
+                    if frame then
+                        local children = frame:GetChildren()
+                        if children[2] then
+                            local subChildren = children[2]:GetChildren()
+                            if subChildren[6] then
+                                local textButton = subChildren[6]:FindFirstChild("TextButton")
+                                if textButton then
+                                    local textLabel = textButton:FindFirstChild("TextLabel")
+                                    if textLabel and textLabel.Text == "Start" then
+                                        RS.Remotes.PlayerReady:FireServer()
+                                        print("[Auto Ready] Player ready fired")
+                                        task.wait()
+                                    end
+                                end
+                            end
+                        end
                     end
-                elseif g.SelectedObject ~= nil then g.SelectedObject = nil end
-                if seen and not a.Value then rs.Remotes.SetSettings:InvokeServer("AutoReady") end
+                end
             end)
         end
         if isUnloaded then break end
