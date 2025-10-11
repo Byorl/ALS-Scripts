@@ -256,11 +256,33 @@ local function addToggle(tab, key, title, default, onChanged)
 end
 
 Tabs.Main:AddParagraph({ Title = "⚡ Game Automation", Content = "Streamline your gameplay with automatic actions" })
+
+addToggle(Tabs.Main, "AutoLeaveToggle", "Auto Leave", getgenv().Config.toggles.AutoLeaveToggle or false, function(val)
+    getgenv().AutoLeaveEnabled = val
+    getgenv().Config.toggles.AutoLeaveToggle = val
+    saveConfig(getgenv().Config)
+    notify("Auto Leave", val and "Enabled" or "Disabled", 3)
+end)
+
 addToggle(Tabs.Main, "AutoFastRetryToggle", "Auto Replay", getgenv().Config.toggles.AutoFastRetryToggle or false, function(val)
     getgenv().AutoFastRetryEnabled = val
     getgenv().Config.toggles.AutoFastRetryToggle = val
     saveConfig(getgenv().Config)
     notify("Auto Replay", val and "Enabled" or "Disabled", 3)
+end)
+
+addToggle(Tabs.Main, "AutoNextToggle", "Auto Next", getgenv().Config.toggles.AutoNextToggle or false, function(val)
+    getgenv().AutoNextEnabled = val
+    getgenv().Config.toggles.AutoNextToggle = val
+    saveConfig(getgenv().Config)
+    notify("Auto Next", val and "Enabled" or "Disabled", 3)
+end)
+
+addToggle(Tabs.Main, "AutoSmartToggle", "Auto Leave/Replay/Next", getgenv().Config.toggles.AutoSmartToggle or false, function(val)
+    getgenv().AutoSmartEnabled = val
+    getgenv().Config.toggles.AutoSmartToggle = val
+    saveConfig(getgenv().Config)
+    notify("Auto Leave/Replay/Next", val and "Enabled" or "Disabled", 3)
 end)
 
 addToggle(Tabs.Main, "AutoReadyToggle", "Auto Ready", getgenv().Config.toggles.AutoReadyToggle or false, function(val)
@@ -1132,35 +1154,61 @@ task.spawn(function()
     local GuiService = game:GetService("GuiService")
     while true do
         task.wait(2)
-        if getgenv().AutoFastRetryEnabled then
-            pcall(function()
-                local endGameUI = LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
-                if endGameUI and endGameUI:FindFirstChild("BG") then
-                    local retryButton = endGameUI.BG.Buttons:FindFirstChild("Retry")
-                    if retryButton then
-                        if getgenv().WebhookEnabled then
-                            print("[Auto Fast Retry] Waiting for webhook to send...")
-                            local maxWait = 0
-                            while isProcessing and maxWait < 5 do
-                                task.wait(0.5)
-                                maxWait = maxWait + 0.5
-                            end
-                            print("[Auto Fast Retry] Webhook sent, proceeding with retry")
-                        end
-                        
-                        GuiService.SelectedObject = retryButton
-                        repeat 
-                            press(Enum.KeyCode.Return)
-                            task.wait(0.5)
-                        until not LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
-                        GuiService.SelectedObject = nil
-                        print("[Auto Fast Retry] Clicked retry button")
+        pcall(function()
+            local endGameUI = LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
+            if endGameUI and endGameUI:FindFirstChild("BG") and endGameUI.BG:FindFirstChild("Buttons") then
+                local buttons = endGameUI.BG.Buttons
+                local nextButton = buttons:FindFirstChild("Next")
+                local retryButton = buttons:FindFirstChild("Retry")
+                local leaveButton = buttons:FindFirstChild("Leave")
+                
+                if getgenv().WebhookEnabled and isProcessing then
+                    print("[EndGameUI] Waiting for webhook to send...")
+                    local maxWait = 0
+                    while isProcessing and maxWait < 5 do
+                        task.wait(0.5)
+                        maxWait = maxWait + 0.5
                     end
-                elseif GuiService.SelectedObject ~= nil then 
-                    GuiService.SelectedObject = nil 
                 end
-            end)
-        end
+                
+                local buttonToPress = nil
+                local actionName = ""
+                
+                if getgenv().AutoSmartEnabled then
+                    if nextButton and nextButton.Visible then
+                        buttonToPress = nextButton
+                        actionName = "Next"
+                    elseif retryButton and retryButton.Visible then
+                        buttonToPress = retryButton
+                        actionName = "Replay"
+                    elseif leaveButton then
+                        buttonToPress = leaveButton
+                        actionName = "Leave"
+                    end
+                elseif getgenv().AutoNextEnabled and nextButton and nextButton.Visible then
+                    buttonToPress = nextButton
+                    actionName = "Next"
+                elseif getgenv().AutoFastRetryEnabled and retryButton and retryButton.Visible then
+                    buttonToPress = retryButton
+                    actionName = "Replay"
+                elseif getgenv().AutoLeaveEnabled and leaveButton then
+                    buttonToPress = leaveButton
+                    actionName = "Leave"
+                end
+                
+                if buttonToPress then
+                    GuiService.SelectedObject = buttonToPress
+                    repeat 
+                        press(Enum.KeyCode.Return)
+                        task.wait(0.5)
+                    until not LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
+                    GuiService.SelectedObject = nil
+                    print("[EndGameUI] Clicked " .. actionName .. " button")
+                end
+            elseif GuiService.SelectedObject ~= nil then 
+                GuiService.SelectedObject = nil 
+            end
+        end)
         if isUnloaded then break end
     end
 end)
@@ -1598,54 +1646,44 @@ task.spawn(function()
                 return {} 
             end
             
-            local rewardsHolder = ui:FindFirstChild("BG")
-            if not rewardsHolder then 
-                print("[Webhook] No BG found")
+            local holder = ui:FindFirstChild("BG") and ui.BG:FindFirstChild("Container") and ui.BG.Container:FindFirstChild("Rewards") and ui.BG.Container.Rewards:FindFirstChild("Holder")
+            
+            if not holder then 
+                print("[Webhook] Could not find Holder path")
                 return {} 
             end
             
-            rewardsHolder = rewardsHolder:FindFirstChild("Container")
-            if not rewardsHolder then 
-                print("[Webhook] No Container found")
-                return {} 
-            end
+            print("[Webhook] Found Holder, scanning all children...")
             
-            rewardsHolder = rewardsHolder:FindFirstChild("Rewards")
-            if not rewardsHolder then 
-                print("[Webhook] No Rewards found")
-                return {} 
-            end
-            
-            rewardsHolder = rewardsHolder:FindFirstChild("Holder")
-            if not rewardsHolder then 
-                print("[Webhook] No Holder found")
-                return {} 
-            end
-            
-            print("[Webhook] Found Holder, scanning children...")
-            local childCount = 0
-            for _, item in pairs(rewardsHolder:GetChildren()) do
-                childCount = childCount + 1
-                if item:IsA("GuiObject") and not item:IsA("UIListLayout") then
-                    print("[Webhook] Checking item:", item.Name, item.ClassName)
-                    local amountLabel = item:FindFirstChild("Amount")
-                    local nameLabel = item:FindFirstChild("ItemName")
+            for _, item in pairs(holder:GetChildren()) do
+                if item:IsA("TextButton") then
+                    print("[Webhook] Checking TextButton:", item.Name)
                     
-                    if amountLabel and nameLabel then
-                        local amountText = amountLabel.Text
-                        local itemName = nameLabel.Text
-                        print("[Webhook] Found reward:", itemName, "Amount text:", amountText)
-                        
-                        local clean = string.gsub(string.gsub(amountText, "x", ""), "+", "")
-                        clean = string.gsub(clean, ",", "")
-                        local n = tonumber(clean)
-                        
-                        if n and itemName ~= "" then 
-                            table.insert(rewards, { name=itemName, amount=n })
-                            print("[Webhook] Added reward:", itemName, n)
+                    local rewardName = nil
+                    local rewardAmount = nil
+                    
+                    local unitName = item:FindFirstChild("UnitName")
+                    if unitName and unitName.Text and unitName.Text ~= "" then
+                        rewardName = unitName.Text
+                    end
+                    
+                    local itemName = item:FindFirstChild("ItemName")
+                    if itemName and itemName.Text and itemName.Text ~= "" then
+                        rewardName = itemName.Text
+                    end
+                    
+                    if rewardName then
+                        local amountLabel = item:FindFirstChild("Amount")
+                        if amountLabel and amountLabel.Text then
+                            local amountText = amountLabel.Text
+                            local clean = string.gsub(string.gsub(string.gsub(amountText, "x", ""), "+", ""), ",", "")
+                            rewardAmount = tonumber(clean)
                         end
-                    else
-                        print("[Webhook] Missing labels - Amount:", amountLabel ~= nil, "ItemName:", nameLabel ~= nil)
+                        
+                        if rewardAmount then
+                            table.insert(rewards, { name = rewardName, amount = rewardAmount })
+                            print("[Webhook] Added reward:", rewardName, rewardAmount)
+                        end
                     end
                 end
             end
