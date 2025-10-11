@@ -133,6 +133,7 @@ function MacLib:Window(Settings)
 
 	local baseUIScale = Instance.new("UIScale")
 	baseUIScale.Name = "BaseUIScale"
+	baseUIScale.Scale = sizeMult
 	baseUIScale.Parent = base
 
 	local baseUICorner = Instance.new("UICorner")
@@ -4940,7 +4941,7 @@ function MacLib:Window(Settings)
 
 		local tweens = {
 			In = Tween(notificationUIScale, TweenInfo.new(0.2, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out), {
-				Scale = Settings.Scale or 1
+				Scale = (Settings.Scale or 1) * sizeMult
 			}),
 			Out = Tween(notificationUIScale, TweenInfo.new(0.2, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out), {
 				Scale = 0
