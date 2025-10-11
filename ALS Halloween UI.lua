@@ -1659,7 +1659,8 @@ task.spawn(function()
             
             print("[Webhook] Found Holder, scanning all children...")
             
-            for _, item in pairs(holder:GetChildren()) do
+            local children = holder:GetChildren()
+            for _, item in pairs(children) do
                 if item:IsA("TextButton") then
                     print("[Webhook] Checking TextButton:", item.Name)
                     
@@ -1691,7 +1692,7 @@ task.spawn(function()
                     end
                 end
             end
-            print("[Webhook] Total children:", childCount, "Rewards found:", #rewards)
+            print("[Webhook] Total children:", #children, "Rewards found:", #rewards)
             return rewards
         end)
         
@@ -1744,7 +1745,7 @@ task.spawn(function()
             
             print("[Webhook] Starting webhook process...")
             
-            task.wait(0.5)
+            task.wait(1.5)
             
             print("[Webhook] Capturing rewards...")
             local rewards = getRewards()
