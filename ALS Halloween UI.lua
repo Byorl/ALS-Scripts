@@ -56,6 +56,7 @@ getgenv().Config = loadConfig()
 getgenv().AutoEventEnabled = false
 getgenv().AutoAbilitiesEnabled = false
 getgenv().CardSelectionEnabled = false
+getgenv().BossRushEnabled = false
 getgenv().WebhookEnabled = false
 getgenv().SeamlessLimiterEnabled = false
 getgenv().BingoEnabled = false
@@ -78,6 +79,7 @@ local Tabs = {
     AutoEvent = Window:AddTab({ Title = "Auto Event", Icon = "calendar" }),
     AutoAbility = Window:AddTab({ Title = "Auto Ability", Icon = "zap" }),
     CardSelection = Window:AddTab({ Title = "Card Selection", Icon = "layers" }),
+    BossRush = Window:AddTab({ Title = "Boss Rush", Icon = "trophy" }),
     Webhook = Window:AddTab({ Title = "Webhook", Icon = "send" }),
     SeamlessFix = Window:AddTab({ Title = "Seamless Fix", Icon = "refresh-cw" }),
     Event = Window:AddTab({ Title = "Event", Icon = "grid" }),
@@ -132,6 +134,26 @@ getgenv().CardPriority = {}
 for name, priority in pairs(CandyCards) do getgenv().CardPriority[name] = priority end
 for name, priority in pairs(DevilSacrifice) do getgenv().CardPriority[name] = priority end
 for name, priority in pairs(OtherCards) do getgenv().CardPriority[name] = priority end
+
+local BossRushGeneral = {
+    ["Metal Skin"] = 0,
+    ["Raging Power"] = 0,
+    ["Demon Takeover"] = 0,
+    ["Fortune"] = 0,
+    ["Chaos Eater"] = 0,
+    ["Godspeed"] = 0,
+    ["Insanity"] = 0,
+    ["Feeding Madness"] = 0,
+    ["Emotional Damage"] = 0
+}
+
+local BabyloniaCastle = {}
+local MidnightHunt = {}
+
+getgenv().BossRushCardPriority = {}
+for name, priority in pairs(BossRushGeneral) do getgenv().BossRushCardPriority[name] = priority end
+for name, priority in pairs(BabyloniaCastle) do getgenv().BossRushCardPriority[name] = priority end
+for name, priority in pairs(MidnightHunt) do getgenv().BossRushCardPriority[name] = priority end
 
 
 Tabs.AutoEvent:AddParagraph({
@@ -532,6 +554,158 @@ for _, cardName in ipairs(otherCardNames) do
         end
     })
 end
+
+Tabs.BossRush:AddParagraph({
+    Title = "Boss Rush Card System",
+    Content = "Set priority for Boss Rush cards (lower = better).\nCards with 999 priority will be avoided."
+})
+
+local BossRushToggle = Tabs.BossRush:AddToggle("BossRushToggle", {
+    Title = "Enable Boss Rush Cards",
+    Description = "Auto-select Boss Rush cards by priority",
+    Default = getgenv().Config.toggles.BossRushToggle or false
+})
+
+BossRushToggle:OnChanged(function()
+    getgenv().BossRushEnabled = Options.BossRushToggle.Value
+    getgenv().Config.toggles.BossRushToggle = Options.BossRushToggle.Value
+    saveConfig(getgenv().Config)
+    if getgenv().BossRushEnabled then
+        Fluent:Notify({
+            Title = "Boss Rush",
+            Content = "Boss Rush card selection enabled!",
+            Duration = 3
+        })
+    else
+        Fluent:Notify({
+            Title = "Boss Rush",
+            Content = "Boss Rush card selection disabled!",
+            Duration = 3
+        })
+    end
+end)
+
+Tabs.BossRush:AddParagraph({
+    Title = "━━━━━ Boss Rush ━━━━━",
+    Content = "General Boss Rush cards"
+})
+
+local bossRushCardNames = {}
+for cardName, _ in pairs(BossRushGeneral) do
+    table.insert(bossRushCardNames, cardName)
+end
+table.sort(bossRushCardNames)
+
+for _, cardName in ipairs(bossRushCardNames) do
+    local inputKey = "BossRush_" .. cardName
+    local defaultValue = getgenv().Config.inputs[inputKey] or tostring(BossRushGeneral[cardName])
+    
+    local cardType = "Buff" 
+    pcall(function()
+        local bossRushModule = RS:FindFirstChild("Modules"):FindFirstChild("CardHandler"):FindFirstChild("BossRushCards")
+        if bossRushModule then
+            local cards = require(bossRushModule)
+            for _, card in pairs(cards) do
+                if card.CardName == cardName then
+                    cardType = card.CardType
+                    break
+                end
+            end
+        end
+    end)
+    
+    Tabs.BossRush:AddInput(inputKey, {
+        Title = cardName .. " (" .. cardType .. ")",
+        Default = defaultValue,
+        Placeholder = "Priority (1-999)",
+        Numeric = true,
+        Finished = true,
+        Callback = function(Value)
+            local num = tonumber(Value)
+            if num then
+                getgenv().BossRushCardPriority[cardName] = num
+                getgenv().Config.inputs[inputKey] = Value
+                saveConfig(getgenv().Config)
+            end
+        end
+    })
+end
+
+Tabs.BossRush:AddParagraph({
+    Title = "━━━━━ Babylonia Castle ━━━━━",
+    Content = "Babylonia Castle specific cards"
+})
+
+pcall(function()
+    local babyloniaModule = RS:FindFirstChild("Modules"):FindFirstChild("CardHandler"):FindFirstChild("BossRushCards"):FindFirstChild("Babylonia Castle")
+    if babyloniaModule then
+        local cards = require(babyloniaModule)
+        for _, card in pairs(cards) do
+            local cardName = card.CardName
+            local cardType = card.CardType or "Buff"
+            local inputKey = "BabyloniaCastle_" .. cardName
+            local defaultValue = getgenv().Config.inputs[inputKey] or "999"
+            
+            if not getgenv().BossRushCardPriority[cardName] then
+                getgenv().BossRushCardPriority[cardName] = 999
+            end
+            
+            Tabs.BossRush:AddInput(inputKey, {
+                Title = cardName .. " (" .. cardType .. ")",
+                Default = defaultValue,
+                Placeholder = "Priority (1-999)",
+                Numeric = true,
+                Finished = true,
+                Callback = function(Value)
+                    local num = tonumber(Value)
+                    if num then
+                        getgenv().BossRushCardPriority[cardName] = num
+                        getgenv().Config.inputs[inputKey] = Value
+                        saveConfig(getgenv().Config)
+                    end
+                end
+            })
+        end
+    end
+end)
+
+Tabs.BossRush:AddParagraph({
+    Title = "━━━━━ Midnight Hunt ━━━━━",
+    Content = "Midnight Hunt specific cards"
+})
+
+pcall(function()
+    local midnightModule = RS:FindFirstChild("Modules"):FindFirstChild("CardHandler"):FindFirstChild("BossRushCards"):FindFirstChild("Midnight Hunt")
+    if midnightModule then
+        local cards = require(midnightModule)
+        for _, card in pairs(cards) do
+            local cardName = card.CardName
+            local cardType = card.CardType or "Buff"
+            local inputKey = "MidnightHunt_" .. cardName
+            local defaultValue = getgenv().Config.inputs[inputKey] or "999"
+            
+            if not getgenv().BossRushCardPriority[cardName] then
+                getgenv().BossRushCardPriority[cardName] = 999
+            end
+            
+            Tabs.BossRush:AddInput(inputKey, {
+                Title = cardName .. " (" .. cardType .. ")",
+                Default = defaultValue,
+                Placeholder = "Priority (1-999)",
+                Numeric = true,
+                Finished = true,
+                Callback = function(Value)
+                    local num = tonumber(Value)
+                    if num then
+                        getgenv().BossRushCardPriority[cardName] = num
+                        getgenv().Config.inputs[inputKey] = Value
+                        saveConfig(getgenv().Config)
+                    end
+                end
+            })
+        end
+    end
+end)
 
 Tabs.Webhook:AddParagraph({
     Title = "Discord Webhook Integration",
@@ -1264,6 +1438,134 @@ task.spawn(function()
 end)
 
 task.spawn(function()
+    local function getBossRushCards()
+        local playerGui = LocalPlayer.PlayerGui
+        local prompt = playerGui:FindFirstChild("Prompt")
+        if not prompt then return nil end
+        local frame = prompt:FindFirstChild("Frame")
+        if not frame or not frame:FindFirstChild("Frame") then return nil end
+        
+        local cards = {}
+        local cardButtons = {}
+        
+        for _, descendant in pairs(frame:GetDescendants()) do
+            if descendant:IsA("TextLabel") and descendant.Parent and descendant.Parent:IsA("Frame") then
+                local text = descendant.Text
+                if getgenv().BossRushCardPriority[text] then
+                    local button = descendant.Parent.Parent
+                    if button:IsA("GuiButton") or button:IsA("TextButton") or button:IsA("ImageButton") then
+                        table.insert(cardButtons, {text = text, button = button})
+                    end
+                end
+            end
+        end
+        
+        table.sort(cardButtons, function(a, b)
+            return a.button.AbsolutePosition.X < b.button.AbsolutePosition.X
+        end)
+        
+        for i, cardData in ipairs(cardButtons) do
+            cards[i] = {name = cardData.text, button = cardData.button}
+        end
+        
+        return #cards > 0 and cards or nil
+    end
+    
+    local function findBestBossRushCard(availableCards)
+        local bestIndex = 1
+        local bestPriority = math.huge
+        
+        for cardIndex = 1, #availableCards do
+            local cardData = availableCards[cardIndex]
+            local cardName = cardData.name
+            local priority = getgenv().BossRushCardPriority[cardName] or 999
+            
+            if priority < bestPriority then
+                bestPriority = priority
+                bestIndex = cardIndex
+            end
+        end
+        
+        return bestIndex, availableCards[bestIndex], bestPriority
+    end
+    
+    local function pressBossRushConfirm()
+        local ok, confirmButton = pcall(function()
+            local prompt = LocalPlayer.PlayerGui:FindFirstChild("Prompt")
+            if not prompt then return nil end
+            local frame = prompt:FindFirstChild("Frame")
+            if not frame then return nil end
+            local innerFrame = frame:FindFirstChild("Frame")
+            if not innerFrame then return nil end
+            
+            local children = innerFrame:GetChildren()
+            if #children < 5 then return nil end
+            
+            local button = children[5]:FindFirstChild("TextButton")
+            if not button then return nil end
+            
+            local label = button:FindFirstChild("TextLabel")
+            if label and label.Text == "Confirm" then
+                return button
+            end
+            
+            return nil
+        end)
+        
+        if ok and confirmButton then
+            local events = {"Activated", "MouseButton1Click", "MouseButton1Down", "MouseButton1Up"}
+            for _, eventName in ipairs(events) do
+                pcall(function()
+                    for _, conn in ipairs(getconnections(confirmButton[eventName])) do
+                        conn:Fire()
+                    end
+                end)
+            end
+            return true
+        end
+        return false
+    end
+    
+    local function selectBossRushCard()
+        if not getgenv().BossRushEnabled then return false end
+        
+        local availableCards = getBossRushCards()
+        if not availableCards then return false end
+        
+        local bestCardIndex, bestCardData, bestPriority = findBestBossRushCard(availableCards)
+        
+        if bestPriority >= 999 then
+            return false
+        end
+        
+        local buttonToClick = bestCardData.button
+        local events = {"Activated", "MouseButton1Click", "MouseButton1Down", "MouseButton1Up"}
+        
+        for _, eventName in ipairs(events) do
+            pcall(function()
+                for _, conn in ipairs(getconnections(buttonToClick[eventName])) do
+                    conn:Fire()
+                end
+            end)
+        end
+        
+        wait(0.2)
+        pressBossRushConfirm()
+        
+        return true
+    end
+    
+    while true do
+        wait(1)
+        if getgenv().BossRushEnabled then
+            selectBossRushCard()
+        end
+        if Fluent.Unloaded then break end
+    end
+end)
+
+
+task.spawn(function()
     local hasRun = 0
     local isProcessing = false
     
@@ -1413,6 +1715,14 @@ task.spawn(function()
     
     local function sendGameCompletionWebhook()
         if not getgenv().WebhookEnabled then return end
+        
+        if getgenv()._webhookLock then
+            local timeSinceLock = tick() - getgenv()._webhookLock
+            if timeSinceLock < 10 then
+                return
+            end
+        end
+        
         if isProcessing then return end
         
         if hasRun > 0 then
@@ -1422,6 +1732,7 @@ task.spawn(function()
             end
         end
         
+        getgenv()._webhookLock = tick()
         isProcessing = true
         hasRun = tick()
         
