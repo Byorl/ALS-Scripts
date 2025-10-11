@@ -1,5 +1,10 @@
 repeat task.wait() until game:IsLoaded()
 
+-- UI Size Configuration (can be set before loading script)
+-- Example: getgenv().size = 75 (for 75% of original size)
+local uiSizePercent = getgenv().size or 100
+local sizeMult = uiSizePercent / 100
+
 local MacLib = loadstring(game:HttpGet("https://github.com/biggaboy212/Maclib/releases/latest/download/maclib.txt"))()
 
 local Players = game:GetService("Players")
@@ -69,7 +74,7 @@ getgenv().UnitAbilities = {}
 local Window = MacLib:Window({
     Title = "ALS Halloween Event",
     Subtitle = "Anime Last Stand Script",
-    Size = UDim2.fromOffset(868, 650),
+    Size = UDim2.fromOffset(math.floor(868 * sizeMult), math.floor(650 * sizeMult)),
     DragStyle = 1,
     DisabledWindowControls = {},
     ShowUserInfo = true,
@@ -90,7 +95,7 @@ ToggleGui.Parent = game:GetService("CoreGui")
 
 local ToggleButton = Instance.new("ImageButton")
 ToggleButton.Name = "ToggleButton"
-ToggleButton.Size = UDim2.new(0, 72, 0, 72)
+ToggleButton.Size = UDim2.new(0, math.floor(72 * sizeMult), 0, math.floor(72 * sizeMult))
 ToggleButton.Position = UDim2.new(0, 24, 0, 24)
 ToggleButton.AnchorPoint = Vector2.new(0, 0)
 ToggleButton.BackgroundTransparency = 1
