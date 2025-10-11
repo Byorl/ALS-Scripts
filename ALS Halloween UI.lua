@@ -10,8 +10,16 @@ local RS = game:GetService("ReplicatedStorage")
 local VIM = game:GetService("VirtualInputManager")
 local LocalPlayer = Players.LocalPlayer
 
-local LOBBY_PLACEID = 12886143095
-local isInLobby = game.PlaceId == LOBBY_PLACEID
+local LOBBY_PLACEIDS = {12886143095, 18583778121}
+local function checkIsInLobby()
+    for _, placeId in ipairs(LOBBY_PLACEIDS) do
+        if game.PlaceId == placeId then
+            return true
+        end
+    end
+    return false
+end
+local isInLobby = checkIsInLobby()
 
 local CONFIG_FOLDER = "ALSHalloweenEvent"
 local CONFIG_FILE = "config.json"
@@ -48,7 +56,6 @@ local function saveConfig(config)
         local json = HttpService:JSONEncode(config)
         local path = getConfigPath()
         writefile(path, json)
-        print("[Config] Saved to: " .. path)
     end)
     if not ok then
         warn("[Config] Save failed: " .. tostring(err))
@@ -116,6 +123,9 @@ for n,v in pairs(BabyloniaCastle) do
     if getgenv().Config.inputs[key] then getgenv().BossRushCardPriority[n] = tonumber(getgenv().Config.inputs[key]) else getgenv().BossRushCardPriority[n] = v end
 end
 
+getgenv().BreachAutoJoin = getgenv().BreachAutoJoin or {}
+getgenv().BreachEnabled = getgenv().Config.toggles.BreachToggle or false
+
 local function notify(title, content, duration)
     Fluent:Notify({ Title = title or "ALS", Content = content or "", Duration = duration or 3 })
 end
@@ -123,8 +133,8 @@ end
 local Window = Fluent:CreateWindow({
     Title = "ALS Halloween Event",
     SubTitle = "Anime Last Stand Script",
-    TabWidth = 160,
-    Size = UDim2.fromOffset(868, 650),
+    TabWidth = 100,
+    Size = UDim2.fromOffset(720, 480),
     Acrylic = true,
     Theme = "Dark",
     MinimizeKey = Enum.KeyCode.LeftControl
@@ -132,9 +142,10 @@ local Window = Fluent:CreateWindow({
 
 local Tabs = {
     Main = Window:AddTab({ Title = "Main", Icon = "home" }),
-    Ability = Window:AddTab({ Title = "Ability", Icon = "cube" }),
+    Ability = Window:AddTab({ Title = "Ability", Icon = "star" }),
     CardSelection = Window:AddTab({ Title = "Card Selection", Icon = "layout-grid" }),
     BossRush = Window:AddTab({ Title = "Boss Rush", Icon = "shield" }),
+    Breach = Window:AddTab({ Title = "Breach", Icon = "alert-triangle" }),
     Webhook = Window:AddTab({ Title = "Webhook", Icon = "send" }),
     SeamlessFix = Window:AddTab({ Title = "Seamless Fix", Icon = "refresh-cw" }),
     Event = Window:AddTab({ Title = "Event", Icon = "gift" }),
@@ -557,36 +568,100 @@ for _, cardName in ipairs(brNames) do
     getgenv().BossRushCardPriority[cardName] = tonumber(defaultValue) or BossRushGeneral[cardName]
 end
 
-Tabs.BossRush:AddParagraph({ Title = "🏰 Babylonia Castle", Content = "" })
-pcall(function()
-    local babyloniaModule = RS:FindFirstChild("Modules"):FindFirstChild("CardHandler"):FindFirstChild("BossRushCards"):FindFirstChild("Babylonia Castle")
-    if babyloniaModule then
-        local cards = require(babyloniaModule)
-        for _, card in pairs(cards) do
-            local cardName = card.CardName
-            local cardType = card.CardType or "Buff"
-            local inputKey = "BabyloniaCastle_" .. cardName
-            if not getgenv().BossRushCardPriority[cardName] then getgenv().BossRushCardPriority[cardName] = 999 end
-            local defaultValue = getgenv().Config.inputs[inputKey] or "999"
-            Tabs.BossRush:AddInput(inputKey, {
-                Title = cardName .. " ("..cardType..")",
-                Default = defaultValue,
-                Placeholder = "Priority (1-999)",
-                Numeric = true,
-                Finished = true,
-                Callback = function(Value)
-                    local num = tonumber(Value)
-                    if num then
-                        getgenv().BossRushCardPriority[cardName] = num
-                        getgenv().Config.inputs[inputKey] = tostring(num)
-                        saveConfig(getgenv().Config)
+if not isInLobby then
+    Tabs.BossRush:AddParagraph({ Title = "🏰 Babylonia Castle", Content = "" })
+    pcall(function()
+        local babyloniaModule = RS:FindFirstChild("Modules"):FindFirstChild("CardHandler"):FindFirstChild("BossRushCards"):FindFirstChild("Babylonia Castle")
+        if babyloniaModule then
+            local cards = require(babyloniaModule)
+            for _, card in pairs(cards) do
+                local cardName = card.CardName
+                local cardType = card.CardType or "Buff"
+                local inputKey = "BabyloniaCastle_" .. cardName
+                if not getgenv().BossRushCardPriority[cardName] then getgenv().BossRushCardPriority[cardName] = 999 end
+                local defaultValue = getgenv().Config.inputs[inputKey] or "999"
+                Tabs.BossRush:AddInput(inputKey, {
+                    Title = cardName .. " ("..cardType..")",
+                    Default = defaultValue,
+                    Placeholder = "Priority (1-999)",
+                    Numeric = true,
+                    Finished = true,
+                    Callback = function(Value)
+                        local num = tonumber(Value)
+                        if num then
+                            getgenv().BossRushCardPriority[cardName] = num
+                            getgenv().Config.inputs[inputKey] = tostring(num)
+                            saveConfig(getgenv().Config)
+                        end
                     end
+                })
+                getgenv().BossRushCardPriority[cardName] = tonumber(defaultValue) or 999
+            end
+        end
+    end)
+else
+    Tabs.BossRush:AddParagraph({ Title = "ℹ️ Babylonia Castle", Content = "Babylonia Castle cards are only available outside the lobby." })
+end
+
+Tabs.Breach:AddParagraph({ Title = "⚡ Breach Auto-Join", Content = "Automatically join available breaches when they spawn in the lobby" })
+
+addToggle(Tabs.Breach, "BreachToggle", "Enable Breach Auto-Join", getgenv().BreachEnabled, function(v)
+    getgenv().BreachEnabled = v
+    getgenv().Config.toggles.BreachToggle = v
+    saveConfig(getgenv().Config)
+    print("[Breach] Master toggle set to:", v)
+    notify("Breach Auto-Join", v and "Enabled" or "Disabled", 3)
+end)
+
+Tabs.Breach:AddParagraph({ Title = "📋 Available Breaches", Content = "Toggle which breaches to auto-join" })
+
+local breachesLoaded = false
+pcall(function()
+    local mapParamsModule = RS:FindFirstChild("Modules") and RS.Modules:FindFirstChild("Breach") and RS.Modules.Breach:FindFirstChild("MapParameters")
+    
+    if mapParamsModule and mapParamsModule:IsA("ModuleScript") then
+        local mapParams = require(mapParamsModule)
+        
+        if mapParams and next(mapParams) then
+            local breachList = {}
+            for breachName, breachInfo in pairs(mapParams) do
+                table.insert(breachList, {
+                    name = breachName,
+                    disabled = breachInfo.Disabled or false
+                })
+            end
+            
+            table.sort(breachList, function(a, b) return a.name < b.name end)
+            
+            for _, breach in ipairs(breachList) do
+                local breachKey = "Breach_" .. breach.name
+                local savedState = getgenv().Config.toggles[breachKey] or false
+                
+                if not getgenv().BreachAutoJoin[breach.name] then
+                    getgenv().BreachAutoJoin[breach.name] = savedState
                 end
-            })
-            getgenv().BossRushCardPriority[cardName] = tonumber(defaultValue) or 999
+                
+                local statusText = breach.disabled and " [DISABLED]" or ""
+                local breachTitle = breach.name .. statusText
+                
+                addToggle(Tabs.Breach, breachKey, breachTitle, savedState, function(v)
+                    getgenv().BreachAutoJoin[breach.name] = v
+                    getgenv().Config.toggles[breachKey] = v
+                    saveConfig(getgenv().Config)
+                    print("[Breach] Toggle for", breach.name, "set to:", v)
+                    print("[Breach] Current BreachAutoJoin table:", game:GetService("HttpService"):JSONEncode(getgenv().BreachAutoJoin))
+                end)
+            end
+            
+            breachesLoaded = true
+            print("[Breach] Loaded " .. #breachList .. " breaches from MapParameters")
         end
     end
 end)
+
+if not breachesLoaded then
+    Tabs.Breach:AddParagraph({ Title = "⚠️ Loading Failed", Content = "Could not load breach data from MapParameters. The module may not be available." })
+end
 
 Tabs.Webhook:AddParagraph({ Title = "🔔 Discord Notifications", Content = "Get match completion stats sent directly to your Discord server" })
 addToggle(Tabs.Webhook, "WebhookToggle", "Enable Webhook Notifications", getgenv().WebhookEnabled, function(v)
@@ -831,20 +906,27 @@ end)
 
 task.spawn(function()
     while true do
-        task.wait(0.1)
+        task.wait(0.2)
         if getgenv().RemoveEnemiesEnabled then
-            local enemies = workspace:FindFirstChild("Enemies")
-            if enemies then
-                for _, enemy in pairs(enemies:GetChildren()) do
-                    if enemy:IsA("Model") and enemy.Name ~= "Boss" then pcall(function() enemy:Destroy() end) end
+            pcall(function()
+                local enemies = workspace:FindFirstChild("Enemies")
+                if enemies then
+                    for _, enemy in pairs(enemies:GetChildren()) do
+                        if enemy:IsA("Model") and enemy.Name ~= "Boss" then 
+                            enemy:Destroy()
+                        end
+                    end
                 end
-            end
-            local spawnedunits = workspace:FindFirstChild("SpawnedUnits")
-            if spawnedunits then
-                for _, su in pairs(spawnedunits:GetChildren()) do
-                    if su:IsA("Model") then pcall(function() su:Destroy() end) end
+                
+                local spawnedunits = workspace:FindFirstChild("SpawnedUnits")
+                if spawnedunits then
+                    for _, su in pairs(spawnedunits:GetChildren()) do
+                        if su:IsA("Model") then 
+                            su:Destroy()
+                        end
+                    end
                 end
-            end
+            end)
         end
         if isUnloaded then break end
     end
@@ -886,21 +968,18 @@ task.spawn(function()
 end)
 
 task.spawn(function()
+    local eventsFolder = RS:FindFirstChild("Events")
+    local halloweenFolder = eventsFolder and eventsFolder:FindFirstChild("Hallowen2025")
+    local enterEvent = halloweenFolder and halloweenFolder:FindFirstChild("Enter")
+    local startEvent = halloweenFolder and halloweenFolder:FindFirstChild("Start")
+    
     while true do
-        task.wait(1)
-        if getgenv().AutoEventEnabled then
-            local eventsFolder = RS:FindFirstChild("Events")
-            if eventsFolder then
-                local halloweenFolder = eventsFolder:FindFirstChild("Hallowen2025")
-                if halloweenFolder then
-                    local enterEvent = halloweenFolder:FindFirstChild("Enter")
-                    local startEvent = halloweenFolder:FindFirstChild("Start")
-                    if enterEvent and startEvent then
-                        pcall(function() enterEvent:FireServer() task.wait(0.2) startEvent:FireServer() end)
-                        print("[Auto Event] Joined and started Halloween event")
-                    end
-                end
-            end
+        task.wait(0.5)
+        if getgenv().AutoEventEnabled and enterEvent and startEvent then
+            pcall(function() 
+                enterEvent:FireServer()
+                startEvent:FireServer()
+            end)
         end
         if isUnloaded then break end
     end
@@ -1056,7 +1135,6 @@ task.spawn(function()
             local correctedName = fixAbilityName(abilityName)
             pcall(function() 
                 RS.Remotes.Ability:InvokeServer(tower, correctedName) 
-                print("[Auto Ability] Used: " .. correctedName .. " on " .. tower.Name)
             end) 
         end
     end
@@ -1271,7 +1349,7 @@ task.spawn(function()
         return ok
     end
     while true do 
-        task.wait(1) 
+        task.wait(0.5)
         if getgenv().CardSelectionEnabled then 
             selectCard() 
         elseif getgenv().SlowerCardSelectionEnabled then 
@@ -1339,7 +1417,13 @@ task.spawn(function()
         end)
         return ok
     end
-    while true do task.wait(1) if getgenv().BossRushEnabled then select() end if isUnloaded then break end end
+    while true do 
+        task.wait(0.5)
+        if getgenv().BossRushEnabled then 
+            select() 
+        end 
+        if isUnloaded then break end 
+    end
 end)
 
 task.spawn(function()
@@ -1578,24 +1662,37 @@ end)
 
 task.spawn(function()
     if isInLobby then return end
-    task.wait(2)
-    local BingoEvents = RS:WaitForChild("Events"):WaitForChild("Bingo")
+    task.wait(1)
+    
+    local BingoEvents = RS:FindFirstChild("Events") and RS.Events:FindFirstChild("Bingo")
+    if not BingoEvents then return end
+    
     local UseStampEvent = BingoEvents:FindFirstChild("UseStamp")
     local ClaimRewardEvent = BingoEvents:FindFirstChild("ClaimReward")
     local CompleteBoardEvent = BingoEvents:FindFirstChild("CompleteBoard")
+    
     print("[Auto Bingo] Bingo automation loaded!")
+    
     while true do
-        task.wait(1)
+        task.wait(0.3)
         if getgenv().BingoEnabled then
-            if UseStampEvent then
-                for i=1,25 do pcall(function() UseStampEvent:FireServer() end) task.wait(0.1) end
-                task.wait(0.2)
-            end
-            if ClaimRewardEvent then
-                for i=1,25 do pcall(function() ClaimRewardEvent:InvokeServer(i) end) task.wait(0.1) end
-                task.wait(0.2)
-            end
-            if CompleteBoardEvent then pcall(function() CompleteBoardEvent:InvokeServer() end) task.wait(0.1) end
+            pcall(function()
+                if UseStampEvent then
+                    for i=1,25 do 
+                        UseStampEvent:FireServer()
+                    end
+                end
+                
+                if ClaimRewardEvent then
+                    for i=1,25 do 
+                        ClaimRewardEvent:InvokeServer(i)
+                    end
+                end
+                
+                if CompleteBoardEvent then 
+                    CompleteBoardEvent:InvokeServer()
+                end
+            end)
         end
         if isUnloaded then break end
     end
@@ -1608,7 +1705,7 @@ task.spawn(function()
     local OpenCapsuleEvent = RS:WaitForChild("Remotes"):WaitForChild("OpenCapsule")
     print("[Auto Capsules] Capsule automation loaded!")
     while true do
-        task.wait()
+        task.wait(0.1)
         if getgenv().CapsuleEnabled then
             local clientData = getClientData()
             if clientData then
@@ -1617,16 +1714,145 @@ task.spawn(function()
                 if clientData.ItemData and clientData.ItemData.HalloweenCapsule2025 then
                     capsuleAmount = clientData.ItemData.HalloweenCapsule2025.Amount or 0
                 end
-                if candyBasket >= 100000 then pcall(function() PurchaseEvent:InvokeServer(1, 100) end) task.wait(1)
-                elseif candyBasket >= 10000 then pcall(function() PurchaseEvent:InvokeServer(1, 10) end) task.wait(1)
-                elseif candyBasket >= 1000 then pcall(function() PurchaseEvent:InvokeServer(1, 1) end) task.wait(1) end
-                task.wait()
+                
+                if candyBasket >= 100000 then 
+                    pcall(function() PurchaseEvent:InvokeServer(1, 100) end)
+                elseif candyBasket >= 10000 then 
+                    pcall(function() PurchaseEvent:InvokeServer(1, 10) end)
+                elseif candyBasket >= 1000 then 
+                    pcall(function() PurchaseEvent:InvokeServer(1, 1) end)
+                end
+                
                 clientData = getClientData()
-                if clientData and clientData.ItemData and clientData.ItemData.HalloweenCapsule2025 then capsuleAmount = clientData.ItemData.HalloweenCapsule2025.Amount or 0 end
-                if capsuleAmount > 0 then pcall(function() OpenCapsuleEvent:FireServer("HalloweenCapsule2025", capsuleAmount) end) task.wait(1) end
+                if clientData and clientData.ItemData and clientData.ItemData.HalloweenCapsule2025 then 
+                    capsuleAmount = clientData.ItemData.HalloweenCapsule2025.Amount or 0 
+                end
+                
+                if capsuleAmount > 0 then 
+                    pcall(function() OpenCapsuleEvent:FireServer("HalloweenCapsule2025", capsuleAmount) end)
+                end
             end
         end
         if isUnloaded then break end
+    end
+end)
+
+task.spawn(function()
+    print("=== [Breach Auto-Join] STARTING ===")
+    print("[Breach Auto-Join] Initial isInLobby:", isInLobby)
+    print("[Breach Auto-Join] Current PlaceId:", game.PlaceId)
+    print("[Breach Auto-Join] Valid Lobby PlaceIds:", table.concat(LOBBY_PLACEIDS, ", "))
+    print("[Breach Auto-Join] BreachEnabled:", getgenv().BreachEnabled)
+    print("[Breach Auto-Join] BreachAutoJoin table:", game:GetService("HttpService"):JSONEncode(getgenv().BreachAutoJoin))
+    
+    print("[Breach Auto-Join] Breach automation loaded! (Will check lobby status each loop)")
+    
+    local function getAvailableBreaches()
+        local ok, breaches = pcall(function()
+            local lobby = workspace:FindFirstChild("Lobby")
+            if not lobby then 
+                print("[Breach Auto-Join] ERROR: No Lobby found in workspace")
+                return {} 
+            end
+            
+            local breachesFolder = lobby:FindFirstChild("Breaches")
+            if not breachesFolder then 
+                print("[Breach Auto-Join] ERROR: No Breaches folder found in Lobby")
+                return {} 
+            end
+            
+            print("[Breach Auto-Join] Scanning Breaches folder...")
+            print("[Breach Auto-Join] Total children in Breaches:", #breachesFolder:GetChildren())
+            
+            local available = {}
+            local scannedCount = 0
+            
+            for _, part in pairs(breachesFolder:GetChildren()) do
+                scannedCount = scannedCount + 1
+                
+                local breachPart = part:FindFirstChild("Breach")
+                if breachPart then
+                    print("[Breach Auto-Join] Found Breach part in:", part.Name)
+                    
+                    local proximityPrompt = breachPart:FindFirstChild("ProximityPrompt")
+                    if proximityPrompt and proximityPrompt:IsA("ProximityPrompt") then
+                        print("[Breach Auto-Join]   ProximityPrompt found!")
+                        print("[Breach Auto-Join]   ObjectText:", proximityPrompt.ObjectText)
+                        
+                        if proximityPrompt.ObjectText and proximityPrompt.ObjectText ~= "" then
+                            local breachName = proximityPrompt.ObjectText
+                            table.insert(available, { name = breachName, instance = part })
+                            print("[Breach Auto-Join]   ✓ Added breach:", breachName)
+                        else
+                            print("[Breach Auto-Join]   ✗ ObjectText is empty")
+                        end
+                    else
+                        print("[Breach Auto-Join]   ✗ No ProximityPrompt found in Breach part")
+                    end
+                end
+            end
+            
+            print("[Breach Auto-Join] Scanned", scannedCount, "parts, found", #available, "breaches")
+            return available
+        end)
+        
+        if not ok then
+            warn("[Breach Auto-Join] ERROR in getAvailableBreaches:", breaches)
+            return {}
+        end
+        
+        return breaches or {}
+    end
+    
+    local loopCount = 0
+    while true do
+        task.wait(1)
+        loopCount = loopCount + 1
+        
+        local currentlyInLobby = checkIsInLobby()
+        
+        print("\n=== [Breach Auto-Join] Loop #" .. loopCount .. " ===")
+        print("[Breach Auto-Join] Currently in lobby:", currentlyInLobby)
+        print("[Breach Auto-Join] Enabled:", getgenv().BreachEnabled)
+        
+        if not currentlyInLobby then
+            print("[Breach Auto-Join] Not in lobby, skipping this loop")
+        elseif getgenv().BreachEnabled then
+            local availableBreaches = getAvailableBreaches()
+            
+            print("[Breach Auto-Join] Available breaches:", #availableBreaches)
+            
+            for _, breach in ipairs(availableBreaches) do
+                local shouldJoin = getgenv().BreachAutoJoin[breach.name]
+                print("[Breach Auto-Join] Breach:", breach.name)
+                print("[Breach Auto-Join]   Should join:", shouldJoin)
+                print("[Breach Auto-Join]   Instance:", breach.instance:GetFullName())
+                
+                if shouldJoin then
+                    print("[Breach Auto-Join]   Attempting to join...")
+                    
+                    local success, err = pcall(function()
+                        local remote = RS.Remotes.Breach.EnterEvent
+                        print("[Breach Auto-Join]   Remote:", remote:GetFullName())
+                        print("[Breach Auto-Join]   Firing with:", breach.instance)
+                        
+                        remote:FireServer(breach.instance)
+                        print("[Breach Auto-Join]   ✓✓✓ SUCCESSFULLY FIRED REMOTE ✓✓✓")
+                    end)
+                    
+                    if not success then
+                        warn("[Breach Auto-Join]   ✗✗✗ FAILED:", err)
+                    end
+                    
+                    task.wait(0.5)
+                else
+                    print("[Breach Auto-Join]   Skipping (not enabled)")
+                end
+            end
+        else
+            print("[Breach Auto-Join] Auto-join is disabled, skipping...")
+        end
+
     end
 end)
 
