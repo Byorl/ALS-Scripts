@@ -733,64 +733,68 @@ else
     Tabs.BossRush:AddParagraph({ Title = "ℹ️ Babylonia Castle", Content = "Babylonia Castle cards are only available outside the lobby." })
 end
 
-Tabs.Breach:AddParagraph({ Title = "⚡ Breach Auto-Join", Content = "Automatically join available breaches when they spawn in the lobby" })
+if isInLobby then
+    Tabs.Breach:AddParagraph({ Title = "⚡ Breach Auto-Join", Content = "Automatically join available breaches when they spawn in the lobby" })
 
-addToggle(Tabs.Breach, "BreachToggle", "Enable Breach Auto-Join", getgenv().BreachEnabled, function(v)
-    getgenv().BreachEnabled = v
-    getgenv().Config.toggles.BreachToggle = v
-    saveConfig(getgenv().Config)
-    print("[Breach] Master toggle set to:", v)
-    notify("Breach Auto-Join", v and "Enabled" or "Disabled", 3)
-end)
+    addToggle(Tabs.Breach, "BreachToggle", "Enable Breach Auto-Join", getgenv().BreachEnabled, function(v)
+        getgenv().BreachEnabled = v
+        getgenv().Config.toggles.BreachToggle = v
+        saveConfig(getgenv().Config)
+        print("[Breach] Master toggle set to:", v)
+        notify("Breach Auto-Join", v and "Enabled" or "Disabled", 3)
+    end)
 
-Tabs.Breach:AddParagraph({ Title = "📋 Available Breaches", Content = "Toggle which breaches to auto-join" })
+    Tabs.Breach:AddParagraph({ Title = "📋 Available Breaches", Content = "Toggle which breaches to auto-join" })
 
-local breachesLoaded = false
-pcall(function()
-    local mapParamsModule = RS:FindFirstChild("Modules") and RS.Modules:FindFirstChild("Breach") and RS.Modules.Breach:FindFirstChild("MapParameters")
-    
-    if mapParamsModule and mapParamsModule:IsA("ModuleScript") then
-        local mapParams = require(mapParamsModule)
+    local breachesLoaded = false
+    pcall(function()
+        local mapParamsModule = RS:FindFirstChild("Modules") and RS.Modules:FindFirstChild("Breach") and RS.Modules.Breach:FindFirstChild("MapParameters")
         
-        if mapParams and next(mapParams) then
-            local breachList = {}
-            for breachName, breachInfo in pairs(mapParams) do
-                table.insert(breachList, {
-                    name = breachName,
-                    disabled = breachInfo.Disabled or false
-                })
-            end
+        if mapParamsModule and mapParamsModule:IsA("ModuleScript") then
+            local mapParams = require(mapParamsModule)
             
-            table.sort(breachList, function(a, b) return a.name < b.name end)
-            
-            for _, breach in ipairs(breachList) do
-                local breachKey = "Breach_" .. breach.name
-                local savedState = getgenv().Config.toggles[breachKey] or false
-                
-                if not getgenv().BreachAutoJoin[breach.name] then
-                    getgenv().BreachAutoJoin[breach.name] = savedState
+            if mapParams and next(mapParams) then
+                local breachList = {}
+                for breachName, breachInfo in pairs(mapParams) do
+                    table.insert(breachList, {
+                        name = breachName,
+                        disabled = breachInfo.Disabled or false
+                    })
                 end
                 
-                local statusText = breach.disabled and " [DISABLED]" or ""
-                local breachTitle = breach.name .. statusText
+                table.sort(breachList, function(a, b) return a.name < b.name end)
                 
-                addToggle(Tabs.Breach, breachKey, breachTitle, savedState, function(v)
-                    getgenv().BreachAutoJoin[breach.name] = v
-                    getgenv().Config.toggles[breachKey] = v
-                    saveConfig(getgenv().Config)
-                    print("[Breach] Toggle for", breach.name, "set to:", v)
-                    print("[Breach] Current BreachAutoJoin table:", game:GetService("HttpService"):JSONEncode(getgenv().BreachAutoJoin))
-                end)
+                for _, breach in ipairs(breachList) do
+                    local breachKey = "Breach_" .. breach.name
+                    local savedState = getgenv().Config.toggles[breachKey] or false
+                    
+                    if not getgenv().BreachAutoJoin[breach.name] then
+                        getgenv().BreachAutoJoin[breach.name] = savedState
+                    end
+                    
+                    local statusText = breach.disabled and " [DISABLED]" or ""
+                    local breachTitle = breach.name .. statusText
+                    
+                    addToggle(Tabs.Breach, breachKey, breachTitle, savedState, function(v)
+                        getgenv().BreachAutoJoin[breach.name] = v
+                        getgenv().Config.toggles[breachKey] = v
+                        saveConfig(getgenv().Config)
+                        print("[Breach] Toggle for", breach.name, "set to:", v)
+                        print("[Breach] Current BreachAutoJoin table:", game:GetService("HttpService"):JSONEncode(getgenv().BreachAutoJoin))
+                    end)
+                end
+                
+                breachesLoaded = true
+                print("[Breach] Loaded " .. #breachList .. " breaches from MapParameters")
             end
-            
-            breachesLoaded = true
-            print("[Breach] Loaded " .. #breachList .. " breaches from MapParameters")
         end
-    end
-end)
+    end)
 
-if not breachesLoaded then
-    Tabs.Breach:AddParagraph({ Title = "⚠️ Loading Failed", Content = "Could not load breach data from MapParameters. The module may not be available." })
+    if not breachesLoaded then
+        Tabs.Breach:AddParagraph({ Title = "⚠️ Loading Failed", Content = "Could not load breach data from MapParameters. The module may not be available." })
+    end
+else
+    Tabs.Breach:AddParagraph({ Title = "ℹ️ Breach Auto-Join", Content = "The Auto Breach can only be used in the lobby." })
 end
 
 Tabs.Webhook:AddParagraph({ Title = "🔔 Discord Notifications", Content = "Get match completion stats sent directly to your Discord server" })
@@ -2000,116 +2004,118 @@ task.spawn(function()
     end
 end)
 
-task.spawn(function()
-    print("=== [Breach Auto-Join] STARTING ===")
-    print("[Breach Auto-Join] Initial isInLobby:", isInLobby)
-    print("[Breach Auto-Join] Current PlaceId:", game.PlaceId)
-    print("[Breach Auto-Join] Valid Lobby PlaceIds:", table.concat(LOBBY_PLACEIDS, ", "))
-    print("[Breach Auto-Join] BreachEnabled:", getgenv().BreachEnabled)
-    print("[Breach Auto-Join] BreachAutoJoin table:", game:GetService("HttpService"):JSONEncode(getgenv().BreachAutoJoin))
-    
-    print("[Breach Auto-Join] Breach automation loaded! (Will check lobby status each loop)")
-    
-    local function getAvailableBreaches()
-        local ok, breaches = pcall(function()
-            local lobby = workspace:FindFirstChild("Lobby")
-            if not lobby then 
-                print("[Breach Auto-Join] ERROR: No Lobby found in workspace")
-                return {} 
-            end
-            
-            local breachesFolder = lobby:FindFirstChild("Breaches")
-            if not breachesFolder then 
-                print("[Breach Auto-Join] ERROR: No Breaches folder found in Lobby")
-                return {} 
-            end
-            
-            print("[Breach Auto-Join] Scanning Breaches folder...")
-            print("[Breach Auto-Join] Total children in Breaches:", #breachesFolder:GetChildren())
-            
-            local available = {}
-            local scannedCount = 0
-            
-            for _, part in pairs(breachesFolder:GetChildren()) do
-                scannedCount = scannedCount + 1
+if isInLobby then
+    task.spawn(function()
+        print("=== [Breach Auto-Join] STARTING ===")
+        print("[Breach Auto-Join] Initial isInLobby:", isInLobby)
+        print("[Breach Auto-Join] Current PlaceId:", game.PlaceId)
+        print("[Breach Auto-Join] Valid Lobby PlaceIds:", table.concat(LOBBY_PLACEIDS, ", "))
+        print("[Breach Auto-Join] BreachEnabled:", getgenv().BreachEnabled)
+        print("[Breach Auto-Join] BreachAutoJoin table:", game:GetService("HttpService"):JSONEncode(getgenv().BreachAutoJoin))
+        
+        print("[Breach Auto-Join] Breach automation loaded! (Will check lobby status each loop)")
+        
+        local function getAvailableBreaches()
+            local ok, breaches = pcall(function()
+                local lobby = workspace:FindFirstChild("Lobby")
+                if not lobby then 
+                    print("[Breach Auto-Join] ERROR: No Lobby found in workspace")
+                    return {} 
+                end
                 
-                local breachPart = part:FindFirstChild("Breach")
-                if breachPart then
-                    print("[Breach Auto-Join] Found Breach part in:", part.Name)
+                local breachesFolder = lobby:FindFirstChild("Breaches")
+                if not breachesFolder then 
+                    print("[Breach Auto-Join] ERROR: No Breaches folder found in Lobby")
+                    return {} 
+                end
+                
+                print("[Breach Auto-Join] Scanning Breaches folder...")
+                print("[Breach Auto-Join] Total children in Breaches:", #breachesFolder:GetChildren())
+                
+                local available = {}
+                local scannedCount = 0
+                
+                for _, part in pairs(breachesFolder:GetChildren()) do
+                    scannedCount = scannedCount + 1
                     
-                    local proximityPrompt = breachPart:FindFirstChild("ProximityPrompt")
-                    if proximityPrompt and proximityPrompt:IsA("ProximityPrompt") then
-                        print("[Breach Auto-Join]   ProximityPrompt found!")
-                        print("[Breach Auto-Join]   ObjectText:", proximityPrompt.ObjectText)
+                    local breachPart = part:FindFirstChild("Breach")
+                    if breachPart then
+                        print("[Breach Auto-Join] Found Breach part in:", part.Name)
                         
-                        if proximityPrompt.ObjectText and proximityPrompt.ObjectText ~= "" then
-                            local breachName = proximityPrompt.ObjectText
-                            table.insert(available, { name = breachName, instance = part })
-                            print("[Breach Auto-Join]   ✓ Added breach:", breachName)
+                        local proximityPrompt = breachPart:FindFirstChild("ProximityPrompt")
+                        if proximityPrompt and proximityPrompt:IsA("ProximityPrompt") then
+                            print("[Breach Auto-Join]   ProximityPrompt found!")
+                            print("[Breach Auto-Join]   ObjectText:", proximityPrompt.ObjectText)
+                            
+                            if proximityPrompt.ObjectText and proximityPrompt.ObjectText ~= "" then
+                                local breachName = proximityPrompt.ObjectText
+                                table.insert(available, { name = breachName, instance = part })
+                                print("[Breach Auto-Join]   ✓ Added breach:", breachName)
+                            else
+                                print("[Breach Auto-Join]   ✗ ObjectText is empty")
+                            end
                         else
-                            print("[Breach Auto-Join]   ✗ ObjectText is empty")
+                            print("[Breach Auto-Join]   ✗ No ProximityPrompt found in Breach part")
                         end
-                    else
-                        print("[Breach Auto-Join]   ✗ No ProximityPrompt found in Breach part")
                     end
                 end
-            end
-            
-            print("[Breach Auto-Join] Scanned", scannedCount, "parts, found", #available, "breaches")
-            return available
-        end)
-        
-        if not ok then
-            warn("[Breach Auto-Join] ERROR in getAvailableBreaches:", breaches)
-            return {}
-        end
-        
-        return breaches or {}
-    end
-    
-    local loopCount = 0
-    while true do
-        task.wait(1)
-        loopCount = loopCount + 1
-        
-        local currentlyInLobby = checkIsInLobby()
-        
-        if getgenv().BreachEnabled then
-            local availableBreaches = getAvailableBreaches()
-            
-            print("[Breach Auto-Join] Available breaches:", #availableBreaches)
-            
-            for _, breach in ipairs(availableBreaches) do
-                local shouldJoin = getgenv().BreachAutoJoin[breach.name]
-                print("[Breach Auto-Join] Breach:", breach.name)
-                print("[Breach Auto-Join]   Should join:", shouldJoin)
-                print("[Breach Auto-Join]   Instance:", breach.instance:GetFullName())
                 
-                if shouldJoin then
-                    print("[Breach Auto-Join]   Attempting to join...")
+                print("[Breach Auto-Join] Scanned", scannedCount, "parts, found", #available, "breaches")
+                return available
+            end)
+            
+            if not ok then
+                warn("[Breach Auto-Join] ERROR in getAvailableBreaches:", breaches)
+                return {}
+            end
+            
+            return breaches or {}
+        end
+        
+        local loopCount = 0
+        while true do
+            task.wait(1)
+            loopCount = loopCount + 1
+            
+            local currentlyInLobby = checkIsInLobby()
+            
+            if getgenv().BreachEnabled then
+                local availableBreaches = getAvailableBreaches()
+                
+                print("[Breach Auto-Join] Available breaches:", #availableBreaches)
+                
+                for _, breach in ipairs(availableBreaches) do
+                    local shouldJoin = getgenv().BreachAutoJoin[breach.name]
+                    print("[Breach Auto-Join] Breach:", breach.name)
+                    print("[Breach Auto-Join]   Should join:", shouldJoin)
+                    print("[Breach Auto-Join]   Instance:", breach.instance:GetFullName())
                     
-                    local success, err = pcall(function()
-                        local remote = RS.Remotes.Breach.EnterEvent
-                        print("[Breach Auto-Join]   Remote:", remote:GetFullName())
-                        print("[Breach Auto-Join]   Firing with:", breach.instance)
+                    if shouldJoin then
+                        print("[Breach Auto-Join]   Attempting to join...")
                         
-                        remote:FireServer(breach.instance)
-                        print("[Breach Auto-Join]   ✓✓✓ SUCCESSFULLY FIRED REMOTE ✓✓✓")
-                    end)
-                    
-                    if not success then
-                        warn("[Breach Auto-Join]   ✗✗✗ FAILED:", err)
+                        local success, err = pcall(function()
+                            local remote = RS.Remotes.Breach.EnterEvent
+                            print("[Breach Auto-Join]   Remote:", remote:GetFullName())
+                            print("[Breach Auto-Join]   Firing with:", breach.instance)
+                            
+                            remote:FireServer(breach.instance)
+                            print("[Breach Auto-Join]   ✓✓✓ SUCCESSFULLY FIRED REMOTE ✓✓✓")
+                        end)
+                        
+                        if not success then
+                            warn("[Breach Auto-Join]   ✗✗✗ FAILED:", err)
+                        end
+                        
+                        task.wait(0.5)
+                    else
+                        print("[Breach Auto-Join]   Skipping (not enabled)")
                     end
-                    
-                    task.wait(0.5)
-                else
-                    print("[Breach Auto-Join]   Skipping (not enabled)")
                 end
             end
-        end
 
-    end
-end)
+        end
+    end)
+end
 
 if isInLobby then
     task.spawn(function()
