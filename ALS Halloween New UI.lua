@@ -1,7 +1,5 @@
 repeat task.wait() until game:IsLoaded()
 
--- UI Size Configuration (can be set before loading script)
--- Example: getgenv().size = 75 (for 75% of original size)
 local uiSizePercent = getgenv().size or 100
 local sizeMult = uiSizePercent / 100
 
@@ -74,13 +72,24 @@ getgenv().UnitAbilities = {}
 local Window = MacLib:Window({
     Title = "ALS Halloween Event",
     Subtitle = "Anime Last Stand Script",
-    Size = UDim2.fromOffset(math.floor(868 * sizeMult), math.floor(650 * sizeMult)),
+    Size = UDim2.fromOffset(868, 650),
     DragStyle = 1,
     DisabledWindowControls = {},
     ShowUserInfo = true,
     Keybind = Enum.KeyCode.LeftControl,
     AcrylicBlur = true,
 })
+
+task.spawn(function()
+    task.wait(0.1)
+    local screenGui = LocalPlayer.PlayerGui:FindFirstChild("macLib") or (gethui and gethui():FindFirstChild("macLib"))
+    if screenGui then
+        local uiScale = Instance.new("UIScale")
+        uiScale.Scale = sizeMult
+        uiScale.Parent = screenGui
+        print("[UI Scale] Applied " .. uiSizePercent .. "% scaling to UI")
+    end
+end)
 
 local function notify(title, desc, time)
     Window:Notify({ Title = title or "ALS", Description = desc or "", Lifetime = time or 3 })
