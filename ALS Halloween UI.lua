@@ -773,7 +773,14 @@ addToggle(Tabs.Misc, "BlackScreenToggle", "Black Screen Mode", getgenv().BlackSc
     notify("Black Screen", v and "Enabled" or "Disabled", 3)
 end)
 
-Tabs.Misc:AddParagraph({ Title = "🔒 Safety", Content = "" })
+Tabs.Misc:AddParagraph({ Title = "🔒 Safety & UI", Content = "" })
+
+addToggle(Tabs.Misc, "AutoHideUIToggle", "Auto Hide UI on Start", getgenv().Config.toggles.AutoHideUIToggle or false, function(v)
+    getgenv().Config.toggles.AutoHideUIToggle = v
+    saveConfig(getgenv().Config)
+    notify("Auto Hide UI", v and "Enabled - Will hide on next run" or "Disabled", 3)
+end)
+
 addToggle(Tabs.Misc, "AntiAFKToggle", "Anti-AFK", getgenv().AntiAFKEnabled, function(v)
     getgenv().AntiAFKEnabled = v
     getgenv().Config.toggles.AntiAFKToggle = v
@@ -815,7 +822,17 @@ InterfaceManager:BuildInterfaceSection(Tabs.Settings)
 SaveManager:BuildConfigSection(Tabs.Settings)
 
 Window:SelectTab(1)
-notify("ALS Halloween Event", "Script loaded successfully!", 5)
+
+if getgenv().Config.toggles.AutoHideUIToggle then
+    task.wait(0.5)
+    local VIM = game:GetService("VirtualInputManager")
+    VIM:SendKeyEvent(true, Enum.KeyCode.LeftControl, false, game)
+    task.wait(0.05)
+    VIM:SendKeyEvent(false, Enum.KeyCode.LeftControl, false, game)
+    notify("ALS Halloween Event", "Script loaded! UI auto-hidden", 3)
+else
+    notify("ALS Halloween Event", "Script loaded successfully!", 5)
+end
 
 for inputKey, value in pairs(getgenv().Config.inputs) do
     if inputKey:match("^Card_") then
