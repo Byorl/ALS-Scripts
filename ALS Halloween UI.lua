@@ -148,12 +148,10 @@ local BossRushGeneral = {
 }
 
 local BabyloniaCastle = {}
-local MidnightHunt = {}
 
 getgenv().BossRushCardPriority = {}
 for name, priority in pairs(BossRushGeneral) do getgenv().BossRushCardPriority[name] = priority end
 for name, priority in pairs(BabyloniaCastle) do getgenv().BossRushCardPriority[name] = priority end
-for name, priority in pairs(MidnightHunt) do getgenv().BossRushCardPriority[name] = priority end
 
 
 Tabs.AutoEvent:AddParagraph({
@@ -669,43 +667,7 @@ pcall(function()
     end
 end)
 
-Tabs.BossRush:AddParagraph({
-    Title = "━━━━━ Midnight Hunt ━━━━━",
-    Content = "Midnight Hunt specific cards"
-})
 
-pcall(function()
-    local midnightModule = RS:FindFirstChild("Modules"):FindFirstChild("CardHandler"):FindFirstChild("BossRushCards"):FindFirstChild("Midnight Hunt")
-    if midnightModule then
-        local cards = require(midnightModule)
-        for _, card in pairs(cards) do
-            local cardName = card.CardName
-            local cardType = card.CardType or "Buff"
-            local inputKey = "MidnightHunt_" .. cardName
-            local defaultValue = getgenv().Config.inputs[inputKey] or "999"
-            
-            if not getgenv().BossRushCardPriority[cardName] then
-                getgenv().BossRushCardPriority[cardName] = 999
-            end
-            
-            Tabs.BossRush:AddInput(inputKey, {
-                Title = cardName .. " (" .. cardType .. ")",
-                Default = defaultValue,
-                Placeholder = "Priority (1-999)",
-                Numeric = true,
-                Finished = true,
-                Callback = function(Value)
-                    local num = tonumber(Value)
-                    if num then
-                        getgenv().BossRushCardPriority[cardName] = num
-                        getgenv().Config.inputs[inputKey] = Value
-                        saveConfig(getgenv().Config)
-                    end
-                end
-            })
-        end
-    end
-end)
 
 Tabs.Webhook:AddParagraph({
     Title = "Discord Webhook Integration",
