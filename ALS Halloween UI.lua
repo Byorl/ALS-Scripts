@@ -133,8 +133,8 @@ end
 local Window = Fluent:CreateWindow({
     Title = "ALS Halloween Event",
     SubTitle = "Anime Last Stand Script",
-    TabWidth = 100,
-    Size = UDim2.fromOffset(720, 480),
+    TabWidth = 140,
+    Size = UDim2.fromOffset(560, 380),
     Acrylic = true,
     Theme = "Dark",
     MinimizeKey = Enum.KeyCode.LeftControl
@@ -723,8 +723,8 @@ addToggle(Tabs.Event, "AutoEventToggle", "Auto Event Join", getgenv().AutoEventE
     notify("Auto Event", val and "Enabled" or "Disabled", 3)
 end)
 
-if not isInLobby then
-    Tabs.Event:AddParagraph({ Title = "� AAuto Bingo", Content = "" })
+if isInLobby then
+    Tabs.Event:AddParagraph({ Title = "🎲 Auto Bingo", Content = "" })
     addToggle(Tabs.Event, "BingoToggle", "Enable Auto Bingo", getgenv().BingoEnabled, function(v)
         getgenv().BingoEnabled = v
         getgenv().Config.toggles.BingoToggle = v
@@ -742,7 +742,7 @@ if not isInLobby then
 
     Tabs.Event:AddParagraph({ Title = "ℹ️ Info", Content = "Bingo: Uses stamps (25x), claims rewards, completes board\nCapsules: Buys 100/10/1 based on candy, opens all" })
 else
-    Tabs.Event:AddParagraph({ Title = "ℹ️ Lobby Only", Content = "Bingo and Capsule features are only available outside the lobby." })
+    Tabs.Event:AddParagraph({ Title = "ℹ️ Lobby Only", Content = "Bingo and Capsule features are only available in the lobby." })
 end
 
 Tabs.Misc:AddParagraph({ Title = "🛠️ Utility Features", Content = "Performance and quality of life improvements" })
