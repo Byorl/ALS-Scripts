@@ -1132,7 +1132,7 @@ task.spawn(function()
         
         blackScreenGui = Instance.new("ScreenGui")
         blackScreenGui.Name = "BlackScreenOverlay"
-        blackScreenGui.DisplayOrder = 999999
+        blackScreenGui.DisplayOrder = -999999
         blackScreenGui.IgnoreGuiInset = true
         blackScreenGui.ResetOnSpawn = false
         
@@ -1141,10 +1141,11 @@ task.spawn(function()
         blackFrame.Position = UDim2.new(0, 0, 0, 0)
         blackFrame.BackgroundColor3 = Color3.new(0, 0, 0)
         blackFrame.BorderSizePixel = 0
+        blackFrame.ZIndex = -999999
         blackFrame.Parent = blackScreenGui
         
         pcall(function()
-            blackScreenGui.Parent = game:GetService("CoreGui")
+            blackScreenGui.Parent = LocalPlayer.PlayerGui
         end)
         
         pcall(function()
