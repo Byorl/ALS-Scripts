@@ -1811,10 +1811,6 @@ task.spawn(function()
         
         local currentlyInLobby = checkIsInLobby()
         
-        print("\n=== [Breach Auto-Join] Loop #" .. loopCount .. " ===")
-        print("[Breach Auto-Join] Currently in lobby:", currentlyInLobby)
-        print("[Breach Auto-Join] Enabled:", getgenv().BreachEnabled)
-        
         if not currentlyInLobby then
             print("[Breach Auto-Join] Not in lobby, skipping this loop")
         elseif getgenv().BreachEnabled then
@@ -1849,8 +1845,6 @@ task.spawn(function()
                     print("[Breach Auto-Join]   Skipping (not enabled)")
                 end
             end
-        else
-            print("[Breach Auto-Join] Auto-join is disabled, skipping...")
         end
 
     end
