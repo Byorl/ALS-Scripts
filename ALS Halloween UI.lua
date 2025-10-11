@@ -1001,6 +1001,16 @@ task.spawn(function()
                 if endGameUI and endGameUI:FindFirstChild("BG") then
                     local retryButton = endGameUI.BG.Buttons:FindFirstChild("Retry")
                     if retryButton then
+                        if getgenv().WebhookEnabled then
+                            print("[Auto Fast Retry] Waiting for webhook to send...")
+                            local maxWait = 0
+                            while isProcessing and maxWait < 5 do
+                                task.wait(0.5)
+                                maxWait = maxWait + 0.5
+                            end
+                            print("[Auto Fast Retry] Webhook sent, proceeding with retry")
+                        end
+                        
                         GuiService.SelectedObject = retryButton
                         repeat 
                             press(Enum.KeyCode.Return)
@@ -1510,12 +1520,20 @@ task.spawn(function()
     local function sendWebhook()
         pcall(function()
             if not getgenv().WebhookEnabled then return end
-            if getgenv()._webhookLock and (tick() - getgenv()._webhookLock) < 10 then return end
+            if getgenv()._webhookLock and (tick() - getgenv()._webhookLock) < 3 then return end
             if isProcessing then return end
-            if hasRun > 0 and (tick() - hasRun) < 5 then return end
-            getgenv()._webhookLock = tick() isProcessing = true hasRun = tick()
-            task.wait(0.5)
-            local clientData = getClientData() if not clientData then isProcessing=false return end
+            
+            getgenv()._webhookLock = tick()
+            isProcessing = true
+            hasRun = tick()
+            
+            task.wait(1)
+            
+            local clientData = getClientData()
+            if not clientData then 
+                isProcessing = false
+                return
+            end
         local rewards = getRewards()
         local matchTime, matchWave, matchResult = getMatchResult()
         local mapName, mapDifficulty = getMapInfo()
@@ -1532,15 +1550,27 @@ task.spawn(function()
         if #rewards > 0 then
             for _, r in ipairs(rewards) do
                 local total = 0
-                if r.name == "CandyBasket" or r.name == "Candy Basket" then total = (clientData.CandyBasket or 0) + r.amount
-                elseif r.name == "HallowenBingoStamp" or r.name:find("Bingo Stamp") then
-                    if clientData.ItemData and clientData.ItemData.HallowenBingoStamp then total = (clientData.ItemData.HallowenBingoStamp.Amount or 0) + r.amount else total = r.amount end
-                elseif clientData.Items and clientData.Items[r.name] then total = (clientData.Items[r.name].Amount or 0) + r.amount
-                elseif clientData[r.name] then total = (clientData[r.name] or 0) + r.amount
-                else total = r.amount end
-                rewardsText = rewardsText .. "+"..formatNumber(r.amount).." "..r.name.." [ Total: "..formatNumber(total).." ]\n"
+                local itemName = r.name
+                
+                if clientData[itemName] and type(clientData[itemName]) == "number" then
+                    total = clientData[itemName]
+                elseif clientData.ItemData and clientData.ItemData[itemName] and clientData.ItemData[itemName].Amount then
+                    total = clientData.ItemData[itemName].Amount
+                elseif clientData.Items and clientData.Items[itemName] and clientData.Items[itemName].Amount then
+                    total = clientData.Items[itemName].Amount
+                elseif itemName == "Candy Basket" and clientData.CandyBasket then
+                    total = clientData.CandyBasket
+                elseif itemName:find("Bingo Stamp") and clientData.ItemData and clientData.ItemData.HallowenBingoStamp then
+                    total = clientData.ItemData.HallowenBingoStamp.Amount or 0
+                else
+                    total = r.amount
+                end
+                
+                rewardsText = rewardsText .. "+"..formatNumber(r.amount).." "..itemName.." [ Total: "..formatNumber(total).." ]\n"
             end
-        else rewardsText = "No rewards found" end
+        else 
+            rewardsText = "No rewards found" 
+        end
         local unitsText = ""
         if clientData.Slots then
             local slots = {"Slot1","Slot2","Slot3","Slot4","Slot5","Slot6"}
@@ -1564,8 +1594,20 @@ task.spawn(function()
             isProcessing=false
         end)
     end
-    LocalPlayer.PlayerGui.ChildAdded:Connect(function(child) if child.Name=="EndGameUI" and getgenv().WebhookEnabled then sendWebhook() end end)
-    LocalPlayer.PlayerGui.ChildRemoved:Connect(function(child) if child.Name=="EndGameUI" then task.wait(2) isProcessing=false end end)
+    LocalPlayer.PlayerGui.ChildAdded:Connect(function(child) 
+        if child.Name == "EndGameUI" and getgenv().WebhookEnabled then 
+            print("[Webhook] EndGameUI detected, sending webhook...")
+            sendWebhook() 
+        end 
+    end)
+    
+    LocalPlayer.PlayerGui.ChildRemoved:Connect(function(child) 
+        if child.Name == "EndGameUI" then 
+            task.wait(1)
+            isProcessing = false
+            print("[Webhook] EndGameUI removed, ready for next webhook")
+        end 
+    end)
 end)
 
 task.spawn(function()
