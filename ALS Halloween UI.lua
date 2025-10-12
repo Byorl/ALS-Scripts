@@ -188,6 +188,17 @@ getgenv().RemoveEnemiesEnabled = getgenv().Config.toggles.RemoveEnemiesToggle or
 getgenv().AntiAFKEnabled = getgenv().Config.toggles.AntiAFKToggle or false
 getgenv().BlackScreenEnabled = getgenv().Config.toggles.BlackScreenToggle or false
 getgenv().FPSBoostEnabled = (not isInLobby) and (getgenv().Config.toggles.FPSBoostToggle or false) or false
+
+getgenv().AutoLeaveEnabled = getgenv().Config.toggles.AutoLeaveToggle or false
+getgenv().AutoFastRetryEnabled = getgenv().Config.toggles.AutoFastRetryToggle or false
+getgenv().AutoNextEnabled = getgenv().Config.toggles.AutoNextToggle or false
+getgenv().AutoSmartEnabled = getgenv().Config.toggles.AutoSmartToggle or false
+
+print("[Config] Auto Leave: " .. tostring(getgenv().AutoLeaveEnabled))
+print("[Config] Auto Replay: " .. tostring(getgenv().AutoFastRetryEnabled))
+print("[Config] Auto Next: " .. tostring(getgenv().AutoNextEnabled))
+print("[Config] Auto Smart: " .. tostring(getgenv().AutoSmartEnabled))
+
 getgenv().WebhookURL = getgenv().Config.inputs.WebhookURL or ""
 getgenv().MaxSeamlessRounds = tonumber(getgenv().Config.inputs.SeamlessRounds) or 4
 getgenv().UnitAbilities = getgenv().UnitAbilities or {}
@@ -1487,10 +1498,22 @@ task.spawn(function()
     local GuiService = game:GetService("GuiService")
     local hasProcessedCurrentUI = false
     local endGameUIDetectedTime = 0
+    local lastEndGameUIInstance = nil
+    
     LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
         if child.Name == "EndGameUI" then
+            print("[Auto Action] EndGameUI detected - resetting flags")
             hasProcessedCurrentUI = false
             endGameUIDetectedTime = tick()
+            lastEndGameUIInstance = child
+        end
+    end)
+    
+    LocalPlayer.PlayerGui.ChildRemoved:Connect(function(child)
+        if child.Name == "EndGameUI" then
+            print("[Auto Action] EndGameUI removed - resetting flags")
+            hasProcessedCurrentUI = false
+            lastEndGameUIInstance = nil
         end
     end)
     while true do
@@ -1499,7 +1522,16 @@ task.spawn(function()
         local success, errorMsg = pcall(function()
             local endGameUI = LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
             if endGameUI and endGameUI:FindFirstChild("BG") and endGameUI.BG:FindFirstChild("Buttons") then
-                if hasProcessedCurrentUI then return end
+                if lastEndGameUIInstance and endGameUI ~= lastEndGameUIInstance then
+                    print("[Auto Action] New EndGameUI instance detected - resetting flag")
+                    hasProcessedCurrentUI = false
+                    lastEndGameUIInstance = endGameUI
+                    endGameUIDetectedTime = tick()
+                end
+                
+                if hasProcessedCurrentUI then 
+                    return 
+                end
                 
                 local buttons = endGameUI.BG.Buttons
                 local nextButton = buttons:FindFirstChild("Next")
@@ -1509,29 +1541,74 @@ task.spawn(function()
                 
                 task.wait(0.5)
                 
+                print("[Auto Action] Checking buttons...")
+                print("[Auto Action] Next button: " .. tostring(nextButton ~= nil) .. " (Visible: " .. tostring(nextButton and nextButton.Visible) .. ")")
+                print("[Auto Action] Retry button: " .. tostring(retryButton ~= nil) .. " (Visible: " .. tostring(retryButton and retryButton.Visible) .. ")")
+                print("[Auto Action] Leave button: " .. tostring(leaveButton ~= nil))
+                print("[Auto Action] AutoSmartEnabled: " .. tostring(getgenv().AutoSmartEnabled))
+                print("[Auto Action] AutoNextEnabled: " .. tostring(getgenv().AutoNextEnabled))
+                print("[Auto Action] AutoFastRetryEnabled: " .. tostring(getgenv().AutoFastRetryEnabled))
+                print("[Auto Action] AutoLeaveEnabled: " .. tostring(getgenv().AutoLeaveEnabled))
+                
                 if getgenv().AutoSmartEnabled then
-                    if nextButton and nextButton.Visible then buttonToPress = nextButton actionName = "Next"
-                    elseif retryButton and retryButton.Visible then buttonToPress = retryButton actionName = "Replay"
-                    elseif leaveButton then buttonToPress = leaveButton actionName = "Leave" end
+                    if nextButton and nextButton.Visible then 
+                        buttonToPress = nextButton 
+                        actionName = "Next"
+                        print("[Auto Action] Smart mode selected: Next")
+                    elseif retryButton and retryButton.Visible then 
+                        buttonToPress = retryButton 
+                        actionName = "Replay"
+                        print("[Auto Action] Smart mode selected: Replay")
+                    elseif leaveButton then 
+                        buttonToPress = leaveButton 
+                        actionName = "Leave"
+                        print("[Auto Action] Smart mode selected: Leave")
+                    end
                 elseif getgenv().AutoNextEnabled and nextButton and nextButton.Visible then
-                    buttonToPress = nextButton actionName = "Next"
+                    buttonToPress = nextButton 
+                    actionName = "Next"
+                    print("[Auto Action] Auto Next selected")
                 elseif getgenv().AutoFastRetryEnabled and retryButton and retryButton.Visible then
-                    buttonToPress = retryButton actionName = "Replay"
+                    buttonToPress = retryButton 
+                    actionName = "Replay"
+                    print("[Auto Action] Auto Replay selected")
                 elseif getgenv().AutoLeaveEnabled and leaveButton then
-                    buttonToPress = leaveButton actionName = "Leave"
+                    buttonToPress = leaveButton 
+                    actionName = "Leave"
+                    print("[Auto Action] Auto Leave selected")
+                end
+                
+                if not buttonToPress then
+                    print("[Auto Action] No button selected - no action will be taken")
                 end
                 
                 if buttonToPress then
+                    print("[Auto Action] Button selected: " .. actionName)
                     task.wait(0.3)
+                    
                     if getgenv().WebhookEnabled then
                         local timeSinceDetection = tick() - endGameUIDetectedTime
-                        if timeSinceDetection < 3 or isProcessing then return end
+                        if timeSinceDetection < 3 then
+                            print("[Auto Action] Waiting for webhook (time since detection: " .. string.format("%.1f", timeSinceDetection) .. "s)")
+                            return
+                        end
+                        if isProcessing then
+                            print("[Auto Action] Webhook still processing, waiting...")
+                            return
+                        end
                     end
                     
+                    print("[Auto Action] Pressing " .. actionName .. " button...")
                     hasProcessedCurrentUI = true
                     GuiService.SelectedObject = buttonToPress
-                    repeat press(Enum.KeyCode.Return) task.wait(0.5) until not LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
+                    repeat 
+                        press(Enum.KeyCode.Return) 
+                        task.wait(0.5) 
+                    until not LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
                     GuiService.SelectedObject = nil
+                    print("[Auto Action] " .. actionName .. " completed successfully!")
+                else
+                    print("[Auto Action] No button to press")
                 elseif GuiService.SelectedObject ~= nil then
                     GuiService.SelectedObject = nil
                 end
