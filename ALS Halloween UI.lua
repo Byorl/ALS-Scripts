@@ -1233,50 +1233,29 @@ task.spawn(function()
     end
 end)
 
-print("[DEBUG] About to start EndGameUI automation task...")
-
 task.spawn(function()
-    print("[EndGameUI Automation] Starting automation loop...")
-    
-    local success, err = pcall(function()
-    
     local function press(key)
         VIM:SendKeyEvent(true, key, false, game)
         task.wait(0.1)
         VIM:SendKeyEvent(false, key, false, game)
     end
     local GuiService = game:GetService("GuiService")
-    local lastEndGameUICheck = 0
     local hasProcessedCurrentUI = false
-    local loopCount = 0
     
     LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
         if child.Name == "EndGameUI" then
-            print("[EndGameUI] NEW EndGameUI detected! Resetting flags...")
             hasProcessedCurrentUI = false
-            lastEndGameUICheck = 0
-            print("[EndGameUI] Flags reset - hasProcessedCurrentUI:", hasProcessedCurrentUI)
         end
     end)
     
-    print("[EndGameUI Automation] Loop started, checking every 2 seconds...")
-    
     while true do
-        task.wait(2)
-        loopCount = loopCount + 1
-        
-        if loopCount == 1 then
-            print("[EndGameUI Automation] First loop iteration running!")
-        end
-        
+        task.wait(1)
         
         pcall(function()
             local endGameUI = LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
             if endGameUI and endGameUI:FindFirstChild("BG") and endGameUI.BG:FindFirstChild("Buttons") then
-                print("[EndGameUI] Found EndGameUI! hasProcessedCurrentUI:", hasProcessedCurrentUI)
                 
                 if hasProcessedCurrentUI then
-                    print("[EndGameUI] Already processed, skipping")
                     return
                 end
                 
@@ -1285,34 +1264,12 @@ task.spawn(function()
                 local retryButton = buttons:FindFirstChild("Retry")
                 local leaveButton = buttons:FindFirstChild("Leave")
                 
-                print("[EndGameUI] Buttons found - Next:", nextButton ~= nil, "Retry:", retryButton ~= nil, "Leave:", leaveButton ~= nil)
-                
-                if getgenv().WebhookEnabled then
-                    if tick() - lastEndGameUICheck < 5 then
-                        print("[EndGameUI] Waiting for 5s cooldown...")
-                        return
-                    end
-                    
-                    if lastEndGameUICheck == 0 then
-                        print("[EndGameUI] Waiting for webhook to complete...")
-                        lastEndGameUICheck = tick()
-                        return
-                    end
-                    
-                    if isProcessing then
-                        print("[EndGameUI] Webhook still processing...")
-                        return
-                    end
-                    
-                    print("[EndGameUI] Webhook completed, proceeding...")
-                else
-                    print("[EndGameUI] Webhook disabled, checking automation...")
+                if getgenv().WebhookEnabled and isProcessing then
+                    return
                 end
                 
                 local buttonToPress = nil
                 local actionName = ""
-                
-                print("[EndGameUI] Checking automation - Smart:", getgenv().AutoSmartEnabled, "Retry:", getgenv().AutoFastRetryEnabled, "Next:", getgenv().AutoNextEnabled, "Leave:", getgenv().AutoLeaveEnabled)
                 
                 if getgenv().AutoSmartEnabled then
                     if nextButton and nextButton.Visible then
@@ -1337,7 +1294,6 @@ task.spawn(function()
                 end
                 
                 if buttonToPress then
-                    print("[EndGameUI] Pressing button:", actionName)
                     hasProcessedCurrentUI = true
                     GuiService.SelectedObject = buttonToPress
                     repeat 
@@ -1345,9 +1301,6 @@ task.spawn(function()
                         task.wait(0.5)
                     until not LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
                     GuiService.SelectedObject = nil
-                    print("[EndGameUI] Clicked " .. actionName .. " button")
-                else
-                    print("[EndGameUI] No button to press! Check your toggles.")
                     
                     buttons = nil
                     nextButton = nil
@@ -1361,14 +1314,7 @@ task.spawn(function()
         end)
         if isUnloaded then break end
     end
-    end)
-    
-    if not success then
-        warn("[EndGameUI Automation] ERROR:", err)
-    end
 end)
-
-print("[DEBUG] EndGameUI automation task created")
 
 task.spawn(function()
     while true do
