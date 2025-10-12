@@ -18,20 +18,13 @@ if isfile(LOCK_FILE) then
 end
 
 writefile(LOCK_FILE, tostring(tick()))
-print("[ALS] Lock acquired, starting load...")
+print("[ALS] Lock acquired, starting cleanup...")
 
 task.wait(0.2)
 
--- Store list of existing UIs BEFORE creating new one
 local CoreGui = game:GetService("CoreGui")
-local existingUIs = {}
-for _, child in pairs(CoreGui:GetChildren()) do
-    if child:IsA("ScreenGui") and child:FindFirstChild("Obsidian") then
-        existingUIs[child] = true
-    end
-end
 
--- Unload old library FIRST
+-- STEP 1: DELETE OLD - Unload old library
 if getgenv().ALS_Library and not getgenv().ALS_Library.Unloaded then
     pcall(function()
         getgenv().ALS_Library:Unload()
@@ -39,28 +32,11 @@ if getgenv().ALS_Library and not getgenv().ALS_Library.Unloaded then
     end)
 end
 
--- NOW load the NEW UI
-print("[ALS] Loading new UI libraries...")
-local repo = "https://raw.githubusercontent.com/deividcomsono/Obsidian/main/"
-local Library = loadstring(game:HttpGet(repo .. "Library.lua"))()
-local ThemeManager = loadstring(game:HttpGet(repo .. "addons/ThemeManager.lua"))()
-local SaveManagerUI = loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))()
-
-print("[ALS] Libraries loaded successfully!")
-
--- Store new library reference IMMEDIATELY
-getgenv().ALS_Library = Library
-getgenv().ALS_SCRIPT_LOADED = true
-
--- Small delay to let new UI create its ScreenGui
-task.wait(0.3)
-
--- NOW cleanup ONLY the old UIs (not the new one)
-print("[ALS] Cleaning up old UI instances...")
+-- STEP 2: DELETE OLD - Remove all old Obsidian UIs
 local removedUIs = 0
-for oldUI, _ in pairs(existingUIs) do
-    if oldUI and oldUI.Parent then
-        oldUI:Destroy()
+for _, child in pairs(CoreGui:GetChildren()) do
+    if child:IsA("ScreenGui") and child:FindFirstChild("Obsidian") then
+        child:Destroy()
         removedUIs = removedUIs + 1
     end
 end
@@ -68,7 +44,7 @@ if removedUIs > 0 then
     print("[ALS] Removed " .. removedUIs .. " old Obsidian UI(s)")
 end
 
--- Remove ALL old toggle buttons (we'll create a new one later)
+-- STEP 3: DELETE OLD - Remove all old toggle buttons
 local removedButtons = 0
 for _, child in pairs(CoreGui:GetChildren()) do
     if child.Name == "ALS_Obsidian_Toggle" then
@@ -80,7 +56,20 @@ if removedButtons > 0 then
     print("[ALS] Removed " .. removedButtons .. " old toggle button(s)")
 end
 
-print("[ALS] Cleanup complete!")
+task.wait(0.3)
+print("[ALS] Old instances deleted, loading new UI...")
+
+-- STEP 4: LOAD NEW - Load the new UI libraries
+local repo = "https://raw.githubusercontent.com/deividcomsono/Obsidian/main/"
+local Library = loadstring(game:HttpGet(repo .. "Library.lua"))()
+local ThemeManager = loadstring(game:HttpGet(repo .. "addons/ThemeManager.lua"))()
+local SaveManagerUI = loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))()
+
+print("[ALS] New UI libraries loaded!")
+
+-- Store new library reference
+getgenv().ALS_Library = Library
+getgenv().ALS_SCRIPT_LOADED = true
 
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
