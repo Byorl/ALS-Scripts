@@ -1,9 +1,34 @@
 repeat task.wait() until game:IsLoaded()
 
+if getgenv().ALS_SCRIPT_LOADED then
+    print("[ALS] Script already running! Cleaning up old instance...")
+    
+    if getgenv().ALS_Library and not getgenv().ALS_Library.Unloaded then
+        pcall(function()
+            getgenv().ALS_Library:Unload()
+            print("[ALS] Unloaded old UI")
+        end)
+    end
+    
+    local CoreGui = game:GetService("CoreGui")
+    local oldToggleGui = CoreGui:FindFirstChild("ALS_Obsidian_Toggle")
+    if oldToggleGui then
+        oldToggleGui:Destroy()
+        print("[ALS] Removed old toggle button")
+    end
+    
+    task.wait(0.5)
+    print("[ALS] Old instance cleaned up, loading new instance...")
+end
+
+getgenv().ALS_SCRIPT_LOADED = true
+
 local repo = "https://raw.githubusercontent.com/deividcomsono/Obsidian/main/"
 local Library = loadstring(game:HttpGet(repo .. "Library.lua"))()
 local ThemeManager = loadstring(game:HttpGet(repo .. "addons/ThemeManager.lua"))()
 local SaveManagerUI = loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))()
+
+getgenv().ALS_Library = Library
 
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
@@ -315,6 +340,22 @@ local Tabs = {
 }
 
 print("[UI] Tabs created successfully!")
+
+Library:OnUnload(function()
+    print("[ALS] UI unloaded, cleaning up...")
+    
+    local CoreGui = game:GetService("CoreGui")
+    local toggleGui = CoreGui:FindFirstChild("ALS_Obsidian_Toggle")
+    if toggleGui then
+        toggleGui:Destroy()
+        print("[ALS] Removed toggle button")
+    end
+    
+    getgenv().ALS_SCRIPT_LOADED = false
+    getgenv().ALS_Library = nil
+    
+    print("[ALS] Cleanup complete!")
+end)
 
 local ToggleGui = Instance.new("ScreenGui")
 ToggleGui.Name = "ALS_Obsidian_Toggle"
@@ -1124,7 +1165,21 @@ GB.Settings_Right:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", {
 })
 
 GB.Settings_Right:AddButton("Unload", function()
+    print("[ALS] Unloading script...")
+    
+    local CoreGui = game:GetService("CoreGui")
+    local toggleGui = CoreGui:FindFirstChild("ALS_Obsidian_Toggle")
+    if toggleGui then
+        toggleGui:Destroy()
+        print("[ALS] Removed toggle button")
+    end
+    
     Library:Unload()
+    
+    getgenv().ALS_SCRIPT_LOADED = false
+    getgenv().ALS_Library = nil
+    
+    print("[ALS] Script fully unloaded!")
 end)
 
 Library.ToggleKeybind = Options.MenuKeybind
