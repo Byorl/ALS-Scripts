@@ -1227,19 +1227,27 @@ task.spawn(function()
                 
                 if getgenv().WebhookEnabled then
                     if tick() - lastEndGameUICheck > 5 then
-                        print("[EndGameUI] First detection, waiting 4 seconds for webhook...")
-                        task.wait(4)
+                        print("[EndGameUI] First detection, waiting for webhook to complete...")
                         lastEndGameUICheck = tick()
+                        
+                        local waitTime = 0
+                        while waitTime < 8 do
+                            task.wait(0.5)
+                            waitTime = waitTime + 0.5
+                            if not isProcessing and waitTime > 4 then
+                                print("[EndGameUI] Webhook completed after", waitTime, "seconds")
+                                break
+                            end
+                        end
                     end
                     
                     if isProcessing then
-                        print("[EndGameUI] Waiting for webhook to complete...")
+                        print("[EndGameUI] Still processing, waiting more...")
                         local maxWait = 0
-                        while isProcessing and maxWait < 15 do
+                        while isProcessing and maxWait < 10 do
                             task.wait(0.5)
                             maxWait = maxWait + 0.5
                         end
-                        print("[EndGameUI] Webhook completed, proceeding...")
                     end
                 end
                 
@@ -1890,8 +1898,6 @@ task.spawn(function()
             isProcessing = true
             hasRun = tick()
             
-            task.wait(3)
-            
             print("[Webhook] Capturing rewards...")
             local rewards = getRewards()
             print("[Webhook] Rewards captured:", #rewards)
@@ -1901,8 +1907,6 @@ task.spawn(function()
             
             local mapName, mapDifficulty = getMapInfo()
             print("[Webhook] Map info:", mapName, mapDifficulty)
-            
-            task.wait(0.3)
             
             local clientData = getClientData()
             if not clientData then 
@@ -1979,8 +1983,7 @@ task.spawn(function()
     end
     LocalPlayer.PlayerGui.ChildAdded:Connect(function(child) 
         if child.Name == "EndGameUI" and getgenv().WebhookEnabled then 
-            print("[Webhook] EndGameUI detected, waiting for UI to populate...")
-            task.wait(0.5)
+            print("[Webhook] EndGameUI detected, capturing data immediately...")
             sendWebhook() 
         end 
     end)
