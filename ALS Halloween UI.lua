@@ -1219,7 +1219,6 @@ task.spawn(function()
     local hasProcessedCurrentUI = false
     local loopCount = 0
     
-    -- Track when EndGameUI appears/disappears
     LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
         if child.Name == "EndGameUI" then
             hasProcessedCurrentUI = false
@@ -1239,7 +1238,6 @@ task.spawn(function()
             local endGameUI = LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
             if endGameUI and endGameUI:FindFirstChild("BG") and endGameUI.BG:FindFirstChild("Buttons") then
                 
-                -- Skip if we already processed this EndGameUI
                 if hasProcessedCurrentUI then
                     return
                 end
@@ -1249,10 +1247,8 @@ task.spawn(function()
                 local retryButton = buttons:FindFirstChild("Retry")
                 local leaveButton = buttons:FindFirstChild("Leave")
                 
-                -- Wait for webhook if enabled
                 if getgenv().WebhookEnabled then
                     if tick() - lastEndGameUICheck < 5 then
-                        -- Still waiting for webhook
                         return
                     end
                     
@@ -1370,6 +1366,9 @@ task.spawn(function()
         bossInRangeTracker = {}
         generalBossSpawnTime = nil
         abilityCooldowns = {}
+        towerInfoCache = {}
+        collectgarbage("collect")
+        print("[Auto Abilities] Round trackers reset")
     end
     local function getTowerInfoCached(towerName)
         if towerInfoCache[towerName] then return towerInfoCache[towerName] end
@@ -1612,6 +1611,9 @@ task.spawn(function()
             for _, ev in ipairs(events) do pcall(function() for _, conn in ipairs(getconnections(button[ev])) do conn:Fire() end end) end
             task.wait(0.2)
             pressConfirm()
+            list = nil
+            best = nil
+            button = nil
         end)
         return ok
     end
@@ -2056,10 +2058,14 @@ task.spawn(function()
             task.wait(1)
             isProcessing = false
             
+            print("[System] EndGameUI removed, performing full cleanup...")
+            
+            if getgenv()._lastRewardHash then getgenv()._lastRewardHash = nil end
+            
             collectgarbage("collect")
             collectgarbage("collect")
             
-            print("[Webhook] EndGameUI removed, ready for next webhook")
+            print("[System] Cleanup complete, ready for next round")
         end 
     end)
 end)
