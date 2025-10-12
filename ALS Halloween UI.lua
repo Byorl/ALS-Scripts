@@ -1,5 +1,23 @@
 repeat task.wait() until game:IsLoaded()
 
+local TeleportService = game:GetService("TeleportService")
+local SCRIPT_URL = "https://raw.githubusercontent.com/Byorl/ALS-Scripts/refs/heads/main/ALS%20Halloween%20UI.lua"
+
+if isfile("ALSHalloweenEvent/autoexec.txt") then
+    print("[Auto Execute] Enabled - Setting up teleport hook...")
+    TeleportService.TeleportInitFailed:Connect(function()
+        task.wait(2)
+        loadstring(game:HttpGet(SCRIPT_URL))()
+    end)
+    
+    game:GetService("CoreGui").DescendantRemoving:Connect(function(descendant)
+        if descendant.Name == "Roblox" then
+            task.wait(0.5)
+            loadstring(game:HttpGet(SCRIPT_URL))()
+        end
+    end)
+end
+
 local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
 local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
@@ -977,6 +995,21 @@ addToggle(Tabs.Misc, "AntiAFKToggle", "Anti-AFK", getgenv().AntiAFKEnabled, func
     notify("Anti-AFK", v and "Enabled" or "Disabled", 3)
 end)
 
+addToggle(Tabs.Misc, "AutoExecuteToggle", "Auto Execute on Teleport", getgenv().Config.toggles.AutoExecuteToggle or false, function(v)
+    getgenv().Config.toggles.AutoExecuteToggle = v
+    saveConfig(getgenv().Config)
+    
+    if v then
+        writefile("ALSHalloweenEvent/autoexec.txt", "true")
+        notify("Auto Execute", "Enabled - Script will reload on teleport", 3)
+    else
+        if isfile("ALSHalloweenEvent/autoexec.txt") then
+            delfile("ALSHalloweenEvent/autoexec.txt")
+        end
+        notify("Auto Execute", "Disabled", 3)
+    end
+end)
+
 Tabs.Settings:AddParagraph({ Title = "💾 Config Management", Content = "Your settings are automatically saved to: " .. CONFIG_FOLDER .. "/" .. CONFIG_FILE })
 
 Tabs.Settings:AddButton({
@@ -1051,14 +1084,6 @@ spawn(function()
     end
 end)
 
-task.spawn(function()
-    while true do
-        task.wait(20)
-        collectgarbage("collect")
-        collectgarbage("collect")
-        if isUnloaded then break end
-    end
-end)
 
 task.spawn(function()
     repeat task.wait() until game.CoreGui:FindFirstChild("RobloxPromptGui")
@@ -1208,7 +1233,13 @@ task.spawn(function()
     end
 end)
 
+print("[DEBUG] About to start EndGameUI automation task...")
+
 task.spawn(function()
+    print("[EndGameUI Automation] Starting automation loop...")
+    
+    local success, err = pcall(function()
+    
     local function press(key)
         VIM:SendKeyEvent(true, key, false, game)
         task.wait(0.1)
@@ -1221,24 +1252,31 @@ task.spawn(function()
     
     LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
         if child.Name == "EndGameUI" then
+            print("[EndGameUI] NEW EndGameUI detected! Resetting flags...")
             hasProcessedCurrentUI = false
             lastEndGameUICheck = 0
+            print("[EndGameUI] Flags reset - hasProcessedCurrentUI:", hasProcessedCurrentUI)
         end
     end)
+    
+    print("[EndGameUI Automation] Loop started, checking every 2 seconds...")
     
     while true do
         task.wait(2)
         loopCount = loopCount + 1
         
-        if loopCount % 10 == 0 then
-            collectgarbage("collect")
+        if loopCount == 1 then
+            print("[EndGameUI Automation] First loop iteration running!")
         end
+        
         
         pcall(function()
             local endGameUI = LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
             if endGameUI and endGameUI:FindFirstChild("BG") and endGameUI.BG:FindFirstChild("Buttons") then
+                print("[EndGameUI] Found EndGameUI! hasProcessedCurrentUI:", hasProcessedCurrentUI)
                 
                 if hasProcessedCurrentUI then
+                    print("[EndGameUI] Already processed, skipping")
                     return
                 end
                 
@@ -1247,8 +1285,11 @@ task.spawn(function()
                 local retryButton = buttons:FindFirstChild("Retry")
                 local leaveButton = buttons:FindFirstChild("Leave")
                 
+                print("[EndGameUI] Buttons found - Next:", nextButton ~= nil, "Retry:", retryButton ~= nil, "Leave:", leaveButton ~= nil)
+                
                 if getgenv().WebhookEnabled then
                     if tick() - lastEndGameUICheck < 5 then
+                        print("[EndGameUI] Waiting for 5s cooldown...")
                         return
                     end
                     
@@ -1264,10 +1305,14 @@ task.spawn(function()
                     end
                     
                     print("[EndGameUI] Webhook completed, proceeding...")
+                else
+                    print("[EndGameUI] Webhook disabled, checking automation...")
                 end
                 
                 local buttonToPress = nil
                 local actionName = ""
+                
+                print("[EndGameUI] Checking automation - Smart:", getgenv().AutoSmartEnabled, "Retry:", getgenv().AutoFastRetryEnabled, "Next:", getgenv().AutoNextEnabled, "Leave:", getgenv().AutoLeaveEnabled)
                 
                 if getgenv().AutoSmartEnabled then
                     if nextButton and nextButton.Visible then
@@ -1292,6 +1337,7 @@ task.spawn(function()
                 end
                 
                 if buttonToPress then
+                    print("[EndGameUI] Pressing button:", actionName)
                     hasProcessedCurrentUI = true
                     GuiService.SelectedObject = buttonToPress
                     repeat 
@@ -1300,6 +1346,8 @@ task.spawn(function()
                     until not LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
                     GuiService.SelectedObject = nil
                     print("[EndGameUI] Clicked " .. actionName .. " button")
+                else
+                    print("[EndGameUI] No button to press! Check your toggles.")
                     
                     buttons = nil
                     nextButton = nil
@@ -1313,7 +1361,14 @@ task.spawn(function()
         end)
         if isUnloaded then break end
     end
+    end)
+    
+    if not success then
+        warn("[EndGameUI Automation] ERROR:", err)
+    end
 end)
+
+print("[DEBUG] EndGameUI automation task created")
 
 task.spawn(function()
     while true do
@@ -1367,7 +1422,6 @@ task.spawn(function()
         generalBossSpawnTime = nil
         abilityCooldowns = {}
         towerInfoCache = {}
-        collectgarbage("collect")
         print("[Auto Abilities] Round trackers reset")
     end
     local function getTowerInfoCached(towerName)
@@ -2041,7 +2095,6 @@ task.spawn(function()
             rewards = nil
             clientData = nil
             embed = nil
-            collectgarbage("collect")
             
             isProcessing=false
         end)
@@ -2061,9 +2114,6 @@ task.spawn(function()
             print("[System] EndGameUI removed, performing full cleanup...")
             
             if getgenv()._lastRewardHash then getgenv()._lastRewardHash = nil end
-            
-            collectgarbage("collect")
-            collectgarbage("collect")
             
             print("[System] Cleanup complete, ready for next round")
         end 
