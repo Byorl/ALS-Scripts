@@ -1,15 +1,33 @@
 repeat task.wait() until game:IsLoaded()
 
-local TeleportService = game:GetService("TeleportService")
-local SCRIPT_URL = "https://raw.githubusercontent.com/Byorl/ALS-Scripts/refs/heads/main/ALS%20Halloween%20UI.lua"
+local repo = "https://raw.githubusercontent.com/deividcomsono/Obsidian/main/"
+local Library = loadstring(game:HttpGet(repo .. "Library.lua"))()
+local ThemeManager = loadstring(game:HttpGet(repo .. "addons/ThemeManager.lua"))()
+local SaveManagerUI = loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))()
 
+local Players = game:GetService("Players")
+local HttpService = game:GetService("HttpService")
+local RS = game:GetService("ReplicatedStorage")
+local VIM = game:GetService("VirtualInputManager")
+local TeleportService = game:GetService("TeleportService")
+local LocalPlayer = Players.LocalPlayer
+
+local LOBBY_PLACEIDS = {12886143095, 18583778121}
+local function checkIsInLobby()
+    for _, placeId in ipairs(LOBBY_PLACEIDS) do
+        if game.PlaceId == placeId then return true end
+    end
+    return false
+end
+local isInLobby = checkIsInLobby()
+
+local SCRIPT_URL = "https://raw.githubusercontent.com/Byorl/ALS-Scripts/refs/heads/main/ALS%20Halloween%20UI.lua"
 if isfile("ALSHalloweenEvent/autoexec.txt") then
     print("[Auto Execute] Enabled - Setting up teleport hook...")
     TeleportService.TeleportInitFailed:Connect(function()
         task.wait(2)
         loadstring(game:HttpGet(SCRIPT_URL))()
     end)
-    
     game:GetService("CoreGui").DescendantRemoving:Connect(function(descendant)
         if descendant.Name == "Roblox" then
             task.wait(0.5)
@@ -18,27 +36,6 @@ if isfile("ALSHalloweenEvent/autoexec.txt") then
     end)
 end
 
-local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
-local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
-local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
-
-local Players = game:GetService("Players")
-local HttpService = game:GetService("HttpService")
-local RS = game:GetService("ReplicatedStorage")
-local VIM = game:GetService("VirtualInputManager")
-local LocalPlayer = Players.LocalPlayer
-
-local LOBBY_PLACEIDS = {12886143095, 18583778121}
-local function checkIsInLobby()
-    for _, placeId in ipairs(LOBBY_PLACEIDS) do
-        if game.PlaceId == placeId then
-            return true
-        end
-    end
-    return false
-end
-local isInLobby = checkIsInLobby()
-
 local CONFIG_FOLDER = "ALSHalloweenEvent"
 local CONFIG_FILE = "config.json"
 local USER_ID = tostring(LocalPlayer.UserId)
@@ -46,31 +43,23 @@ local USER_ID = tostring(LocalPlayer.UserId)
 local function getConfigPath()
     return CONFIG_FOLDER .. "/" .. USER_ID .. "/" .. CONFIG_FILE
 end
-
 local function getUserFolder()
     return CONFIG_FOLDER .. "/" .. USER_ID
 end
-
 local function getOldConfigPath()
     return CONFIG_FOLDER .. "/" .. CONFIG_FILE
 end
-
 local function migrateOldConfig()
     local oldConfigPath = getOldConfigPath()
     local newConfigPath = getConfigPath()
-    
     if isfile(oldConfigPath) and not isfile(newConfigPath) then
         print("[Config] Migrating old config to user-specific folder...")
         local ok, oldData = pcall(function()
             return readfile(oldConfigPath)
         end)
-        
         if ok and oldData then
             local userFolder = getUserFolder()
-            if not isfolder(userFolder) then
-                makefolder(userFolder)
-            end
-            
+            if not isfolder(userFolder) then makefolder(userFolder) end
             pcall(function()
                 writefile(newConfigPath, oldData)
                 print("[Config] Migration successful! Config moved to: " .. newConfigPath)
@@ -78,19 +67,11 @@ local function migrateOldConfig()
         end
     end
 end
-
 local function loadConfig()
-    if not isfolder(CONFIG_FOLDER) then
-        makefolder(CONFIG_FOLDER)
-    end
-    
+    if not isfolder(CONFIG_FOLDER) then makefolder(CONFIG_FOLDER) end
     local userFolder = getUserFolder()
-    if not isfolder(userFolder) then
-        makefolder(userFolder)
-    end
-    
+    if not isfolder(userFolder) then makefolder(userFolder) end
     migrateOldConfig()
-    
     local configPath = getConfigPath()
     if isfile(configPath) then
         local ok, data = pcall(function()
@@ -106,28 +87,23 @@ local function loadConfig()
     end
     return { toggles = {}, inputs = {}, dropdowns = {}, abilities = {} }
 end
-
 local function saveConfig(config)
     local userFolder = getUserFolder()
-    if not isfolder(CONFIG_FOLDER) then
-        makefolder(CONFIG_FOLDER)
-    end
-    if not isfolder(userFolder) then
-        makefolder(userFolder)
-    end
-    
+    if not isfolder(CONFIG_FOLDER) then makefolder(CONFIG_FOLDER) end
+    if not isfolder(userFolder) then makefolder(userFolder) end
     local ok, err = pcall(function()
         local json = HttpService:JSONEncode(config)
-        local path = getConfigPath()
-        writefile(path, json)
+        writefile(getConfigPath(), json)
     end)
-    if not ok then
-        warn("[Config] Save failed: " .. tostring(err))
-    end
+    if not ok then warn("[Config] Save failed: " .. tostring(err)) end
     return ok
 end
 
 getgenv().Config = loadConfig()
+getgenv().Config.toggles = getgenv().Config.toggles or {}
+getgenv().Config.inputs = getgenv().Config.inputs or {}
+getgenv().Config.dropdowns = getgenv().Config.dropdowns or {}
+getgenv().Config.abilities = getgenv().Config.abilities or {}
 print("[Config] Loaded config for User ID: " .. USER_ID)
 print("[Config] Config path: " .. getConfigPath())
 print("[Config] Config keys: toggles=" .. tostring(getgenv().Config.toggles ~= nil) .. ", inputs=" .. tostring(getgenv().Config.inputs ~= nil) .. ", abilities=" .. tostring(getgenv().Config.abilities ~= nil))
@@ -191,58 +167,6 @@ end
 getgenv().BreachAutoJoin = getgenv().BreachAutoJoin or {}
 getgenv().BreachEnabled = getgenv().Config.toggles.BreachToggle or false
 
-local function notify(title, content, duration)
-    Fluent:Notify({ Title = title or "ALS", Content = content or "", Duration = duration or 3 })
-end
-
-local Window = Fluent:CreateWindow({
-    Title = "ALS Halloween Event",
-    SubTitle = "Anime Last Stand Script",
-    TabWidth = 140,
-    Size = UDim2.fromOffset(580, 400),
-    Acrylic = true,
-    Theme = "Dark",
-    MinimizeKey = Enum.KeyCode.LeftControl
-})
-
-local Tabs = {
-    Main = Window:AddTab({ Title = "Main", Icon = "home" }),
-    Ability = Window:AddTab({ Title = "Ability", Icon = "star" }),
-    CardSelection = Window:AddTab({ Title = "Card Selection", Icon = "layout-grid" }),
-    BossRush = Window:AddTab({ Title = "Boss Rush", Icon = "shield" }),
-    Breach = Window:AddTab({ Title = "Breach", Icon = "alert-triangle" }),
-    Webhook = Window:AddTab({ Title = "Webhook", Icon = "send" }),
-    SeamlessFix = Window:AddTab({ Title = "Seamless Fix", Icon = "refresh-cw" }),
-    Event = Window:AddTab({ Title = "Event", Icon = "gift" }),
-    Misc = Window:AddTab({ Title = "Misc", Icon = "wrench" }),
-    Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
-}
-
-local ToggleGui = Instance.new("ScreenGui")
-ToggleGui.Name = "ALS_Fluent_Toggle"
-ToggleGui.ResetOnSpawn = false
-ToggleGui.IgnoreGuiInset = true
-ToggleGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-ToggleGui.Parent = game:GetService("CoreGui")
-
-local ToggleButton = Instance.new("ImageButton")
-ToggleButton.Name = "ToggleButton"
-ToggleButton.Size = UDim2.new(0, 75, 0, 75)
-ToggleButton.Position = UDim2.new(0, 24, 0, 24)
-ToggleButton.AnchorPoint = Vector2.new(0, 0)
-ToggleButton.BackgroundTransparency = 1
-ToggleButton.Image = "rbxassetid://72399447876912"
-ToggleButton.Active = true
-ToggleButton.Draggable = true
-ToggleButton.Parent = ToggleGui
-
-local function toggleUI()
-    VIM:SendKeyEvent(true, Enum.KeyCode.LeftControl, false, game)
-    task.wait(0.05)
-    VIM:SendKeyEvent(false, Enum.KeyCode.LeftControl, false, game)
-end
-ToggleButton.MouseButton1Click:Connect(toggleUI)
-
 local function getClientData()
     local ok, data = pcall(function()
         local modulePath = RS:WaitForChild("Modules"):WaitForChild("ClientData")
@@ -253,7 +177,6 @@ local function getClientData()
     end)
     return ok and data or nil
 end
-
 local function getTowerInfo(unitName)
     local ok, data = pcall(function()
         local towerInfoPath = RS:WaitForChild("Modules"):WaitForChild("TowerInfo")
@@ -265,7 +188,6 @@ local function getTowerInfo(unitName)
     end)
     return ok and data or nil
 end
-
 local function getAllAbilities(unitName)
     if not unitName or unitName == "" then return {} end
     local towerNameToCheck = unitName
@@ -311,55 +233,195 @@ local function getAllAbilities(unitName)
     return abilities
 end
 
-local function addToggle(tab, key, title, default, onChanged)
-    local t = tab:AddToggle(key, { Title = title, Default = default })
-    t:OnChanged(function()
-        local val = Fluent.Options[key].Value
-        if onChanged then onChanged(val) end
-    end)
-    return t
+local function notify(title, content, duration)
+    Library:Notify({
+        Title = title or "ALS",
+        Description = content or "",
+        Time = duration or 3,
+    })
 end
 
-Tabs.Main:AddParagraph({ Title = "⚡ Game Automation", Content = "Streamline your gameplay with automatic actions" })
+Library.ForceCheckbox = false
+Library.ShowToggleFrameInKeybinds = true
 
-addToggle(Tabs.Main, "AutoLeaveToggle", "Auto Leave", getgenv().Config.toggles.AutoLeaveToggle or false, function(val)
-    getgenv().AutoLeaveEnabled = val
-    getgenv().Config.toggles.AutoLeaveToggle = val
-    saveConfig(getgenv().Config)
-    notify("Auto Leave", val and "Enabled" or "Disabled", 3)
+print("[UI] Creating window...")
+local windowSuccess, Window = pcall(function()
+    return Library:CreateWindow({
+        Title = "ALS Halloween Event",
+        Footer = "Anime Last Stand Script",
+        Icon = 72399447876912,
+        NotifySide = getgenv().Config.inputs.NotificationSide or "Right",
+        ShowCustomCursor = getgenv().Config.toggles.ShowCustomCursor ~= false,
+        Size = UDim2.fromOffset(620, 460),
+    })
 end)
 
-addToggle(Tabs.Main, "AutoFastRetryToggle", "Auto Replay", getgenv().Config.toggles.AutoFastRetryToggle or false, function(val)
-    getgenv().AutoFastRetryEnabled = val
-    getgenv().Config.toggles.AutoFastRetryToggle = val
-    saveConfig(getgenv().Config)
-    notify("Auto Replay", val and "Enabled" or "Disabled", 3)
-end)
+if not windowSuccess then
+    warn("[UI] Failed to create window:", Window)
+    Window = Library:CreateWindow({
+        Title = "ALS Halloween Event",
+        Footer = "Anime Last Stand Script",
+        Size = UDim2.fromOffset(580, 460),
+    })
+end
 
-addToggle(Tabs.Main, "AutoNextToggle", "Auto Next", getgenv().Config.toggles.AutoNextToggle or false, function(val)
-    getgenv().AutoNextEnabled = val
-    getgenv().Config.toggles.AutoNextToggle = val
-    saveConfig(getgenv().Config)
-    notify("Auto Next", val and "Enabled" or "Disabled", 3)
-end)
+print("[UI] Window created successfully!")
+print("[UI] Creating tabs...")
 
-addToggle(Tabs.Main, "AutoSmartToggle", "Auto Leave/Replay/Next", getgenv().Config.toggles.AutoSmartToggle or false, function(val)
-    getgenv().AutoSmartEnabled = val
-    getgenv().Config.toggles.AutoSmartToggle = val
-    saveConfig(getgenv().Config)
-    notify("Auto Leave/Replay/Next", val and "Enabled" or "Disabled", 3)
-end)
+local Tabs = {
+    WhatsNew = Window:AddTab("What's New?", "newspaper"),
+    Main = Window:AddTab("Main", "activity"), 
+    Ability = Window:AddTab("Ability", "star"),
+    CardSelection = Window:AddTab("Card Selection", "layout-grid"),
+    BossRush = Window:AddTab("Boss Rush", "shield"),
+    Breach = Window:AddTab("Breach", "triangle-alert"),
+    Webhook = Window:AddTab("Webhook", "send"),
+    SeamlessFix = Window:AddTab("Seamless Fix", "refresh-cw"),
+    Event = Window:AddTab("Event", "gift"),
+    Misc = Window:AddTab("Misc", "wrench"),
+    Settings = Window:AddTab("Settings", "settings"),
+}
 
-addToggle(Tabs.Main, "AutoReadyToggle", "Auto Ready", getgenv().Config.toggles.AutoReadyToggle or false, function(val)
-    getgenv().AutoReadyEnabled = val
-    getgenv().Config.toggles.AutoReadyToggle = val
-    saveConfig(getgenv().Config)
-    notify("Auto Ready", val and "Enabled" or "Disabled", 3)
-end)
+print("[UI] Tabs created successfully!")
+
+local ToggleGui = Instance.new("ScreenGui")
+ToggleGui.Name = "ALS_Obsidian_Toggle"
+ToggleGui.ResetOnSpawn = false
+ToggleGui.IgnoreGuiInset = true
+ToggleGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ToggleGui.Parent = game:GetService("CoreGui")
+local ToggleButton = Instance.new("ImageButton")
+ToggleButton.Name = "ToggleButton"
+ToggleButton.Size = UDim2.new(0, 75, 0, 75)
+ToggleButton.Position = UDim2.new(0, 24, 0, 24)
+ToggleButton.BackgroundTransparency = 1
+ToggleButton.Image = "rbxassetid://72399447876912"
+ToggleButton.Active = true
+ToggleButton.Draggable = true
+ToggleButton.Parent = ToggleGui
+local function toggleUIKey()
+    VIM:SendKeyEvent(true, Enum.KeyCode.LeftControl, false, game)
+    task.wait(0.05)
+    VIM:SendKeyEvent(false, Enum.KeyCode.LeftControl, false, game)
+end
+ToggleButton.MouseButton1Click:Connect(toggleUIKey)
+
+local GB = {}
+GB.WhatsNew_Left = Tabs.WhatsNew:AddLeftGroupbox("📰 Latest Updates")
+GB.WhatsNew_Right = Tabs.WhatsNew:AddRightGroupbox("✨ All Features")
+GB.Main_Left = Tabs.Main:AddLeftGroupbox("🚀 Auto Join System")
+GB.Main_Right = Tabs.Main:AddRightGroupbox("⚡ Game Automation")
+GB.Ability_Left = Tabs.Ability:AddLeftGroupbox("⚔️ Auto Ability System")
+GB.Card_Left = Tabs.CardSelection:AddLeftGroupbox("🃏 Card Priority System")
+GB.Card_Right = Tabs.CardSelection:AddRightGroupbox("Card Lists")
+GB.Boss_Left = Tabs.BossRush:AddLeftGroupbox("Boss Rush Controls")
+GB.Breach_Left = Tabs.Breach:AddLeftGroupbox("⚡ Breach Auto-Join")
+GB.Webhook_Left = Tabs.Webhook:AddLeftGroupbox("🔔 Discord Notifications")
+GB.Seam_Left = Tabs.SeamlessFix:AddLeftGroupbox("🔄 Seamless Retry Fix")
+GB.Event_Left = Tabs.Event:AddLeftGroupbox("🎃 Halloween 2025 Event")
+GB.Misc_Left = Tabs.Misc:AddLeftGroupbox("⚡ Performance")
+GB.Misc_Right = Tabs.Misc:AddRightGroupbox("🔒 Safety & UI")
+GB.Settings_Left = Tabs.Settings:AddLeftGroupbox("💾 Config Management")
+GB.Settings_Right = Tabs.Settings:AddRightGroupbox("UI Settings")
+
+GB.WhatsNew_Left:AddLabel("🎨 UI Library Changed", true)
+GB.WhatsNew_Left:AddLabel("• Switched from Fluent UI to Obsidian UI", true)
+GB.WhatsNew_Left:AddLabel("• New modern design with better performance", true)
+GB.WhatsNew_Left:AddLabel("• Menu keybind changed to Left Ctrl", true)
+GB.WhatsNew_Left:AddDivider()
+
+GB.WhatsNew_Left:AddLabel("✨ New Features Added", true)
+GB.WhatsNew_Left:AddLabel("• DPI Scale settings now save & load", true)
+GB.WhatsNew_Left:AddLabel("• Notification side preference saves", true)
+GB.WhatsNew_Left:AddLabel("• Custom cursor toggle saves", true)
+GB.WhatsNew_Left:AddLabel("• Keybind menu toggle added", true)
+GB.WhatsNew_Left:AddLabel("• UI Unload button added", true)
+GB.WhatsNew_Left:AddDivider()
+
+GB.WhatsNew_Left:AddLabel("🔧 Improvements", true)
+GB.WhatsNew_Left:AddLabel("• Fixed text overflow issues", true)
+GB.WhatsNew_Left:AddLabel("• Better label wrapping", true)
+GB.WhatsNew_Left:AddLabel("• Improved settings organization", true)
+GB.WhatsNew_Left:AddLabel("• Main tab layout reorganized", true)
+GB.WhatsNew_Left:AddDivider()
+
+GB.WhatsNew_Left:AddLabel("📅 Version Info", true)
+GB.WhatsNew_Left:AddLabel("Version: Obsidian v1.0", true)
+GB.WhatsNew_Left:AddLabel("Date: August 2025", true)
+
+GB.WhatsNew_Right:AddLabel("⚡ Game Automation", true)
+GB.WhatsNew_Right:AddLabel("• Auto Leave/Replay/Next/Smart", true)
+GB.WhatsNew_Right:AddLabel("• Auto Ready", true)
+GB.WhatsNew_Right:AddLabel("• Auto Join Maps (Lobby)", true)
+GB.WhatsNew_Right:AddDivider()
+
+GB.WhatsNew_Right:AddLabel("⚔️ Auto Abilities", true)
+GB.WhatsNew_Right:AddLabel("• Automatic ability usage", true)
+GB.WhatsNew_Right:AddLabel("• Boss-only conditions", true)
+GB.WhatsNew_Right:AddLabel("• Wave-specific triggers", true)
+GB.WhatsNew_Right:AddLabel("• Boss in range detection", true)
+GB.WhatsNew_Right:AddLabel("• Delay after boss spawn", true)
+GB.WhatsNew_Right:AddDivider()
+
+GB.WhatsNew_Right:AddLabel("🃏 Card Selection", true)
+GB.WhatsNew_Right:AddLabel("• Fast & Slower modes", true)
+GB.WhatsNew_Right:AddLabel("• Priority-based selection", true)
+GB.WhatsNew_Right:AddLabel("• Candy cards support", true)
+GB.WhatsNew_Right:AddLabel("• Boss Rush cards", true)
+GB.WhatsNew_Right:AddDivider()
+
+GB.WhatsNew_Right:AddLabel("🚨 Breach Auto-Join (Lobby)", true)
+GB.WhatsNew_Right:AddLabel("• Auto-join available breaches", true)
+GB.WhatsNew_Right:AddLabel("• Toggle individual breaches", true)
+GB.WhatsNew_Right:AddDivider()
+
+GB.WhatsNew_Right:AddLabel("🔔 Webhook Notifications", true)
+GB.WhatsNew_Right:AddLabel("• Discord webhook support", true)
+GB.WhatsNew_Right:AddLabel("• Match results & stats", true)
+GB.WhatsNew_Right:AddLabel("• Reward detection", true)
+GB.WhatsNew_Right:AddLabel("• Unit kill tracking", true)
+GB.WhatsNew_Right:AddDivider()
+
+GB.WhatsNew_Right:AddLabel("🔄 Seamless Retry Fix", true)
+GB.WhatsNew_Right:AddLabel("• Prevents lag buildup", true)
+GB.WhatsNew_Right:AddLabel("• Configurable round limit", true)
+GB.WhatsNew_Right:AddDivider()
+
+GB.WhatsNew_Right:AddLabel("🎃 Halloween Event", true)
+GB.WhatsNew_Right:AddLabel("• Auto Event Join", true)
+GB.WhatsNew_Right:AddLabel("• Auto Bingo (Lobby)", true)
+GB.WhatsNew_Right:AddLabel("• Auto Capsules (Lobby)", true)
+GB.WhatsNew_Right:AddDivider()
+
+GB.WhatsNew_Right:AddLabel("🛠️ Performance & Misc", true)
+GB.WhatsNew_Right:AddLabel("• FPS Boost", true)
+GB.WhatsNew_Right:AddLabel("• Remove Enemies & Units", true)
+GB.WhatsNew_Right:AddLabel("• Black Screen Mode", true)
+GB.WhatsNew_Right:AddLabel("• Anti-AFK", true)
+GB.WhatsNew_Right:AddLabel("• Auto-execute on teleport", true)
+GB.WhatsNew_Right:AddLabel("• Auto Rejoin on disconnect", true)
+GB.WhatsNew_Right:AddLabel("• Per-user config system", true)
+
+local Options = Library.Options
+local Toggles = Library.Toggles
+local function addToggle(group, key, text, default, onChanged)
+    group:AddToggle(key, {
+        Text = text,
+        Default = default,
+        Callback = function(val)
+            if onChanged then onChanged(val) end
+        end,
+    })
+    if Toggles[key] then
+        Toggles[key]:OnChanged(function()
+            local val = Toggles[key].Value
+            if onChanged then onChanged(val) end
+        end)
+    end
+end
 
 if isInLobby then
-    Tabs.Main:AddParagraph({ Title = "🚀 Auto Join System", Content = "Automatically join maps and start games" })
-
+    GB.Main_Left:AddLabel("Automatically join maps and start games", true)
     getgenv().AutoJoinConfig = getgenv().AutoJoinConfig or {
         enabled = false,
         autoStart = false,
@@ -377,22 +439,14 @@ if isInLobby then
             MapData = require(mapDataModule)
         end
     end)
-
     local function getMapsByMode(mode)
         if not MapData then return {} end
-        
-        if mode == "ElementalCaverns" then
-            return {"Light", "Nature", "Fire", "Dark", "Water"}
-        end
-        
+        if mode == "ElementalCaverns" then return {"Light","Nature","Fire","Dark","Water"} end
         local maps = {}
         for mapName, mapInfo in pairs(MapData) do
             if mapInfo.Type and type(mapInfo.Type) == "table" then
                 for _, mapType in ipairs(mapInfo.Type) do
-                    if mapType == mode then
-                        table.insert(maps, mapName)
-                        break
-                    end
+                    if mapType == mode then table.insert(maps, mapName) break end
                 end
             end
         end
@@ -400,69 +454,56 @@ if isInLobby then
         return maps
     end
 
-    local function mapHasAct(mapName)
-        if not MapData or not MapData[mapName] then return false end
-        return MapData[mapName].HasAct == true
-    end
-
-    local modeDropdown = Tabs.Main:AddDropdown("AutoJoinMode", {
-        Title = "Mode",
-        Values = {"Story", "Infinite", "Raids", "ElementalCaverns", "LegendaryStages", "Dungeon", "Survival", "Challenge"},
+    GB.Main_Left:AddDropdown("AutoJoinMode", {
+        Values = {"Story","Infinite","Raids","ElementalCaverns","LegendaryStages","Dungeon","Survival","Challenge"},
         Default = getgenv().AutoJoinConfig.mode or "Story",
+        Text = "Mode",
+        Callback = function(value)
+            getgenv().AutoJoinConfig.mode = value
+            local newMaps = getMapsByMode(value)
+            if Options.AutoJoinMap then Options.AutoJoinMap:SetValues(newMaps) end
+            if #newMaps > 0 then
+                if Options.AutoJoinMap then Options.AutoJoinMap:SetValue(newMaps[1]) end
+                getgenv().AutoJoinConfig.map = newMaps[1]
+            end
+        end,
+        Searchable = true,
     })
-
-    local mapDropdown = Tabs.Main:AddDropdown("AutoJoinMap", {
-        Title = "Map",
+    GB.Main_Left:AddDropdown("AutoJoinMap", {
         Values = getMapsByMode(getgenv().AutoJoinConfig.mode),
-        Default = getgenv().AutoJoinConfig.map or "",
+        Default = getgenv().AutoJoinConfig.map ~= "" and getgenv().AutoJoinConfig.map or nil,
+        Text = "Map",
+        Callback = function(value)
+            getgenv().AutoJoinConfig.map = value
+        end,
+        Searchable = true,
     })
-
-    local actDropdown = Tabs.Main:AddDropdown("AutoJoinAct", {
-        Title = "Act",
-        Values = {"1", "2", "3", "4", "5", "6"},
+    GB.Main_Left:AddDropdown("AutoJoinAct", {
+        Values = {"1","2","3","4","5","6"},
         Default = tostring(getgenv().AutoJoinConfig.act or 1),
+        Text = "Act",
+        Callback = function(value)
+            getgenv().AutoJoinConfig.act = tonumber(value) or 1
+        end,
     })
-
-    local difficultyDropdown = Tabs.Main:AddDropdown("AutoJoinDifficulty", {
-        Title = "Difficulty",
-        Values = {"Normal", "Nightmare", "Purgatory", "Insanity"},
+    GB.Main_Left:AddDropdown("AutoJoinDifficulty", {
+        Values = {"Normal","Nightmare","Purgatory","Insanity"},
         Default = getgenv().AutoJoinConfig.difficulty or "Normal",
+        Text = "Difficulty",
+        Callback = function(value)
+            getgenv().AutoJoinConfig.difficulty = value
+        end,
     })
 
-    modeDropdown:OnChanged(function(value)
-        getgenv().AutoJoinConfig.mode = value
-        
-        local newMaps = getMapsByMode(value)
-        mapDropdown:SetValues(newMaps)
-        if #newMaps > 0 then
-            mapDropdown:SetValue(newMaps[1])
-            getgenv().AutoJoinConfig.map = newMaps[1]
-        end
-    end)
-
-    mapDropdown:OnChanged(function(value)
-        getgenv().AutoJoinConfig.map = value
-    end)
-
-    actDropdown:OnChanged(function(value)
-        getgenv().AutoJoinConfig.act = tonumber(value) or 1
-    end)
-
-    difficultyDropdown:OnChanged(function(value)
-        getgenv().AutoJoinConfig.difficulty = value
-    end)
-
-    addToggle(Tabs.Main, "AutoJoinToggle", "Auto Join Map", false, function(val)
+    addToggle(GB.Main_Left, "AutoJoinToggle", "Auto Join Map", getgenv().AutoJoinConfig.enabled or false, function(val)
         getgenv().AutoJoinConfig.enabled = val
         notify("Auto Join", val and "Enabled" or "Disabled", 3)
     end)
-
-    addToggle(Tabs.Main, "AutoJoinStartToggle", "Auto Start", false, function(val)
+    addToggle(GB.Main_Left, "AutoJoinStartToggle", "Auto Start", getgenv().AutoJoinConfig.autoStart or false, function(val)
         getgenv().AutoJoinConfig.autoStart = val
         notify("Auto Start", val and "Enabled" or "Disabled", 3)
     end)
-
-    addToggle(Tabs.Main, "FriendsOnlyToggle", "Friends Only", false, function(val)
+    addToggle(GB.Main_Left, "FriendsOnlyToggle", "Friends Only", getgenv().AutoJoinConfig.friendsOnly or false, function(val)
         getgenv().AutoJoinConfig.friendsOnly = val
         pcall(function()
             RS.Remotes.Teleporter.InteractEvent:FireServer("FriendsOnly")
@@ -470,11 +511,42 @@ if isInLobby then
         notify("Friends Only", val and "Enabled" or "Disabled", 3)
     end)
 else
-    Tabs.Main:AddParagraph({ Title = "ℹ️ Auto Join System", Content = "The Auto Join system is only available in the lobby." })
+    GB.Main_Left:AddLabel("The Auto Join system is only available in the lobby.", true)
 end
 
-Tabs.Ability:AddParagraph({ Title = "⚔️ Auto Ability System", Content = "Automatically trigger tower abilities based on conditions you set" })
-addToggle(Tabs.Ability, "AutoAbilityToggle", "Enable Auto Abilities", getgenv().AutoAbilitiesEnabled, function(val)
+GB.Main_Right:AddLabel("Streamline your gameplay with automatic actions", true)
+addToggle(GB.Main_Right, "AutoLeaveToggle", "Auto Leave", getgenv().Config.toggles.AutoLeaveToggle or false, function(val)
+    getgenv().AutoLeaveEnabled = val
+    getgenv().Config.toggles.AutoLeaveToggle = val
+    saveConfig(getgenv().Config)
+    notify("Auto Leave", val and "Enabled" or "Disabled", 3)
+end)
+addToggle(GB.Main_Right, "AutoFastRetryToggle", "Auto Replay", getgenv().Config.toggles.AutoFastRetryToggle or false, function(val)
+    getgenv().AutoFastRetryEnabled = val
+    getgenv().Config.toggles.AutoFastRetryToggle = val
+    saveConfig(getgenv().Config)
+    notify("Auto Replay", val and "Enabled" or "Disabled", 3)
+end)
+addToggle(GB.Main_Right, "AutoNextToggle", "Auto Next", getgenv().Config.toggles.AutoNextToggle or false, function(val)
+    getgenv().AutoNextEnabled = val
+    getgenv().Config.toggles.AutoNextToggle = val
+    saveConfig(getgenv().Config)
+    notify("Auto Next", val and "Enabled" or "Disabled", 3)
+end)
+addToggle(GB.Main_Right, "AutoSmartToggle", "Auto Leave/Replay/Next", getgenv().Config.toggles.AutoSmartToggle or false, function(val)
+    getgenv().AutoSmartEnabled = val
+    getgenv().Config.toggles.AutoSmartToggle = val
+    saveConfig(getgenv().Config)
+    notify("Auto Leave/Replay/Next", val and "Enabled" or "Disabled", 3)
+end)
+addToggle(GB.Main_Right, "AutoReadyToggle", "Auto Ready", getgenv().Config.toggles.AutoReadyToggle or false, function(val)
+    getgenv().AutoReadyEnabled = val
+    getgenv().Config.toggles.AutoReadyToggle = val
+    saveConfig(getgenv().Config)
+    notify("Auto Ready", val and "Enabled" or "Disabled", 3)
+end)
+
+addToggle(GB.Ability_Left, "AutoAbilityToggle", "Enable Auto Abilities", getgenv().AutoAbilitiesEnabled, function(val)
     getgenv().AutoAbilitiesEnabled = val
     getgenv().Config.toggles.AutoAbilityToggle = val
     saveConfig(getgenv().Config)
@@ -488,26 +560,20 @@ local function buildAutoAbilityUI()
         return 
     end
     local sortedSlots = {"Slot1","Slot2","Slot3","Slot4","Slot5","Slot6"}
-
-    local unitCount = 0
     for _, slotName in ipairs(sortedSlots) do
         local slotData = clientData.Slots[slotName]
         if slotData and slotData.Value then
             local unitName = slotData.Value
             local abilities = getAllAbilities(unitName)
             if next(abilities) then
-                unitCount = unitCount + 1
-
-                local unitSection = Tabs.Ability:AddSection(unitName .. " (" .. slotName .. " • Lvl " .. tostring(slotData.Level or 0) .. ")")
-
+                GB.Ability_Left:AddDivider()
+                GB.Ability_Left:AddLabel(unitName .. " (" .. slotName .. " • Lvl " .. tostring(slotData.Level or 0) .. ")")
                 if not getgenv().UnitAbilities[unitName] then getgenv().UnitAbilities[unitName] = {} end
-
                 local sortedAbilities = {}
                 for abilityName, data in pairs(abilities) do
                     table.insert(sortedAbilities, { name = abilityName, data = data })
                 end
                 table.sort(sortedAbilities, function(a,b) return a.data.requiredLevel < b.data.requiredLevel end)
-
                 for _, ab in ipairs(sortedAbilities) do
                     local abilityName = ab.name
                     local abilityData = ab.data
@@ -516,7 +582,6 @@ local function buildAutoAbilityUI()
                     end
                     local cfg = getgenv().UnitAbilities[unitName][abilityName]
                     local saved = getgenv().Config.abilities[unitName] and getgenv().Config.abilities[unitName][abilityName]
-
                     local defaultToggle = saved and saved.enabled or false
                     if saved then
                         cfg.enabled = saved.enabled or false
@@ -526,12 +591,8 @@ local function buildAutoAbilityUI()
                         cfg.delayAfterBossSpawn = saved.delayAfterBossSpawn or false
                         cfg.useOnWave = saved.useOnWave or false
                     end
-
-                    local abilityInfo = abilityName .. " (Lvl " .. abilityData.requiredLevel .. " • CD: " .. tostring(abilityData.cooldown) .. "s"
-                    if abilityData.isAttribute then abilityInfo = abilityInfo .. " • 🔒 Attribute" end
-                    abilityInfo = abilityInfo .. ")"
-
-                    addToggle(Tabs.Ability, unitName .. "_" .. abilityName .. "_Toggle", abilityInfo, defaultToggle, function(v)
+                    local abilityInfo = abilityName .. " (Lvl " .. abilityData.requiredLevel .. " • CD: " .. tostring(abilityData.cooldown) .. "s" .. (abilityData.isAttribute and " • 🔒 Attribute" or "") .. ")"
+                    addToggle(GB.Ability_Left, unitName .. "_" .. abilityName .. "_Toggle", abilityInfo, defaultToggle, function(v)
                         cfg.enabled = v
                         getgenv().Config.abilities[unitName] = getgenv().Config.abilities[unitName] or {}
                         getgenv().Config.abilities[unitName][abilityName] = getgenv().Config.abilities[unitName][abilityName] or {}
@@ -539,54 +600,44 @@ local function buildAutoAbilityUI()
                         saveConfig(getgenv().Config)
                     end)
 
-                    local defaultModifiers = {}
-                    if saved then
-                        if saved.onlyOnBoss then defaultModifiers["Only On Boss"] = true end
-                        if saved.requireBossInRange then defaultModifiers["Boss In Range"] = true end
-                        if saved.delayAfterBossSpawn then defaultModifiers["Delay After Boss Spawn"] = true end
-                        if saved.useOnWave then defaultModifiers["On Wave"] = true end
-                    end
-
                     local defaultList = {}
-                    for k,v in pairs(defaultModifiers) do if v then table.insert(defaultList, k) end end
+                    if cfg.onlyOnBoss then defaultList["Only On Boss"] = true end
+                    if cfg.requireBossInRange then defaultList["Boss In Range"] = true end
+                    if cfg.delayAfterBossSpawn then defaultList["Delay After Boss Spawn"] = true end
+                    if cfg.useOnWave then defaultList["On Wave"] = true end
 
-                    local dd = Tabs.Ability:AddDropdown(unitName .. "_" .. abilityName .. "_Modifiers", {
-                        Title = "  > Conditions",
+                    GB.Ability_Left:AddDropdown(unitName .. "_" .. abilityName .. "_Modifiers", {
                         Values = {"Only On Boss","Boss In Range","Delay After Boss Spawn","On Wave"},
                         Multi = true,
-                        Default = defaultList,
+                        Text = "  > Conditions",
+                        Callback = function(Value)
+                            local selected = {}
+                            if type(Value) == "table" then
+                                for k,v in pairs(Value) do if v == true then selected[k] = true end end
+                            end
+                            cfg.onlyOnBoss = selected["Only On Boss"] or false
+                            cfg.requireBossInRange = selected["Boss In Range"] or false
+                            cfg.delayAfterBossSpawn = selected["Delay After Boss Spawn"] or false
+                            cfg.useOnWave = selected["On Wave"] or false
+                            getgenv().Config.abilities[unitName] = getgenv().Config.abilities[unitName] or {}
+                            local store = getgenv().Config.abilities[unitName]
+                            store[abilityName] = store[abilityName] or {}
+                            store[abilityName].onlyOnBoss = cfg.onlyOnBoss
+                            store[abilityName].requireBossInRange = cfg.requireBossInRange
+                            store[abilityName].delayAfterBossSpawn = cfg.delayAfterBossSpawn
+                            store[abilityName].useOnWave = cfg.useOnWave
+                            saveConfig(getgenv().Config)
+                        end,
                     })
-                    dd:OnChanged(function(Value)
-                        local selected = {}
-                        if type(Value) == "table" then
-                            for k,v in pairs(Value) do
-                                if type(k) == "string" and v == true then selected[k] = true end
-                            end
-                            if #Value > 0 then
-                                for _,opt in ipairs(Value) do selected[opt] = true end
-                            end
-                        end
-                        cfg.onlyOnBoss = selected["Only On Boss"] or false
-                        cfg.requireBossInRange = selected["Boss In Range"] or false
-                        cfg.delayAfterBossSpawn = selected["Delay After Boss Spawn"] or false
-                        cfg.useOnWave = selected["On Wave"] or false
-
-                        getgenv().Config.abilities[unitName] = getgenv().Config.abilities[unitName] or {}
-                        getgenv().Config.abilities[unitName][abilityName] = getgenv().Config.abilities[unitName][abilityName] or {}
-                        local store = getgenv().Config.abilities[unitName][abilityName]
-                        store.onlyOnBoss = cfg.onlyOnBoss
-                        store.requireBossInRange = cfg.requireBossInRange
-                        store.delayAfterBossSpawn = cfg.delayAfterBossSpawn
-                        store.useOnWave = cfg.useOnWave
-                        saveConfig(getgenv().Config)
-                    end)
-
-                    local input = Tabs.Ability:AddInput(unitName .. "_" .. abilityName .. "_Wave", {
-                        Title = "  > Wave Number",
+                    if Options[unitName .. "_" .. abilityName .. "_Modifiers"] then
+                        Options[unitName .. "_" .. abilityName .. "_Modifiers"]:SetValue(defaultList)
+                    end
+                    GB.Ability_Left:AddInput(unitName .. "_" .. abilityName .. "_Wave", {
+                        Text = "  > Wave Number",
                         Default = (saved and saved.specificWave and tostring(saved.specificWave)) or "",
-                        Placeholder = "Required if 'On Wave' selected",
                         Numeric = true,
                         Finished = true,
+                        Placeholder = "Required if 'On Wave' selected",
                         Callback = function(text)
                             local num = tonumber(text)
                             cfg.specificWave = num
@@ -594,7 +645,7 @@ local function buildAutoAbilityUI()
                             getgenv().Config.abilities[unitName][abilityName] = getgenv().Config.abilities[unitName][abilityName] or {}
                             getgenv().Config.abilities[unitName][abilityName].specificWave = num
                             saveConfig(getgenv().Config)
-                        end
+                        end,
                     })
                 end
             end
@@ -605,31 +656,18 @@ end
 task.spawn(function()
     task.wait(2)
     local maxRetries, retryDelay = 10, 3
-    local ok = false
     for i=1,maxRetries do
-        pcall(function()
+        local ok = pcall(function()
             local cd = getClientData()
-            if cd and cd.Slots then
-                buildAutoAbilityUI()
-                ok = true
-            else
-                if i <= 3 then
-                    notify("Auto Ability", "Loading units... ("..i.."/"..maxRetries..")", 2)
-                end
-            end
+            if cd and cd.Slots then buildAutoAbilityUI() else if i <= 3 then notify("Auto Ability","Loading units... ("..i.."/"..maxRetries..")",2) end end
         end)
         if ok then break end
         task.wait(retryDelay)
     end
-    if not ok then
-        pcall(function()
-            Tabs.Ability:AddParagraph({ Title = "❌ Failed to Load Units", Content = "Could not load your equipped units from ClientData. Rejoin or reload the script." })
-        end)
-    end
 end)
 
-Tabs.CardSelection:AddParagraph({ Title = "🃏 Card Priority System", Content = "Lower number = higher priority • Set to 999 to avoid a card" })
-addToggle(Tabs.CardSelection, "CardSelectionToggle", "Fast Mode", getgenv().CardSelectionEnabled, function(v)
+GB.Card_Left:AddLabel("Lower number = higher priority • Set to 999 to avoid a card", true)
+addToggle(GB.Card_Left, "CardSelectionToggle", "Fast Mode", getgenv().CardSelectionEnabled, function(v)
     getgenv().CardSelectionEnabled = v
     getgenv().Config.toggles.CardSelectionToggle = v
     if v and getgenv().SlowerCardSelectionEnabled then
@@ -639,7 +677,7 @@ addToggle(Tabs.CardSelection, "CardSelectionToggle", "Fast Mode", getgenv().Card
     saveConfig(getgenv().Config)
     notify("Card Selection", v and "Fast Mode Enabled" or "Disabled", 3)
 end)
-addToggle(Tabs.CardSelection, "SlowerCardSelectionToggle", "Slower Mode (More Reliable)", getgenv().SlowerCardSelectionEnabled, function(v)
+addToggle(GB.Card_Left, "SlowerCardSelectionToggle", "Slower Mode (More Reliable)", getgenv().SlowerCardSelectionEnabled, function(v)
     getgenv().SlowerCardSelectionEnabled = v
     getgenv().Config.toggles.SlowerCardSelectionToggle = v
     if v and getgenv().CardSelectionEnabled then
@@ -650,41 +688,43 @@ addToggle(Tabs.CardSelection, "SlowerCardSelectionToggle", "Slower Mode (More Re
     notify("Card Selection", v and "Slower Mode Enabled" or "Disabled", 3)
 end)
 
-Tabs.CardSelection:AddParagraph({ Title = "🍬 Candy Cards", Content = "" })
-local candyNames = {}
-for k in pairs(CandyCards) do table.insert(candyNames, k) end
-table.sort(candyNames, function(a,b) return (CandyCards[a] or 999) < (CandyCards[b] or 999) end)
-for _, cardName in ipairs(candyNames) do
-    local key = "Card_"..cardName
-    local defaultValue = getgenv().Config.inputs[key] or tostring(CandyCards[cardName])
-    Tabs.CardSelection:AddInput(key, {
-        Title = cardName,
-        Default = defaultValue,
-        Placeholder = "Priority (1-999)",
-        Numeric = true,
-        Finished = true,
-        Callback = function(Value)
-            local num = tonumber(Value)
-            if num then
-                getgenv().CardPriority[cardName] = num
-                getgenv().Config.inputs[key] = tostring(num)
-                saveConfig(getgenv().Config)
-            end
-        end
-    })
-    getgenv().CardPriority[cardName] = tonumber(defaultValue) or CandyCards[cardName]
+GB.Card_Right:AddLabel("🍬 Candy Cards")
+do
+    local candyNames = {}
+    for k in pairs(CandyCards) do table.insert(candyNames, k) end
+    table.sort(candyNames, function(a,b) return (CandyCards[a] or 999) < (CandyCards[b] or 999) end)
+    for _, cardName in ipairs(candyNames) do
+        local key = "Card_"..cardName
+        local defaultValue = getgenv().Config.inputs[key] or tostring(CandyCards[cardName])
+        GB.Card_Right:AddInput(key, {
+            Text = cardName,
+            Default = defaultValue,
+            Numeric = true,
+            Finished = true,
+            Placeholder = "Priority (1-999)",
+            Callback = function(Value)
+                local num = tonumber(Value)
+                if num then
+                    getgenv().CardPriority[cardName] = num
+                    getgenv().Config.inputs[key] = tostring(num)
+                    saveConfig(getgenv().Config)
+                end
+            end,
+        })
+        getgenv().CardPriority[cardName] = tonumber(defaultValue) or CandyCards[cardName]
+    end
 end
 
-Tabs.CardSelection:AddParagraph({ Title = "😈 Devil's Sacrifice", Content = "" })
+GB.Card_Right:AddLabel("😈 Devil's Sacrifice")
 for cardName,priority in pairs(DevilSacrifice) do
     local key = "Card_"..cardName
     local defaultValue = getgenv().Config.inputs[key] or tostring(priority)
-    Tabs.CardSelection:AddInput(key, {
-        Title = cardName,
+    GB.Card_Right:AddInput(key, {
+        Text = cardName,
         Default = defaultValue,
-        Placeholder = "Priority (1-999)",
         Numeric = true,
         Finished = true,
+        Placeholder = "Priority (1-999)",
         Callback = function(Value)
             local num = tonumber(Value)
             if num then
@@ -692,79 +732,84 @@ for cardName,priority in pairs(DevilSacrifice) do
                 getgenv().Config.inputs[key] = tostring(num)
                 saveConfig(getgenv().Config)
             end
-        end
+        end,
     })
     getgenv().CardPriority[cardName] = tonumber(defaultValue) or priority
 end
 
-Tabs.CardSelection:AddParagraph({ Title = "📋 Other Cards", Content = "" })
-local otherNames = {}
-for k in pairs(OtherCards) do table.insert(otherNames, k) end
-table.sort(otherNames)
-for _, cardName in ipairs(otherNames) do
-    local key = "Card_"..cardName
-    local defaultValue = getgenv().Config.inputs[key] or tostring(OtherCards[cardName])
-    Tabs.CardSelection:AddInput(key, {
-        Title = cardName,
-        Default = defaultValue,
-        Placeholder = "Priority (1-999)",
-        Numeric = true,
-        Finished = true,
-        Callback = function(Value)
-            local num = tonumber(Value)
-            if num then
-                getgenv().CardPriority[cardName] = num
-                getgenv().Config.inputs[key] = tostring(num)
-                saveConfig(getgenv().Config)
-            end
-        end
-    })
-    getgenv().CardPriority[cardName] = tonumber(defaultValue) or OtherCards[cardName]
+GB.Card_Right:AddLabel("📋 Other Cards")
+do
+    local otherNames = {}
+    for k in pairs(OtherCards) do table.insert(otherNames, k) end
+    table.sort(otherNames)
+    for _, cardName in ipairs(otherNames) do
+        local key = "Card_"..cardName
+        local defaultValue = getgenv().Config.inputs[key] or tostring(OtherCards[cardName])
+        GB.Card_Right:AddInput(key, {
+            Text = cardName,
+            Default = defaultValue,
+            Numeric = true,
+            Finished = true,
+            Placeholder = "Priority (1-999)",
+            Callback = function(Value)
+                local num = tonumber(Value)
+                if num then
+                    getgenv().CardPriority[cardName] = num
+                    getgenv().Config.inputs[key] = tostring(num)
+                    saveConfig(getgenv().Config)
+                end
+            end,
+        })
+        getgenv().CardPriority[cardName] = tonumber(defaultValue) or OtherCards[cardName]
+    end
 end
 
-Tabs.BossRush:AddParagraph({ Title = "⚔️ Boss Rush Cards", Content = "Lower number = higher priority • Set to 999 to avoid" })
-addToggle(Tabs.BossRush, "BossRushToggle", "Enable Boss Rush Card Selection", getgenv().BossRushEnabled, function(v)
+GB.Boss_Left:AddLabel("Lower number = higher priority • Set to 999 to avoid", true)
+addToggle(GB.Boss_Left, "BossRushToggle", "Enable Boss Rush Card Selection", getgenv().BossRushEnabled, function(v)
     getgenv().BossRushEnabled = v
     getgenv().Config.toggles.BossRushToggle = v
     saveConfig(getgenv().Config)
     notify("Boss Rush", v and "Enabled" or "Disabled", 3)
 end)
-
-Tabs.BossRush:AddParagraph({ Title = "🎯 General Cards", Content = "" })
-local brNames = {}
-for k in pairs(BossRushGeneral) do table.insert(brNames, k) end
-table.sort(brNames)
-for _, cardName in ipairs(brNames) do
-    local inputKey = "BossRush_"..cardName
-    local defaultValue = getgenv().Config.inputs[inputKey] or tostring(BossRushGeneral[cardName])
-    local cardType = "Buff"
-    pcall(function()
-        local bossRushModule = RS:FindFirstChild("Modules"):FindFirstChild("CardHandler"):FindFirstChild("BossRushCards")
-        if bossRushModule then
-            local cards = require(bossRushModule)
-            for _, card in pairs(cards) do if card.CardName == cardName then cardType = card.CardType or "Buff" break end end
-        end
-    end)
-    Tabs.BossRush:AddInput(inputKey, {
-        Title = cardName .. " ("..cardType..")",
-        Default = defaultValue,
-        Placeholder = "Priority (1-999)",
-        Numeric = true,
-        Finished = true,
-        Callback = function(Value)
-            local num = tonumber(Value)
-            if num then
-                getgenv().BossRushCardPriority[cardName] = num
-                getgenv().Config.inputs[inputKey] = tostring(num)
-                saveConfig(getgenv().Config)
+GB.Boss_Left:AddDivider()
+GB.Boss_Left:AddLabel("🎯 General Cards")
+do
+    local brNames = {}
+    for k in pairs(BossRushGeneral) do table.insert(brNames, k) end
+    table.sort(brNames)
+    for _, cardName in ipairs(brNames) do
+        local inputKey = "BossRush_"..cardName
+        local defaultValue = getgenv().Config.inputs[inputKey] or tostring(BossRushGeneral[cardName])
+        local cardType = "Buff"
+        pcall(function()
+            local bossRushModule = RS:FindFirstChild("Modules"):FindFirstChild("CardHandler"):FindFirstChild("BossRushCards")
+            if bossRushModule then
+                local cards = require(bossRushModule)
+                for _, card in pairs(cards) do if card.CardName == cardName then cardType = card.CardType or "Buff" break end end
             end
-        end
-    })
-    getgenv().BossRushCardPriority[cardName] = tonumber(defaultValue) or BossRushGeneral[cardName]
+        end)
+        GB.Boss_Left:AddInput(inputKey, {
+            Text = cardName .. " ("..cardType..")",
+            Default = defaultValue,
+            Numeric = true,
+            Finished = true,
+            Placeholder = "Priority (1-999)",
+            Callback = function(Value)
+                local num = tonumber(Value)
+                if num then
+                    getgenv().BossRushCardPriority[cardName] = num
+                    getgenv().Config.inputs[inputKey] = tostring(num)
+                    saveConfig(getgenv().Config)
+                end
+            end,
+        })
+        getgenv().BossRushCardPriority[cardName] = tonumber(defaultValue) or BossRushGeneral[cardName]
+    end
 end
 
 if not isInLobby then
-    Tabs.BossRush:AddParagraph({ Title = "🏰 Babylonia Castle", Content = "" })
+    GB.Boss_Left:AddDivider()
+    GB.Boss_Left:AddLabel("🏰 Babylonia Castle")
     pcall(function()
         local babyloniaModule = RS:FindFirstChild("Modules"):FindFirstChild("CardHandler"):FindFirstChild("BossRushCards"):FindFirstChild("Babylonia Castle")
         if babyloniaModule then
@@ -775,12 +820,12 @@ if not isInLobby then
                 local inputKey = "BabyloniaCastle_" .. cardName
                 if not getgenv().BossRushCardPriority[cardName] then getgenv().BossRushCardPriority[cardName] = 999 end
                 local defaultValue = getgenv().Config.inputs[inputKey] or "999"
-                Tabs.BossRush:AddInput(inputKey, {
-                    Title = cardName .. " ("..cardType..")",
+                GB.Boss_Left:AddInput(inputKey, {
+                    Text = cardName .. " ("..cardType..")",
                     Default = defaultValue,
-                    Placeholder = "Priority (1-999)",
                     Numeric = true,
                     Finished = true,
+                    Placeholder = "Priority (1-999)",
                     Callback = function(Value)
                         local num = tonumber(Value)
                         if num then
@@ -788,59 +833,45 @@ if not isInLobby then
                             getgenv().Config.inputs[inputKey] = tostring(num)
                             saveConfig(getgenv().Config)
                         end
-                    end
+                    end,
                 })
                 getgenv().BossRushCardPriority[cardName] = tonumber(defaultValue) or 999
             end
         end
     end)
 else
-    Tabs.BossRush:AddParagraph({ Title = "ℹ️ Babylonia Castle", Content = "Babylonia Castle cards are only available outside the lobby." })
+    GB.Boss_Left:AddLabel("Babylonia Castle cards are only available outside the lobby.", true)
 end
 
 if isInLobby then
-    Tabs.Breach:AddParagraph({ Title = "⚡ Breach Auto-Join", Content = "Automatically join available breaches when they spawn in the lobby" })
-
-    addToggle(Tabs.Breach, "BreachToggle", "Enable Breach Auto-Join", getgenv().BreachEnabled, function(v)
+    addToggle(GB.Breach_Left, "BreachToggle", "Enable Breach Auto-Join", getgenv().BreachEnabled, function(v)
         getgenv().BreachEnabled = v
         getgenv().Config.toggles.BreachToggle = v
         saveConfig(getgenv().Config)
         print("[Breach] Master toggle set to:", v)
         notify("Breach Auto-Join", v and "Enabled" or "Disabled", 3)
     end)
-
-    Tabs.Breach:AddParagraph({ Title = "📋 Available Breaches", Content = "Toggle which breaches to auto-join" })
-
+    GB.Breach_Left:AddDivider()
+    GB.Breach_Left:AddLabel("📋 Available Breaches (Toggle which to auto-join)", true)
     local breachesLoaded = false
     pcall(function()
         local mapParamsModule = RS:FindFirstChild("Modules") and RS.Modules:FindFirstChild("Breach") and RS.Modules.Breach:FindFirstChild("MapParameters")
-        
         if mapParamsModule and mapParamsModule:IsA("ModuleScript") then
             local mapParams = require(mapParamsModule)
-            
             if mapParams and next(mapParams) then
                 local breachList = {}
                 for breachName, breachInfo in pairs(mapParams) do
-                    table.insert(breachList, {
-                        name = breachName,
-                        disabled = breachInfo.Disabled or false
-                    })
+                    table.insert(breachList, { name = breachName, disabled = breachInfo.Disabled or false })
                 end
-                
-                table.sort(breachList, function(a, b) return a.name < b.name end)
-                
+                table.sort(breachList, function(a,b) return a.name < b.name end)
                 for _, breach in ipairs(breachList) do
                     local breachKey = "Breach_" .. breach.name
                     local savedState = getgenv().Config.toggles[breachKey] or false
-                    
                     if not getgenv().BreachAutoJoin[breach.name] then
                         getgenv().BreachAutoJoin[breach.name] = savedState
                     end
-                    
                     local statusText = breach.disabled and " [DISABLED]" or ""
-                    local breachTitle = breach.name .. statusText
-                    
-                    addToggle(Tabs.Breach, breachKey, breachTitle, savedState, function(v)
+                    addToggle(GB.Breach_Left, breachKey, breach.name .. statusText, savedState, function(v)
                         getgenv().BreachAutoJoin[breach.name] = v
                         getgenv().Config.toggles[breachKey] = v
                         saveConfig(getgenv().Config)
@@ -848,22 +879,19 @@ if isInLobby then
                         print("[Breach] Current BreachAutoJoin table:", game:GetService("HttpService"):JSONEncode(getgenv().BreachAutoJoin))
                     end)
                 end
-                
                 breachesLoaded = true
                 print("[Breach] Loaded " .. #breachList .. " breaches from MapParameters")
             end
         end
     end)
-
     if not breachesLoaded then
-        Tabs.Breach:AddParagraph({ Title = "⚠️ Loading Failed", Content = "Could not load breach data from MapParameters. The module may not be available." })
+        GB.Breach_Left:AddLabel("⚠️ Could not load breach data from MapParameters. The module may not be available.", true)
     end
 else
-    Tabs.Breach:AddParagraph({ Title = "ℹ️ Breach Auto-Join", Content = "The Auto Breach can only be used in the lobby." })
+    GB.Breach_Left:AddLabel("The Auto Breach can only be used in the lobby.", true)
 end
 
-Tabs.Webhook:AddParagraph({ Title = "🔔 Discord Notifications", Content = "Get match completion stats sent directly to your Discord server" })
-addToggle(Tabs.Webhook, "WebhookToggle", "Enable Webhook Notifications", getgenv().WebhookEnabled, function(v)
+addToggle(GB.Webhook_Left, "WebhookToggle", "Enable Webhook Notifications", getgenv().WebhookEnabled, function(v)
     getgenv().WebhookEnabled = v
     getgenv().Config.toggles.WebhookToggle = v
     saveConfig(getgenv().Config)
@@ -880,35 +908,32 @@ addToggle(Tabs.Webhook, "WebhookToggle", "Enable Webhook Notifications", getgenv
         notify("Webhook", "Disabled", 3)
     end
 end)
-
-Tabs.Webhook:AddInput("WebhookURL", {
-    Title = "Webhook URL",
+GB.Webhook_Left:AddInput("WebhookURL", {
+    Text = "Webhook URL",
     Default = getgenv().WebhookURL or "",
-    Placeholder = "https://discord.com/api/webhooks/...",
     Numeric = false,
     Finished = true,
+    Placeholder = "https://discord.com/api/webhooks/...",
     Callback = function(Value)
         getgenv().WebhookURL = Value or ""
         getgenv().Config.inputs.WebhookURL = getgenv().WebhookURL
         saveConfig(getgenv().Config)
-    end
+    end,
 })
 
-Tabs.SeamlessFix:AddParagraph({ Title = "🔄 Seamless Retry Fix", Content = "Prevents lag by restarting after a set number of rounds" })
-addToggle(Tabs.SeamlessFix, "SeamlessToggle", "Enable Seamless Fix", getgenv().SeamlessLimiterEnabled, function(v)
+addToggle(GB.Seam_Left, "SeamlessToggle", "Enable Seamless Fix", getgenv().SeamlessLimiterEnabled, function(v)
     getgenv().SeamlessLimiterEnabled = v
     getgenv().Config.toggles.SeamlessToggle = v
     saveConfig(getgenv().Config)
     notify("Seamless Fix", v and "Enabled" or "Disabled", 3)
     print("[Seamless Fix] " .. (v and "Enabled" or "Disabled"))
 end)
-
-Tabs.SeamlessFix:AddInput("SeamlessRounds", {
-    Title = "Max Rounds Before Restart",
+GB.Seam_Left:AddInput("SeamlessRounds", {
+    Text = "Max Rounds Before Restart",
     Default = getgenv().Config.inputs.SeamlessRounds or "4",
-    Placeholder = "Default: 4",
     Numeric = true,
     Finished = true,
+    Placeholder = "Default: 4",
     Callback = function(Value)
         local num = tonumber(Value)
         if num and num > 0 then
@@ -918,45 +943,38 @@ Tabs.SeamlessFix:AddInput("SeamlessRounds", {
         else
             getgenv().MaxSeamlessRounds = 4
         end
-    end
+    end,
 })
 
-Tabs.Event:AddParagraph({ Title = "🎃 Halloween 2025 Event", Content = "Automatically join and participate in the Halloween event" })
-
-addToggle(Tabs.Event, "AutoEventToggle", "Auto Event Join", getgenv().AutoEventEnabled, function(val)
+addToggle(GB.Event_Left, "AutoEventToggle", "Auto Event Join", getgenv().AutoEventEnabled, function(val)
     getgenv().AutoEventEnabled = val
     getgenv().Config.toggles.AutoEventToggle = val
     saveConfig(getgenv().Config)
     notify("Auto Event", val and "Enabled" or "Disabled", 3)
 end)
-
 if isInLobby then
-    Tabs.Event:AddParagraph({ Title = "🎲 Auto Bingo", Content = "" })
-    addToggle(Tabs.Event, "BingoToggle", "Enable Auto Bingo", getgenv().BingoEnabled, function(v)
+    GB.Event_Left:AddDivider()
+    GB.Event_Left:AddLabel("🎲 Auto Bingo")
+    addToggle(GB.Event_Left, "BingoToggle", "Enable Auto Bingo", getgenv().BingoEnabled, function(v)
         getgenv().BingoEnabled = v
         getgenv().Config.toggles.BingoToggle = v
         saveConfig(getgenv().Config)
         notify("Auto Bingo", v and "Enabled" or "Disabled", 3)
     end)
-
-    Tabs.Event:AddParagraph({ Title = "🎁 Auto Capsules", Content = "" })
-    addToggle(Tabs.Event, "CapsuleToggle", "Enable Auto Capsules", getgenv().CapsuleEnabled, function(v)
+    GB.Event_Left:AddLabel("🎁 Auto Capsules")
+    addToggle(GB.Event_Left, "CapsuleToggle", "Enable Auto Capsules", getgenv().CapsuleEnabled, function(v)
         getgenv().CapsuleEnabled = v
         getgenv().Config.toggles.CapsuleToggle = v
         saveConfig(getgenv().Config)
         notify("Auto Capsules", v and "Enabled" or "Disabled", 3)
     end)
-
-    Tabs.Event:AddParagraph({ Title = "ℹ️ Info", Content = "Bingo: Uses stamps (25x), claims rewards, completes board\nCapsules: Buys 100/10/1 based on candy, opens all" })
+    GB.Event_Left:AddLabel("Bingo: Uses stamps (25x), claims rewards, completes board\nCapsules: Buys 100/10/1 based on candy, opens all", true)
 else
-    Tabs.Event:AddParagraph({ Title = "ℹ️ Lobby Only", Content = "Bingo and Capsule features are only available in the lobby." })
+    GB.Event_Left:AddLabel("Bingo and Capsule features are only available in the lobby.", true)
 end
 
-Tabs.Misc:AddParagraph({ Title = "🛠️ Utility Features", Content = "Performance and quality of life improvements" })
-
-Tabs.Misc:AddParagraph({ Title = "⚡ Performance", Content = "" })
 if not isInLobby then
-    addToggle(Tabs.Misc, "FPSBoostToggle", "FPS Boost", getgenv().FPSBoostEnabled, function(v)
+    addToggle(GB.Misc_Left, "FPSBoostToggle", "FPS Boost", getgenv().FPSBoostEnabled, function(v)
         getgenv().FPSBoostEnabled = v
         getgenv().Config.toggles.FPSBoostToggle = v
         saveConfig(getgenv().Config)
@@ -965,97 +983,143 @@ if not isInLobby then
 else
     getgenv().FPSBoostEnabled = false
 end
-
-addToggle(Tabs.Misc, "RemoveEnemiesToggle", "Remove Enemies & Units", getgenv().RemoveEnemiesEnabled, function(v)
+addToggle(GB.Misc_Left, "RemoveEnemiesToggle", "Remove Enemies & Units", getgenv().RemoveEnemiesEnabled, function(v)
     getgenv().RemoveEnemiesEnabled = v
     getgenv().Config.toggles.RemoveEnemiesToggle = v
     saveConfig(getgenv().Config)
     notify("Remove Enemies", v and "Enabled" or "Disabled", 3)
 end)
-
-addToggle(Tabs.Misc, "BlackScreenToggle", "Black Screen Mode", getgenv().BlackScreenEnabled, function(v)
+addToggle(GB.Misc_Left, "BlackScreenToggle", "Black Screen Mode", getgenv().BlackScreenEnabled, function(v)
     getgenv().BlackScreenEnabled = v
     getgenv().Config.toggles.BlackScreenToggle = v
     saveConfig(getgenv().Config)
     notify("Black Screen", v and "Enabled" or "Disabled", 3)
 end)
 
-Tabs.Misc:AddParagraph({ Title = "🔒 Safety & UI", Content = "" })
-
-addToggle(Tabs.Misc, "AutoHideUIToggle", "Auto Hide UI on Start", getgenv().Config.toggles.AutoHideUIToggle or false, function(v)
+addToggle(GB.Misc_Right, "AutoHideUIToggle", "Auto Hide UI on Start", getgenv().Config.toggles.AutoHideUIToggle or false, function(v)
     getgenv().Config.toggles.AutoHideUIToggle = v
     saveConfig(getgenv().Config)
     notify("Auto Hide UI", v and "Enabled - Auto Hide UI" or "Disabled", 3)
 end)
-
-addToggle(Tabs.Misc, "AntiAFKToggle", "Anti-AFK", getgenv().AntiAFKEnabled, function(v)
+addToggle(GB.Misc_Right, "AntiAFKToggle", "Anti-AFK", getgenv().AntiAFKEnabled, function(v)
     getgenv().AntiAFKEnabled = v
     getgenv().Config.toggles.AntiAFKToggle = v
     saveConfig(getgenv().Config)
     notify("Anti-AFK", v and "Enabled" or "Disabled", 3)
 end)
-
-addToggle(Tabs.Misc, "AutoExecuteToggle", "Auto Execute on Teleport", getgenv().Config.toggles.AutoExecuteToggle or false, function(v)
+addToggle(GB.Misc_Right, "AutoExecuteToggle", "Auto Execute on Teleport", getgenv().Config.toggles.AutoExecuteToggle or false, function(v)
     getgenv().Config.toggles.AutoExecuteToggle = v
     saveConfig(getgenv().Config)
-    
     if v then
         writefile("ALSHalloweenEvent/autoexec.txt", "true")
         notify("Auto Execute", "Enabled - Script will reload on teleport", 3)
     else
-        if isfile("ALSHalloweenEvent/autoexec.txt") then
-            delfile("ALSHalloweenEvent/autoexec.txt")
-        end
+        if isfile("ALSHalloweenEvent/autoexec.txt") then delfile("ALSHalloweenEvent/autoexec.txt") end
         notify("Auto Execute", "Disabled", 3)
     end
 end)
 
-Tabs.Settings:AddParagraph({ Title = "💾 Config Management", Content = "Your settings are automatically saved to: " .. CONFIG_FOLDER .. "/" .. CONFIG_FILE })
+GB.Settings_Left:AddLabel("Your settings are automatically saved to: " .. CONFIG_FOLDER .. "/" .. CONFIG_FILE, true)
+GB.Settings_Left:AddButton("Force Save Config Now", function()
+    local success = saveConfig(getgenv().Config)
+    if success then notify("Config", "Settings saved successfully!", 3) else notify("Config", "Failed to save settings!", 5) end
+end)
+GB.Settings_Left:AddButton("Open Config Folder", function()
+    notify("Config Location", CONFIG_FOLDER .. "/" .. CONFIG_FILE, 5)
+    print("[Config] Full path: " .. getConfigPath())
+end)
 
-Tabs.Settings:AddButton({
-    Title = "Force Save Config Now",
-    Description = "Manually save all current settings",
-    Callback = function()
-        local success = saveConfig(getgenv().Config)
-        if success then
-            notify("Config", "Settings saved successfully!", 3)
-        else
-            notify("Config", "Failed to save settings!", 5)
+GB.Settings_Right:AddToggle("KeybindMenuOpen", {
+    Default = Library.KeybindFrame.Visible,
+    Text = "Open Keybind Menu",
+    Callback = function(value)
+        Library.KeybindFrame.Visible = value
+    end,
+})
+
+GB.Settings_Right:AddToggle("ShowCustomCursor", {
+    Text = "Custom Cursor",
+    Default = getgenv().Config.toggles.ShowCustomCursor ~= false,
+    Callback = function(Value)
+        Library.ShowCustomCursor = Value
+        getgenv().Config.toggles.ShowCustomCursor = Value
+        saveConfig(getgenv().Config)
+    end,
+})
+
+GB.Settings_Right:AddDropdown("NotificationSide", {
+    Values = { "Left", "Right" },
+    Default = getgenv().Config.inputs.NotificationSide or "Right",
+    Text = "Notification Side",
+    Callback = function(Value)
+        Library:SetNotifySide(Value)
+        getgenv().Config.inputs.NotificationSide = Value
+        saveConfig(getgenv().Config)
+    end,
+})
+
+GB.Settings_Right:AddDropdown("DPIDropdown", {
+    Values = { "50%", "75%", "100%", "125%", "150%", "175%", "200%" },
+    Default = getgenv().Config.inputs.DPIScale or "100%",
+    Text = "DPI Scale",
+    Callback = function(Value)
+        Value = Value:gsub("%%", "")
+        local DPI = tonumber(Value)
+        Library:SetDPIScale(DPI)
+        getgenv().Config.inputs.DPIScale = Value .. "%"
+        saveConfig(getgenv().Config)
+    end,
+})
+
+pcall(function()
+    if getgenv().Config.inputs.DPIScale then
+        local savedDPI = getgenv().Config.inputs.DPIScale:gsub("%%", "")
+        local DPI = tonumber(savedDPI)
+        if DPI then
+            Library:SetDPIScale(DPI)
+            print("[Config] Applied saved DPI scale:", DPI)
         end
     end
+end)
+
+GB.Settings_Right:AddDivider()
+GB.Settings_Right:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", { 
+    Default = "LeftControl", 
+    NoUI = true, 
+    Text = "Menu keybind",
+    SyncToggleState = false,
+    Mode = "Toggle",
 })
 
-Tabs.Settings:AddButton({
-    Title = "Open Config Folder",
-    Description = "Opens the folder where config is saved",
-    Callback = function()
-        notify("Config Location", CONFIG_FOLDER .. "/" .. CONFIG_FILE, 5)
-        print("[Config] Full path: " .. getConfigPath())
-    end
-})
+GB.Settings_Right:AddButton("Unload", function()
+    Library:Unload()
+end)
 
-SaveManager:SetLibrary(Fluent)
-InterfaceManager:SetLibrary(Fluent)
-SaveManager:IgnoreThemeSettings()
-SaveManager:SetIgnoreIndexes({})
-InterfaceManager:SetFolder("ALS-Fluent")
-SaveManager:SetFolder("ALS-Fluent/Configs")
-InterfaceManager:BuildInterfaceSection(Tabs.Settings)
-SaveManager:BuildConfigSection(Tabs.Settings)
+Library.ToggleKeybind = Options.MenuKeybind
 
-Window:SelectTab(1)
+ThemeManager:SetLibrary(Library)
+SaveManagerUI:SetLibrary(Library)
+SaveManagerUI:IgnoreThemeSettings()
+SaveManagerUI:SetIgnoreIndexes({ "MenuKeybind" })
+ThemeManager:SetFolder("ALS-Obsidian")
+SaveManagerUI:SetFolder("ALS-Obsidian/Configs")
+SaveManagerUI:BuildConfigSection(GB.Settings_Left)
+ThemeManager:ApplyToTab(Tabs.Settings)
 
+print("[UI] All tabs and settings loaded!")
+print("[UI] Sending notification...")
+
+task.wait(0.1) 
 notify("ALS Halloween Event", "Script loaded successfully!", 5)
+
+print("[UI] Script fully loaded and ready!")
 
 if getgenv().Config.toggles.AutoHideUIToggle then
     task.spawn(function()
         task.wait(0.2)
-        if Window and not Fluent.Unloaded then
-            local VIM = game:GetService("VirtualInputManager")
-            VIM:SendKeyEvent(true, Enum.KeyCode.LeftControl, false, game)
-            task.wait(0.05)
-            VIM:SendKeyEvent(false, Enum.KeyCode.LeftControl, false, game)
-            print("[Auto Hide] UI minimized after 3 seconds")
+        if not Library.Unloaded then
+            toggleUIKey()
+            print("[Auto Hide] UI minimized after 0.2 seconds")
         end
     end)
 end
@@ -1077,17 +1141,15 @@ for inputKey, value in pairs(getgenv().Config.inputs) do
 end
 
 local isUnloaded = false
-spawn(function()
+task.spawn(function()
     while true do
         task.wait(1)
-        if Fluent.Unloaded then isUnloaded = true break end
+        if Library.Unloaded then isUnloaded = true break end
     end
 end)
 
-
 task.spawn(function()
     repeat task.wait() until game.CoreGui:FindFirstChild("RobloxPromptGui")
-    local TeleportService = game:GetService("TeleportService")
     local promptOverlay = game.CoreGui.RobloxPromptGui.promptOverlay
     promptOverlay.ChildAdded:Connect(function(child)
         if child.Name == "ErrorPrompt" then
@@ -1159,20 +1221,12 @@ task.spawn(function()
                     local children = enemies:GetChildren()
                     for i = 1, #children do
                         local enemy = children[i]
-                        if enemy:IsA("Model") and enemy.Name ~= "Boss" then 
-                            enemy:Destroy()
-                        end
+                        if enemy:IsA("Model") and enemy.Name ~= "Boss" then enemy:Destroy() end
                     end
-                    children = nil
                 end
-                
                 local spawnedunits = workspace:FindFirstChild("SpawnedUnits")
                 if spawnedunits then
-                    for _, su in pairs(spawnedunits:GetChildren()) do
-                        if su:IsA("Model") then 
-                            su:Destroy()
-                        end
-                    end
+                    for _, su in pairs(spawnedunits:GetChildren()) do if su:IsA("Model") then su:Destroy() end end
                 end
             end)
         end
@@ -1220,19 +1274,16 @@ task.spawn(function()
     local halloweenFolder = eventsFolder and eventsFolder:FindFirstChild("Hallowen2025")
     local enterEvent = halloweenFolder and halloweenFolder:FindFirstChild("Enter")
     local startEvent = halloweenFolder and halloweenFolder:FindFirstChild("Start")
-    
     while true do
         task.wait(0.5)
         if getgenv().AutoEventEnabled and enterEvent and startEvent then
-            pcall(function() 
-                enterEvent:FireServer()
-                startEvent:FireServer()
-            end)
+            pcall(function() enterEvent:FireServer(); startEvent:FireServer() end)
         end
         if isUnloaded then break end
     end
 end)
 
+local isProcessing = false
 task.spawn(function()
     local function press(key)
         VIM:SendKeyEvent(true, key, false, game)
@@ -1241,84 +1292,48 @@ task.spawn(function()
     end
     local GuiService = game:GetService("GuiService")
     local hasProcessedCurrentUI = false
-    
     local endGameUIDetectedTime = 0
-    
     LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
         if child.Name == "EndGameUI" then
             hasProcessedCurrentUI = false
             endGameUIDetectedTime = tick()
         end
     end)
-    
     while true do
         task.wait(1)
-        
         pcall(function()
             local endGameUI = LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
             if endGameUI and endGameUI:FindFirstChild("BG") and endGameUI.BG:FindFirstChild("Buttons") then
-                
-                if hasProcessedCurrentUI then
-                    return
-                end
-                
+                if hasProcessedCurrentUI then return end
                 if getgenv().WebhookEnabled then
                     local timeSinceDetection = tick() - endGameUIDetectedTime
-                    if timeSinceDetection < 3 then
-                        return
-                    end
-                    if isProcessing then
-                        return
-                    end
+                    if timeSinceDetection < 3 then return end
+                    if isProcessing then return end
                 end
-                
                 local buttons = endGameUI.BG.Buttons
                 local nextButton = buttons:FindFirstChild("Next")
                 local retryButton = buttons:FindFirstChild("Retry")
                 local leaveButton = buttons:FindFirstChild("Leave")
-                
-                local buttonToPress = nil
-                local actionName = ""
-                
+                local buttonToPress, actionName = nil, ""
                 if getgenv().AutoSmartEnabled then
-                    if nextButton and nextButton.Visible then
-                        buttonToPress = nextButton
-                        actionName = "Next"
-                    elseif retryButton and retryButton.Visible then
-                        buttonToPress = retryButton
-                        actionName = "Replay"
-                    elseif leaveButton then
-                        buttonToPress = leaveButton
-                        actionName = "Leave"
-                    end
+                    if nextButton and nextButton.Visible then buttonToPress = nextButton actionName = "Next"
+                    elseif retryButton and retryButton.Visible then buttonToPress = retryButton actionName = "Replay"
+                    elseif leaveButton then buttonToPress = leaveButton actionName = "Leave" end
                 elseif getgenv().AutoNextEnabled and nextButton and nextButton.Visible then
-                    buttonToPress = nextButton
-                    actionName = "Next"
+                    buttonToPress = nextButton actionName = "Next"
                 elseif getgenv().AutoFastRetryEnabled and retryButton and retryButton.Visible then
-                    buttonToPress = retryButton
-                    actionName = "Replay"
+                    buttonToPress = retryButton actionName = "Replay"
                 elseif getgenv().AutoLeaveEnabled and leaveButton then
-                    buttonToPress = leaveButton
-                    actionName = "Leave"
+                    buttonToPress = leaveButton actionName = "Leave"
                 end
-                
                 if buttonToPress then
                     hasProcessedCurrentUI = true
                     GuiService.SelectedObject = buttonToPress
-                    repeat 
-                        press(Enum.KeyCode.Return)
-                        task.wait(0.5)
-                    until not LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
+                    repeat press(Enum.KeyCode.Return) task.wait(0.5) until not LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
                     GuiService.SelectedObject = nil
-                    
-                    buttons = nil
-                    nextButton = nil
-                    retryButton = nil
-                    leaveButton = nil
-                    buttonToPress = nil
+                elseif GuiService.SelectedObject ~= nil then
+                    GuiService.SelectedObject = nil
                 end
-            elseif GuiService.SelectedObject ~= nil then 
-                GuiService.SelectedObject = nil 
             end
         end)
         if isUnloaded then break end
@@ -1370,7 +1385,6 @@ task.spawn(function()
     local towerInfoCache = {}
     local generalBossSpawnTime = nil
     local lastWave = 0
-
     local function resetRoundTrackers()
         bossSpawnTime = nil
         bossInRangeTracker = {}
@@ -1443,9 +1457,7 @@ task.spawn(function()
     local function useAbility(tower, abilityName)
         if tower then 
             local correctedName = fixAbilityName(abilityName)
-            pcall(function() 
-                RS.Remotes.Ability:InvokeServer(tower, correctedName) 
-            end) 
+            pcall(function() RS.Remotes.Ability:InvokeServer(tower, correctedName) end)
         end
     end
     local function isOnCooldown(towerName, abilityName)
@@ -1453,8 +1465,7 @@ task.spawn(function()
         local key = towerName .. "_" .. abilityName
         local last = abilityCooldowns[key]
         if not last then return false end
-        local elapsed = tick() - last
-        return elapsed < (d.cooldown / GAME_SPEED)
+        return (tick() - last) < (d.cooldown / GAME_SPEED)
     end
     local function setAbilityUsed(towerName, abilityName) abilityCooldowns[towerName.."_"..abilityName] = tick() end
     local function hasAbilityBeenUnlocked(towerName, abilityName, towerLevel)
@@ -1470,12 +1481,8 @@ task.spawn(function()
     end
     local function bossReadyForAbilities()
         if bossExists() then
-            if not generalBossSpawnTime then 
-                generalBossSpawnTime = tick()
-                print("[Auto Abilities] Boss spawned, waiting 2 seconds...")
-            end
-            local timeSinceSpawn = tick() - generalBossSpawnTime
-            return timeSinceSpawn >= 2
+            if not generalBossSpawnTime then generalBossSpawnTime = tick() print("[Auto Abilities] Boss spawned, waiting 2 seconds...") end
+            return (tick() - generalBossSpawnTime) >= 2
         else
             generalBossSpawnTime = nil
             return false
@@ -1527,7 +1534,6 @@ task.spawn(function()
         end
         return false
     end
-
     while true do
         task.wait(1)
         if getgenv().AutoAbilitiesEnabled then
@@ -1541,21 +1547,21 @@ task.spawn(function()
                 for unitName, abilitiesConfig in pairs(getgenv().UnitAbilities) do
                     local tower = Towers:FindFirstChild(unitName)
                     if tower then
-                    local infoName = getTowerInfoName(tower)
-                    local towerLevel = getUpgradeLevel(tower)
-                    for abilityName, cfg in pairs(abilitiesConfig) do
-                        if cfg.enabled then
-                            local shouldUse = true
-                            if not hasAbilityBeenUnlocked(infoName, abilityName, towerLevel) then shouldUse=false end
-                            if shouldUse and isOnCooldown(infoName, abilityName) then shouldUse=false end
-                            if shouldUse and cfg.onlyOnBoss then if not hasBoss or not bossReadyForAbilities() then shouldUse=false end end
-                            if shouldUse and cfg.useOnWave and cfg.specificWave then if currentWave ~= cfg.specificWave then shouldUse=false end end
-                            if shouldUse and cfg.requireBossInRange then if not hasBoss or not checkBossInRangeForDuration(tower,0) then shouldUse=false end end
-                            if shouldUse and cfg.delayAfterBossSpawn then if not hasBoss or not checkBossSpawnTime() then shouldUse=false end end
-                            if shouldUse then useAbility(tower, abilityName) setAbilityUsed(infoName, abilityName) end
+                        local infoName = getTowerInfoName(tower)
+                        local towerLevel = getUpgradeLevel(tower)
+                        for abilityName, cfg in pairs(abilitiesConfig) do
+                            if cfg.enabled then
+                                local shouldUse = true
+                                if not hasAbilityBeenUnlocked(infoName, abilityName, towerLevel) then shouldUse=false end
+                                if shouldUse and isOnCooldown(infoName, abilityName) then shouldUse=false end
+                                if shouldUse and cfg.onlyOnBoss then if not hasBoss or not bossReadyForAbilities() then shouldUse=false end end
+                                if shouldUse and cfg.useOnWave and cfg.specificWave then if currentWave ~= cfg.specificWave then shouldUse=false end end
+                                if shouldUse and cfg.requireBossInRange then if not hasBoss or not checkBossInRangeForDuration(tower,0) then shouldUse=false end end
+                                if shouldUse and cfg.delayAfterBossSpawn then if not hasBoss or not checkBossSpawnTime() then shouldUse=false end end
+                                if shouldUse then useAbility(tower, abilityName) setAbilityUsed(infoName, abilityName) end
+                            end
                         end
                     end
-                end
                 end
             end)
         end
@@ -1583,10 +1589,8 @@ task.spawn(function()
                     end
                 end
             end
-            descendants = nil
             table.sort(cardButtons, function(a,b) return a.button.AbsolutePosition.X < b.button.AbsolutePosition.X end)
             for i, c in ipairs(cardButtons) do cards[i] = { name=c.text, button=c.button } end
-            cardButtons = nil
             return #cards > 0 and cards or nil
         end)
         return ok and result or nil
@@ -1624,9 +1628,6 @@ task.spawn(function()
             for _, ev in ipairs(events) do pcall(function() for _, conn in ipairs(getconnections(button[ev])) do conn:Fire() end end) end
             task.wait(0.2)
             pressConfirm()
-            list = nil
-            best = nil
-            button = nil
         end)
         return ok
     end
@@ -1637,19 +1638,12 @@ task.spawn(function()
             local _, best = findBestCard(list)
             if not best or not best.button then return false end
             local button = best.button
-            
             local GuiService = game:GetService("GuiService")
-            local function press(key)
-                VIM:SendKeyEvent(true, key, false, game)
-                task.wait(0.1)
-                VIM:SendKeyEvent(false, key, false, game)
-            end
-            
+            local function press(key) VIM:SendKeyEvent(true, key, false, game) task.wait(0.1) VIM:SendKeyEvent(false, key, false, game) end
             GuiService.SelectedObject = button
             task.wait(0.2)
             press(Enum.KeyCode.Return)
             task.wait(0.3)
-            
             local ok2, confirmButton = pcall(function()
                 local prompt = LocalPlayer.PlayerGui:FindFirstChild("Prompt") if not prompt then return nil end
                 local frame = prompt:FindFirstChild("Frame") if not frame then return nil end
@@ -1659,26 +1653,20 @@ task.spawn(function()
                 local label = button:FindFirstChild("TextLabel") if label and label.Text == "Confirm" then return button end
                 return nil
             end)
-            
             if ok2 and confirmButton then
                 GuiService.SelectedObject = confirmButton
                 task.wait(0.2)
                 press(Enum.KeyCode.Return)
                 task.wait(0.3)
             end
-            
             GuiService.SelectedObject = nil
         end)
         return ok
     end
-    while true do 
+    while true do
         task.wait(1)
-        if getgenv().CardSelectionEnabled then 
-            selectCard() 
-        elseif getgenv().SlowerCardSelectionEnabled then 
-            selectCardSlower() 
-        end 
-        if isUnloaded then break end 
+        if getgenv().CardSelectionEnabled then selectCard() elseif getgenv().SlowerCardSelectionEnabled then selectCardSlower() end
+        if isUnloaded then break end
     end
 end)
 
@@ -1702,10 +1690,8 @@ task.spawn(function()
                     end
                 end
             end
-            descendants = nil
             table.sort(cardButtons, function(a,b) return a.button.AbsolutePosition.X < b.button.AbsolutePosition.X end)
             for i, c in ipairs(cardButtons) do cards[i] = { name=c.text, button=c.button } end
-            cardButtons = nil
             return #cards > 0 and cards or nil
         end)
         return ok and result or nil
@@ -1746,18 +1732,15 @@ task.spawn(function()
         end)
         return ok
     end
-    while true do 
+    while true do
         task.wait(1)
-        if getgenv().BossRushEnabled then 
-            select() 
-        end 
-        if isUnloaded then break end 
+        if getgenv().BossRushEnabled then select() end
+        if isUnloaded then break end
     end
 end)
 
 task.spawn(function()
     local hasRun = 0
-    local isProcessing = false
     local function formatNumber(num)
         if not num or num == 0 then return "0" end
         local s = tostring(num) local k
@@ -1774,169 +1757,59 @@ task.spawn(function()
         local rewards = {}
         local ok, res = pcall(function()
             local ui = LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
-            if not ui then 
-                print("[Webhook] No EndGameUI found")
-                return {} 
-            end
-            
+            if not ui then return {} end
             local holder = ui:FindFirstChild("BG") and ui.BG:FindFirstChild("Container") and ui.BG.Container:FindFirstChild("Rewards") and ui.BG.Container.Rewards:FindFirstChild("Holder")
-            
-            if not holder then 
-                print("[Webhook] Could not find Holder path")
-                return {} 
-            end
-            
-            print("[Webhook] Found Holder, waiting for reward buttons to load...")
-            
+            if not holder then return {} end
             local waitTime = 0
             local lastCount = 0
             local stableCount = 0
-            
             repeat
-                task.wait(0.3)
-                waitTime = waitTime + 0.3
-                
+                task.wait(0.3) waitTime = waitTime + 0.3
                 local children = holder:GetChildren()
                 local currentCount = 0
-                for i = 1, #children do
-                    if children[i]:IsA("TextButton") then
-                        currentCount = currentCount + 1
-                    end
-                end
-                
-                if currentCount == lastCount and currentCount > 0 then
-                    stableCount = stableCount + 1
-                else
-                    stableCount = 0
-                end
-                
+                for i = 1, #children do if children[i]:IsA("TextButton") then currentCount = currentCount + 1 end end
+                if currentCount == lastCount and currentCount > 0 then stableCount = stableCount + 1 else stableCount = 0 end
                 lastCount = currentCount
-                print("[Webhook] TextButtons found:", currentCount, "Stable for:", stableCount * 0.3, "s")
-                
             until (stableCount >= 5 and currentCount > 0) or waitTime > 4
-            
-            print("[Webhook] Finished waiting after", waitTime, "s. Total TextButtons:", lastCount)
-            
-            print("[Webhook] Scanning all children...")
-            
-            local children = holder:GetChildren()
-            print("[Webhook] Total children in Holder:", #children)
-            
-            for _, item in pairs(children) do
-                print("[Webhook] Child:", item.Name, "Type:", item.ClassName)
-                
+            for _, item in pairs(holder:GetChildren()) do
                 if item:IsA("TextButton") then
-                    print("[Webhook] -> Is TextButton, checking for reward data...")
-                    
-                    local rewardName = nil
-                    local rewardAmount = nil
-                    
+                    local rewardName, rewardAmount
                     local unitName = item:FindFirstChild("UnitName")
-                    if unitName then
-                        print("[Webhook] -> Found UnitName, Text:", unitName.Text or "nil")
-                        if unitName.Text and unitName.Text ~= "" then
-                            rewardName = unitName.Text
-                            print("[Webhook] -> Set rewardName to:", rewardName)
-                        end
-                    end
-                    
+                    if unitName and unitName.Text and unitName.Text ~= "" then rewardName = unitName.Text end
                     local itemName = item:FindFirstChild("ItemName")
-                    if itemName then
-                        print("[Webhook] -> Found ItemName, Text:", itemName.Text or "nil")
-                        if itemName.Text and itemName.Text ~= "" then
-                            rewardName = itemName.Text
-                            print("[Webhook] -> Set rewardName to:", rewardName)
-                        end
-                    end
-                    
+                    if itemName and itemName.Text and itemName.Text ~= "" then rewardName = itemName.Text end
                     if rewardName then
                         local amountLabel = item:FindFirstChild("Amount")
-                        if amountLabel then
-                            print("[Webhook] -> Found Amount, Text:", amountLabel.Text or "nil")
-                            if amountLabel.Text then
-                                local amountText = amountLabel.Text
-                                local clean = string.gsub(string.gsub(string.gsub(amountText, "x", ""), "+", ""), ",", "")
-                                rewardAmount = tonumber(clean)
-                                print("[Webhook] -> Parsed amount:", rewardAmount)
-                            end
+                        if amountLabel and amountLabel.Text then
+                            local amountText = amountLabel.Text
+                            local clean = string.gsub(string.gsub(string.gsub(amountText, "x", ""), "+", ""), ",", "")
+                            rewardAmount = tonumber(clean)
                         else
-                            print("[Webhook] -> No Amount label found, defaulting to 1 (unit reward)")
                             rewardAmount = 1
                         end
-                        
-                        if rewardAmount then
-                            table.insert(rewards, { name = rewardName, amount = rewardAmount })
-                            print("[Webhook] ✓ Added reward:", rewardName, "x" .. rewardAmount)
-                        else
-                            print("[Webhook] ✗ Skipped (no valid amount):", rewardName)
-                        end
-                    else
-                        print("[Webhook] -> No UnitName or ItemName found")
+                        if rewardAmount then table.insert(rewards, { name = rewardName, amount = rewardAmount }) end
                     end
                 end
             end
-            print("[Webhook] === SCAN COMPLETE === Total rewards found:", #rewards)
             return rewards
         end)
-        
-        if not ok then
-            warn("[Webhook] Error in getRewards:", res)
-        end
-        
         return ok and res or {}
     end
     local function getMatchResult()
         local ok, time, wave, result = pcall(function()
             local ui = LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
-            if not ui then 
-                print("[Webhook] getMatchResult: No EndGameUI")
-                return "00:00:00","0","Unknown" 
-            end
-            
+            if not ui then return "00:00:00","0","Unknown" end
             local stats = ui:FindFirstChild("BG") and ui.BG:FindFirstChild("Container") and ui.BG.Container:FindFirstChild("Stats")
-            if not stats then
-                print("[Webhook] getMatchResult: No Stats found")
-                return "00:00:00", "0", "Unknown"
-            end
-            
-            local resultText = stats:FindFirstChild("Result")
-            local timeText = stats:FindFirstChild("ElapsedTime")
-            local waveText = stats:FindFirstChild("EndWave")
-            
-            local r = resultText and resultText.Text or "Unknown"
-            local t = timeText and timeText.Text or "00:00:00"
-            local w = waveText and waveText.Text or "0"
-            
-            print("[Webhook] Raw stats - Result:", r, "Time:", t, "Wave:", w)
-            
-            if t:find("Total Time:") then 
-                local m,s = t:match("Total Time:%s*(%d+):(%d+)") 
-                if m and s then 
-                    t = string.format("%02d:%02d:%02d", 0, tonumber(m) or 0, tonumber(s) or 0) 
-                end 
-            end
-            
-            if w:find("Wave Reached:") then 
-                local wm = w:match("Wave Reached:%s*(%d+)") 
-                if wm then w = wm end 
-            end
-            
-            if r:lower():find("win") or r:lower():find("victory") then 
-                r = "VICTORY" 
-            elseif r:lower():find("defeat") or r:lower():find("lose") or r:lower():find("loss") then 
-                r = "DEFEAT" 
-            end
-            
-            print("[Webhook] Parsed stats - Result:", r, "Time:", t, "Wave:", w)
+            if not stats then return "00:00:00", "0", "Unknown" end
+            local r = (stats:FindFirstChild("Result") and stats.Result.Text) or "Unknown"
+            local t = (stats:FindFirstChild("ElapsedTime") and stats.ElapsedTime.Text) or "00:00:00"
+            local w = (stats:FindFirstChild("EndWave") and stats.EndWave.Text) or "0"
+            if t:find("Total Time:") then local m,s = t:match("Total Time:%s*(%d+):(%d+)") if m and s then t = string.format("%02d:%02d:%02d", 0, tonumber(m) or 0, tonumber(s) or 0) end end
+            if w:find("Wave Reached:") then local wm = w:match("Wave Reached:%s*(%d+)") if wm then w = wm end end
+            if r:lower():find("win") or r:lower():find("victory") then r = "VICTORY" elseif r:lower():find("defeat") or r:lower():find("lose") or r:lower():find("loss") then r = "DEFEAT" end
             return t, w, r
         end)
-        
-        if ok then 
-            return time, wave, result 
-        else 
-            warn("[Webhook] Error in getMatchResult:", time)
-            return "00:00:00","0","Unknown" 
-        end
+        if ok then return time, wave, result else return "00:00:00","0","Unknown" end
     end
     local function getMapInfo()
         local ok, name, difficulty = pcall(function()
@@ -1950,132 +1823,73 @@ task.spawn(function()
     local lastWebhookHash = ""
     local function sendWebhook()
         pcall(function()
-            if not getgenv().WebhookEnabled then 
-                print("[Webhook] Webhook disabled, skipping")
-                return 
-            end
-            
-            if isProcessing then 
-                print("[Webhook] Already processing, skipping duplicate")
-                return 
-            end
-            
-            if getgenv()._webhookLock and (tick() - getgenv()._webhookLock) < 10 then 
-                print("[Webhook] Lock active, skipping duplicate (last sent:", tick() - getgenv()._webhookLock, "seconds ago)")
-                return 
-            end
-            
-            print("[Webhook] Starting webhook process...")
+            if not getgenv().WebhookEnabled then return end
+            if isProcessing then return end
+            if getgenv()._webhookLock and (tick() - getgenv()._webhookLock) < 10 then return end
             getgenv()._webhookLock = tick()
             isProcessing = true
             hasRun = tick()
-            
-            print("[Webhook] Capturing rewards...")
             local rewards = getRewards()
-            print("[Webhook] Rewards captured:", #rewards)
-            
             local matchTime, matchWave, matchResult = getMatchResult()
-            print("[Webhook] Match result:", matchTime, matchWave, matchResult)
-            
             local mapName, mapDifficulty = getMapInfo()
-            print("[Webhook] Map info:", mapName, mapDifficulty)
-            
             local clientData = getClientData()
-            if not clientData then 
-                print("[Webhook] Failed to get ClientData")
-                isProcessing = false
-                return
+            if not clientData then isProcessing = false return end
+            local function formatStats()
+                local stats = "<:gold:1265957290251522089> "..formatNumber(clientData.Gold or 0)
+                stats = stats .. "\n<:jewel:1217525743408648253> " .. formatNumber(clientData.Jewels or 0)
+                stats = stats .. "\n<:emerald:1389165843966984192> " .. formatNumber(clientData.Emeralds or 0)
+                stats = stats .. "\n<:rerollshard:1426315987019501598> " .. formatNumber(clientData.Rerolls or 0)
+                stats = stats .. "\n<:candybasket:1426304615284084827> " .. formatNumber(clientData.CandyBasket or 0)
+                local bingoStamps = 0
+                if clientData.ItemData and clientData.ItemData.HallowenBingoStamp then bingoStamps = clientData.ItemData.HallowenBingoStamp.Amount or 0 end
+                stats = stats .. "\n<:bingostamp:1426362482141954068> " .. formatNumber(bingoStamps)
+                return stats
             end
-        local description = "**Username:** ||"..LocalPlayer.Name.."||\n**Level:** "..(clientData.Level or 0).." ["..formatNumber(clientData.EXP or 0).."/"..formatNumber(clientData.MaxEXP or 0).."]"
-        local stats = "<:gold:1265957290251522089> "..formatNumber(clientData.Gold or 0)
-        stats = stats .. "\n<:jewel:1217525743408648253> " .. formatNumber(clientData.Jewels or 0)
-        stats = stats .. "\n<:emerald:1389165843966984192> " .. formatNumber(clientData.Emeralds or 0)
-        stats = stats .. "\n<:rerollshard:1426315987019501598> " .. formatNumber(clientData.Rerolls or 0)
-        stats = stats .. "\n<:candybasket:1426304615284084827> " .. formatNumber(clientData.CandyBasket or 0)
-        local bingoStamps = 0
-        if clientData.ItemData and clientData.ItemData.HallowenBingoStamp then bingoStamps = clientData.ItemData.HallowenBingoStamp.Amount or 0 end
-        stats = stats .. "\n<:bingostamp:1426362482141954068> " .. formatNumber(bingoStamps)
-        local rewardsText = ""
-        if #rewards > 0 then
-            for _, r in ipairs(rewards) do
-                local total = 0
-                local itemName = r.name
-                
-                if clientData[itemName] and type(clientData[itemName]) == "number" then
-                    total = clientData[itemName]
-                elseif clientData.ItemData and clientData.ItemData[itemName] and clientData.ItemData[itemName].Amount then
-                    total = clientData.ItemData[itemName].Amount
-                elseif clientData.Items and clientData.Items[itemName] and clientData.Items[itemName].Amount then
-                    total = clientData.Items[itemName].Amount
-                elseif itemName == "Candy Basket" and clientData.CandyBasket then
-                    total = clientData.CandyBasket
-                elseif itemName:find("Bingo Stamp") and clientData.ItemData and clientData.ItemData.HallowenBingoStamp then
-                    total = clientData.ItemData.HallowenBingoStamp.Amount or 0
-                else
-                    total = r.amount
+            local rewardsText = ""
+            if #rewards > 0 then
+                for _, r in ipairs(rewards) do
+                    local total = 0
+                    local itemName = r.name
+                    if clientData[itemName] and type(clientData[itemName]) == "number" then total = clientData[itemName]
+                    elseif clientData.ItemData and clientData.ItemData[itemName] and clientData.ItemData[itemName].Amount then total = clientData.ItemData[itemName].Amount
+                    elseif clientData.Items and clientData.Items[itemName] and clientData.Items[itemName].Amount then total = clientData.Items[itemName].Amount
+                    elseif itemName == "Candy Basket" and clientData.CandyBasket then total = clientData.CandyBasket
+                    elseif itemName:find("Bingo Stamp") and clientData.ItemData and clientData.ItemData.HallowenBingoStamp then total = clientData.ItemData.HallowenBingoStamp.Amount or 0
+                    else total = r.amount end
+                    rewardsText = rewardsText .. "+"..formatNumber(r.amount).." "..itemName.." [ Total: "..formatNumber(total).." ]\n"
                 end
-                
-                rewardsText = rewardsText .. "+"..formatNumber(r.amount).." "..itemName.." [ Total: "..formatNumber(total).." ]\n"
-            end
-        else 
-            rewardsText = "No rewards found" 
-        end
-        local unitsText = ""
-        if clientData.Slots then
-            local slots = {"Slot1","Slot2","Slot3","Slot4","Slot5","Slot6"}
-            for _,slotName in ipairs(slots) do
-                local slot = clientData.Slots[slotName]
-                if slot and slot.Value then
-                    local level = slot.Level or 0
-                    local kills = formatNumber(slot.Kills or 0)
-                    local unitName = slot.Value
-                    unitsText = unitsText .. "[ "..level.." ] "..unitName.." = "..kills.." ⚔️\n"
+            else rewardsText = "No rewards found" end
+            local unitsText = ""
+            if clientData.Slots then
+                local slots = {"Slot1","Slot2","Slot3","Slot4","Slot5","Slot6"}
+                for _,slotName in ipairs(slots) do
+                    local slot = clientData.Slots[slotName]
+                    if slot and slot.Value then
+                        local level = slot.Level or 0
+                        local kills = formatNumber(slot.Kills or 0)
+                        local unitName = slot.Value
+                        unitsText = unitsText .. "[ "..level.." ] "..unitName.." = "..kills.." ⚔️\n"
+                    end
                 end
             end
-        end
-        local embed = { title="Anime Last Stand", description=description or "N/A", color=0x00ff00, fields={
-            { name="Player Stats", value=(stats ~= "" and stats or "N/A"), inline=true },
-            { name="Rewards", value=(rewardsText ~= "" and rewardsText or "No rewards found"), inline=true },
-            { name="Units", value=(unitsText ~= "" and unitsText or "No units"), inline=false },
-            { name="Match Result", value=(matchTime or "00:00:00") .. " - Wave " .. tostring(matchWave or "0") .. "\n" .. (mapName or "Unknown Map") .. ((mapDifficulty and mapDifficulty ~= "Unknown") and (" ["..mapDifficulty.."]") or "") .. " - " .. (matchResult or "Unknown"), inline=false }
+            local description = "**Username:** ||"..LocalPlayer.Name.."||\n**Level:** "..(clientData.Level or 0).." ["..formatNumber(clientData.EXP or 0).."/"..formatNumber(clientData.MaxEXP or 0).."]"
+            local embed = { title="Anime Last Stand", description=description or "N/A", color=0x00ff00, fields={
+                { name="Player Stats", value=(formatStats() ~= "" and formatStats() or "N/A"), inline=true },
+                { name="Rewards", value=(rewardsText ~= "" and rewardsText or "No rewards found"), inline=true },
+                { name="Units", value=(unitsText ~= "" and unitsText or "No units"), inline=false },
+                { name="Match Result", value=(matchTime or "00:00:00") .. " - Wave " .. tostring(matchWave or "0") .. "\n" .. (mapName or "Unknown Map") .. ((mapDifficulty and mapDifficulty ~= "Unknown") and (" ["..mapDifficulty.."]") or "") .. " - " .. (matchResult or "Unknown"), inline=false }
             }, footer={ text="Halloween Hook" } }
-            
             local webhookHash = LocalPlayer.Name .. "_" .. matchTime .. "_" .. matchWave .. "_" .. rewardsText
-            if webhookHash == lastWebhookHash then
-                print("[Webhook] Duplicate detected (same hash), skipping send")
-                isProcessing = false
-                return
-            end
+            if webhookHash == lastWebhookHash then isProcessing = false return end
             lastWebhookHash = webhookHash
-            
             SendMessageEMBED(getgenv().WebhookURL, embed)
             print("[Webhook] Successfully sent!")
-            
-            rewards = nil
-            clientData = nil
-            embed = nil
-            
             isProcessing=false
         end)
     end
-    LocalPlayer.PlayerGui.ChildAdded:Connect(function(child) 
-        if child.Name == "EndGameUI" and getgenv().WebhookEnabled then 
-            print("[Webhook] EndGameUI detected, capturing data immediately...")
-            sendWebhook() 
-        end 
-    end)
-    
-    LocalPlayer.PlayerGui.ChildRemoved:Connect(function(child) 
-        if child.Name == "EndGameUI" then 
-            task.wait(1)
-            isProcessing = false
-            
-            print("[System] EndGameUI removed, performing full cleanup...")
-            
-            if getgenv()._lastRewardHash then getgenv()._lastRewardHash = nil end
-            
-            print("[System] Cleanup complete, ready for next round")
-        end 
+    LocalPlayer.PlayerGui.ChildAdded:Connect(function(child) if child.Name == "EndGameUI" and getgenv().WebhookEnabled then sendWebhook() end end)
+    LocalPlayer.PlayerGui.ChildRemoved:Connect(function(child)
+        if child.Name == "EndGameUI" then task.wait(1) isProcessing = false if getgenv()._lastRewardHash then getgenv()._lastRewardHash = nil end end
     end)
 end)
 
@@ -2087,28 +1901,17 @@ task.spawn(function()
         local lastEndgameTime = 0
         local DEBOUNCE_TIME = 5
         local maxWait = 0
-        repeat 
-            task.wait(0.5) 
-            maxWait = maxWait + 0.5
-        until not LocalPlayer.PlayerGui:FindFirstChild("TeleportUI") or maxWait > 30
+        repeat task.wait(0.5) maxWait = maxWait + 0.5 until not LocalPlayer.PlayerGui:FindFirstChild("TeleportUI") or maxWait > 30
         print("[Seamless Fix] Waiting for Settings GUI...")
         maxWait = 0
-        repeat 
-            task.wait(0.5)
-            maxWait = maxWait + 0.5
-        until LocalPlayer.PlayerGui:FindFirstChild("Settings") or maxWait > 30
+        repeat task.wait(0.5) maxWait = maxWait + 0.5 until LocalPlayer.PlayerGui:FindFirstChild("Settings") or maxWait > 30
         print("[Seamless Fix] Settings GUI found!")
         local function getSeamlessValue()
             local ok, result = pcall(function()
                 local settings = LocalPlayer.PlayerGui:FindFirstChild("Settings")
                 if settings then
                     local seamless = settings:FindFirstChild("SeamlessRetry")
-                    if seamless then 
-                        print("[Seamless Fix] SeamlessRetry.Value =", seamless.Value)
-                        return seamless.Value 
-                    else
-                        print("[Seamless Fix] SeamlessRetry not found in Settings")
-                    end
+                    if seamless then return seamless.Value else print("[Seamless Fix] SeamlessRetry not found in Settings") end
                 else
                     print("[Seamless Fix] Settings not found")
                 end
@@ -2120,90 +1923,50 @@ task.spawn(function()
             pcall(function()
                 local remotes = RS:FindFirstChild("Remotes")
                 local setSettings = remotes and remotes:FindFirstChild("SetSettings")
-                if setSettings then
-                    setSettings:InvokeServer("SeamlessRetry")
-                end
+                if setSettings then setSettings:InvokeServer("SeamlessRetry") end
             end)
         end
         print("[Seamless Fix] Checking initial seamless state...")
         local currentSeamless = getSeamlessValue()
         if endgameCount < (getgenv().MaxSeamlessRounds or 4) then
-            if not currentSeamless then
-                setSeamlessRetry()
-                task.wait(0.5)
-                print("[Seamless Fix] Enabled Seamless Retry")
-            else
-                print("[Seamless Fix] Seamless Retry already enabled")
-            end
+            if not currentSeamless then setSeamlessRetry() task.wait(0.5) print("[Seamless Fix] Enabled Seamless Retry") else print("[Seamless Fix] Seamless Retry already enabled") end
         end
         LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
             pcall(function()
                 if child.Name == "EndGameUI" and not hasRun then
                     local currentTime = tick()
-                    if currentTime - lastEndgameTime < DEBOUNCE_TIME then
-                        print("[Seamless Fix] Debounced duplicate EndGameUI trigger")
-                        return
-                    end
+                    if currentTime - lastEndgameTime < DEBOUNCE_TIME then print("[Seamless Fix] Debounced duplicate EndGameUI trigger") return end
                     hasRun = true
                     lastEndgameTime = currentTime
                     endgameCount = endgameCount + 1
                     local maxRounds = getgenv().MaxSeamlessRounds or 4
                     print("[Seamless Fix] Endgame detected. Current seamless rounds: " .. endgameCount .. "/" .. maxRounds)
                     if endgameCount >= maxRounds then
-                        if getSeamlessValue() then
-                            task.wait(0.5)
-                            setSeamlessRetry()
-                            print("[Seamless Fix] Max rounds reached, disabling seamless retry to restart match...")
-                            task.wait(0.5)
-                            print("[Seamless Fix] Disabled Seamless Retry")
-                        else
-                            print("[Seamless Fix] Max rounds reached but seamless already disabled")
-                        end
+                        if getSeamlessValue() then task.wait(0.5) setSeamlessRetry() print("[Seamless Fix] Max rounds reached, disabling seamless retry to restart match...") task.wait(0.5) print("[Seamless Fix] Disabled Seamless Retry") else print("[Seamless Fix] Max rounds reached but seamless already disabled") end
                     end
                 end
             end)
         end)
-        LocalPlayer.PlayerGui.ChildRemoved:Connect(function(child)
-            if child.Name == "EndGameUI" then
-                task.wait(2)
-                hasRun = false
-            end
-        end)
+        LocalPlayer.PlayerGui.ChildRemoved:Connect(function(child) if child.Name == "EndGameUI" then task.wait(2) hasRun = false end end)
     end)
 end)
 
 task.spawn(function()
     if not isInLobby then return end
     task.wait(1)
-    
     local BingoEvents = RS:FindFirstChild("Events") and RS.Events:FindFirstChild("Bingo")
     if not BingoEvents then return end
-    
     local UseStampEvent = BingoEvents:FindFirstChild("UseStamp")
     local ClaimRewardEvent = BingoEvents:FindFirstChild("ClaimReward")
     local CompleteBoardEvent = BingoEvents:FindFirstChild("CompleteBoard")
-    
     print("[Auto Bingo] Bingo automation loaded!")
-    
     while true do
         task.wait(0.1)
         if getgenv().BingoEnabled then
             pcall(function()
-                if UseStampEvent then
-                    for i=1,25 do 
-                        UseStampEvent:FireServer()
-                    end
-                end
-                
-                if ClaimRewardEvent then
-                    for i=1,25 do 
-                        ClaimRewardEvent:InvokeServer(i)
-                    end
-                end
-                
-                if CompleteBoardEvent then 
-                    CompleteBoardEvent:InvokeServer()
-                end
+                if UseStampEvent then for i=1,25 do UseStampEvent:FireServer() end end
+                if ClaimRewardEvent then for i=1,25 do ClaimRewardEvent:InvokeServer(i) end end
+                if CompleteBoardEvent then CompleteBoardEvent:InvokeServer() end
             end)
         end
         if isUnloaded then break end
@@ -2223,26 +1986,13 @@ task.spawn(function()
             if clientData then
                 local candyBasket = clientData.CandyBasket or 0
                 local capsuleAmount = 0
-                if clientData.ItemData and clientData.ItemData.HalloweenCapsule2025 then
-                    capsuleAmount = clientData.ItemData.HalloweenCapsule2025.Amount or 0
-                end
-                
-                if candyBasket >= 100000 then 
-                    pcall(function() PurchaseEvent:InvokeServer(1, 100) end)
-                elseif candyBasket >= 10000 then 
-                    pcall(function() PurchaseEvent:InvokeServer(1, 10) end)
-                elseif candyBasket >= 1000 then 
-                    pcall(function() PurchaseEvent:InvokeServer(1, 1) end)
-                end
-                
+                if clientData.ItemData and clientData.ItemData.HalloweenCapsule2025 then capsuleAmount = clientData.ItemData.HalloweenCapsule2025.Amount or 0 end
+                if candyBasket >= 100000 then pcall(function() PurchaseEvent:InvokeServer(1, 100) end)
+                elseif candyBasket >= 10000 then pcall(function() PurchaseEvent:InvokeServer(1, 10) end)
+                elseif candyBasket >= 1000 then pcall(function() PurchaseEvent:InvokeServer(1, 1) end) end
                 clientData = getClientData()
-                if clientData and clientData.ItemData and clientData.ItemData.HalloweenCapsule2025 then 
-                    capsuleAmount = clientData.ItemData.HalloweenCapsule2025.Amount or 0 
-                end
-                
-                if capsuleAmount > 0 then 
-                    pcall(function() OpenCapsuleEvent:FireServer("HalloweenCapsule2025", capsuleAmount) end)
-                end
+                if clientData and clientData.ItemData and clientData.ItemData.HalloweenCapsule2025 then capsuleAmount = clientData.ItemData.HalloweenCapsule2025.Amount or 0 end
+                if capsuleAmount > 0 then pcall(function() OpenCapsuleEvent:FireServer("HalloweenCapsule2025", capsuleAmount) end) end
             end
         end
         if isUnloaded then break end
@@ -2257,110 +2007,48 @@ if isInLobby then
         print("[Breach Auto-Join] Valid Lobby PlaceIds:", table.concat(LOBBY_PLACEIDS, ", "))
         print("[Breach Auto-Join] BreachEnabled:", getgenv().BreachEnabled)
         print("[Breach Auto-Join] BreachAutoJoin table:", game:GetService("HttpService"):JSONEncode(getgenv().BreachAutoJoin))
-        
         print("[Breach Auto-Join] Breach automation loaded! (Will check lobby status each loop)")
-        
         local function getAvailableBreaches()
             local ok, breaches = pcall(function()
                 local lobby = workspace:FindFirstChild("Lobby")
-                if not lobby then 
-                    print("[Breach Auto-Join] ERROR: No Lobby found in workspace")
-                    return {} 
-                end
-                
+                if not lobby then print("[Breach Auto-Join] ERROR: No Lobby found in workspace") return {} end
                 local breachesFolder = lobby:FindFirstChild("Breaches")
-                if not breachesFolder then 
-                    print("[Breach Auto-Join] ERROR: No Breaches folder found in Lobby")
-                    return {} 
-                end
-                
-                print("[Breach Auto-Join] Scanning Breaches folder...")
-                print("[Breach Auto-Join] Total children in Breaches:", #breachesFolder:GetChildren())
-                
+                if not breachesFolder then print("[Breach Auto-Join] ERROR: No Breaches folder found in Lobby") return {} end
                 local available = {}
-                local scannedCount = 0
                 local children = breachesFolder:GetChildren()
-                
                 for i = 1, #children do
                     local part = children[i]
-                    scannedCount = scannedCount + 1
-                    
                     local breachPart = part:FindFirstChild("Breach")
                     if breachPart then
-                        print("[Breach Auto-Join] Found Breach part in:", part.Name)
-                        
                         local proximityPrompt = breachPart:FindFirstChild("ProximityPrompt")
                         if proximityPrompt and proximityPrompt:IsA("ProximityPrompt") then
-                            print("[Breach Auto-Join]   ProximityPrompt found!")
-                            print("[Breach Auto-Join]   ObjectText:", proximityPrompt.ObjectText)
-                            
                             if proximityPrompt.ObjectText and proximityPrompt.ObjectText ~= "" then
                                 local breachName = proximityPrompt.ObjectText
                                 available[#available + 1] = { name = breachName, instance = part }
-                                print("[Breach Auto-Join]   ✓ Added breach:", breachName)
-                            else
-                                print("[Breach Auto-Join]   ✗ ObjectText is empty")
                             end
-                        else
-                            print("[Breach Auto-Join]   ✗ No ProximityPrompt found in Breach part")
                         end
                     end
                 end
-                
-                print("[Breach Auto-Join] Scanned", scannedCount, "parts, found", #available, "breaches")
-                children = nil
                 return available
             end)
-            
-            if not ok then
-                warn("[Breach Auto-Join] ERROR in getAvailableBreaches:", breaches)
-                return {}
-            end
-            
+            if not ok then return {} end
             return breaches or {}
         end
-        
-        local loopCount = 0
         while true do
             task.wait(1)
-            loopCount = loopCount + 1
-            
-            local currentlyInLobby = checkIsInLobby()
-            
             if getgenv().BreachEnabled then
                 local availableBreaches = getAvailableBreaches()
-                
-                print("[Breach Auto-Join] Available breaches:", #availableBreaches)
-                
                 for _, breach in ipairs(availableBreaches) do
                     local shouldJoin = getgenv().BreachAutoJoin[breach.name]
-                    print("[Breach Auto-Join] Breach:", breach.name)
-                    print("[Breach Auto-Join]   Should join:", shouldJoin)
-                    print("[Breach Auto-Join]   Instance:", breach.instance:GetFullName())
-                    
                     if shouldJoin then
-                        print("[Breach Auto-Join]   Attempting to join...")
-                        
-                        local success, err = pcall(function()
+                        pcall(function()
                             local remote = RS.Remotes.Breach.EnterEvent
-                            print("[Breach Auto-Join]   Remote:", remote:GetFullName())
-                            print("[Breach Auto-Join]   Firing with:", breach.instance)
-                            
                             remote:FireServer(breach.instance)
-                            print("[Breach Auto-Join]   ✓✓✓ SUCCESSFULLY FIRED REMOTE ✓✓✓")
                         end)
-                        
-                        if not success then
-                            warn("[Breach Auto-Join]   ✗✗✗ FAILED:", err)
-                        end
-                        
                         task.wait(0.5)
-                    else
-                        print("[Breach Auto-Join]   Skipping (not enabled)")
                     end
                 end
             end
-
         end
     end)
 end
@@ -2368,58 +2056,36 @@ end
 if isInLobby then
     task.spawn(function()
         print("[Auto Join] Auto Join system loaded!")
-        
         while true do
             task.wait(2)
-            
             if getgenv().AutoJoinConfig and getgenv().AutoJoinConfig.enabled then
                 pcall(function()
                     local mode = getgenv().AutoJoinConfig.mode
                     local map = getgenv().AutoJoinConfig.map
                     local act = getgenv().AutoJoinConfig.act
                     local difficulty = getgenv().AutoJoinConfig.difficulty
-                    
                     if not map or map == "" then return end
-                    
                     local teleporterRemote = RS.Remotes.Teleporter.InteractEvent
-                    
                     if mode == "Story" then
                         teleporterRemote:FireServer("Select", map, act, difficulty, "Story")
-                        print("[Auto Join] Joined Story:", map, "Act", act, difficulty)
-                        
                     elseif mode == "Infinite" then
                         teleporterRemote:FireServer("Select", map, act, difficulty, "Infinite")
-                        print("[Auto Join] Joined Infinite:", map, "Act", act, difficulty)
-                        
                     elseif mode == "Raids" then
                         teleporterRemote:FireServer("Select", map, act)
-                        print("[Auto Join] Joined Raid:", map, "Act", act)
-                        
                     elseif mode == "Dungeon" then
                         teleporterRemote:FireServer("Select", map)
-                        print("[Auto Join] Joined Dungeon:", map)
-                        
                     elseif mode == "Survival" then
                         teleporterRemote:FireServer("Select", map)
-                        print("[Auto Join] Joined Survival:", map)
-                        
                     elseif mode == "ElementalCaverns" then
                         teleporterRemote:FireServer("Select", map, difficulty)
-                        print("[Auto Join] Joined Elemental Cavern:", map, difficulty)
-                        
                     elseif mode == "Challenge" then
                         teleporterRemote:FireServer("Select", "Challenge", act)
-                        print("[Auto Join] Joined Challenge Act", act)
-                        
                     elseif mode == "LegendaryStages" then
                         teleporterRemote:FireServer("Select", map, act, difficulty, "LegendaryStages")
-                        print("[Auto Join] Joined Legendary Stage:", map, "Act", act, difficulty)
                     end
-                    
                     task.wait(1)
                 end)
             end
-            
             if getgenv().AutoJoinConfig and getgenv().AutoJoinConfig.autoStart then
                 pcall(function()
                     local bottomGui = LocalPlayer.PlayerGui:FindFirstChild("Bottom")
@@ -2436,10 +2102,7 @@ if isInLobby then
                                         if textLabel and textLabel.Text == "Start" then
                                             local remotes = RS:FindFirstChild("Remotes")
                                             local playerReady = remotes and remotes:FindFirstChild("PlayerReady")
-                                            if playerReady then
-                                                playerReady:FireServer()
-                                                print("[Auto Join] Auto Start fired")
-                                            end
+                                            if playerReady then playerReady:FireServer() end
                                         end
                                     end
                                 end
@@ -2451,4 +2114,5 @@ if isInLobby then
         end
     end)
 end
-SaveManager:LoadAutoloadConfig()
+
+SaveManagerUI:LoadAutoloadConfig()
