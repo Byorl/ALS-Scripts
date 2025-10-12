@@ -41,7 +41,6 @@ local function migrateOldConfig()
     local oldConfigPath = getOldConfigPath()
     local newConfigPath = getConfigPath()
     
-    -- Check if old config exists and new one doesn't
     if isfile(oldConfigPath) and not isfile(newConfigPath) then
         print("[Config] Migrating old config to user-specific folder...")
         local ok, oldData = pcall(function()
@@ -49,13 +48,11 @@ local function migrateOldConfig()
         end)
         
         if ok and oldData then
-            -- Create user folder
             local userFolder = getUserFolder()
             if not isfolder(userFolder) then
                 makefolder(userFolder)
             end
             
-            -- Copy old config to new location
             pcall(function()
                 writefile(newConfigPath, oldData)
                 print("[Config] Migration successful! Config moved to: " .. newConfigPath)
@@ -74,7 +71,6 @@ local function loadConfig()
         makefolder(userFolder)
     end
     
-    -- Migrate old config if it exists
     migrateOldConfig()
     
     local configPath = getConfigPath()
@@ -1056,6 +1052,14 @@ spawn(function()
 end)
 
 task.spawn(function()
+    while true do
+        task.wait(60)
+        collectgarbage("collect")
+        if isUnloaded then break end
+    end
+end)
+
+task.spawn(function()
     repeat task.wait() until game.CoreGui:FindFirstChild("RobloxPromptGui")
     local TeleportService = game:GetService("TeleportService")
     local promptOverlay = game.CoreGui.RobloxPromptGui.promptOverlay
@@ -1121,16 +1125,19 @@ end)
 
 task.spawn(function()
     while true do
-        task.wait(0.2)
+        task.wait(1)
         if getgenv().RemoveEnemiesEnabled then
             pcall(function()
                 local enemies = workspace:FindFirstChild("Enemies")
                 if enemies then
-                    for _, enemy in pairs(enemies:GetChildren()) do
+                    local children = enemies:GetChildren()
+                    for i = 1, #children do
+                        local enemy = children[i]
                         if enemy:IsA("Model") and enemy.Name ~= "Boss" then 
                             enemy:Destroy()
                         end
                     end
+                    children = nil
                 end
                 
                 local spawnedunits = workspace:FindFirstChild("SpawnedUnits")
@@ -1280,7 +1287,7 @@ end)
 
 task.spawn(function()
     while true do
-        task.wait(0.5)
+        task.wait(1)
         if getgenv().AutoReadyEnabled then
             pcall(function()
                 local bottomGui = LocalPlayer.PlayerGui:FindFirstChild("Bottom")
@@ -1300,7 +1307,7 @@ task.spawn(function()
                                         if playerReady then
                                             playerReady:FireServer()
                                             print("[Auto Ready] Player ready fired")
-                                            task.wait(1)
+                                            task.wait(2)
                                         end
                                     end
                                 end
@@ -1476,7 +1483,7 @@ task.spawn(function()
     end
 
     while true do
-        task.wait(0.5)
+        task.wait(1)
         if getgenv().AutoAbilitiesEnabled then
             pcall(function()
                 local currentWave = getCurrentWave()
@@ -1517,17 +1524,23 @@ task.spawn(function()
             local prompt = playerGui:FindFirstChild("Prompt") if not prompt then return nil end
             local frame = prompt:FindFirstChild("Frame") if not frame or not frame:FindFirstChild("Frame") then return nil end
             local cards, cardButtons = {}, {}
-            for _, d in pairs(frame:GetDescendants()) do
+            local descendants = frame:GetDescendants()
+            for i = 1, #descendants do
+                local d = descendants[i]
                 if d:IsA("TextLabel") and d.Parent and d.Parent:IsA("Frame") then
                     local text = d.Text
                     if getgenv().CardPriority[text] then
                         local button = d.Parent.Parent
-                        if button:IsA("GuiButton") or button:IsA("TextButton") or button:IsA("ImageButton") then table.insert(cardButtons, {text=text, button=button}) end
+                        if button:IsA("GuiButton") or button:IsA("TextButton") or button:IsA("ImageButton") then 
+                            table.insert(cardButtons, {text=text, button=button}) 
+                        end
                     end
                 end
             end
+            descendants = nil
             table.sort(cardButtons, function(a,b) return a.button.AbsolutePosition.X < b.button.AbsolutePosition.X end)
             for i, c in ipairs(cardButtons) do cards[i] = { name=c.text, button=c.button } end
+            cardButtons = nil
             return #cards > 0 and cards or nil
         end)
         return ok and result or nil
@@ -1610,7 +1623,7 @@ task.spawn(function()
         return ok
     end
     while true do 
-        task.wait(0.5)
+        task.wait(1)
         if getgenv().CardSelectionEnabled then 
             selectCard() 
         elseif getgenv().SlowerCardSelectionEnabled then 
@@ -1627,17 +1640,23 @@ task.spawn(function()
             local prompt = playerGui:FindFirstChild("Prompt") if not prompt then return nil end
             local frame = prompt:FindFirstChild("Frame") if not frame or not frame:FindFirstChild("Frame") then return nil end
             local cards, cardButtons = {}, {}
-            for _, d in pairs(frame:GetDescendants()) do
-            if d:IsA("TextLabel") and d.Parent and d.Parent:IsA("Frame") then
-                local text = d.Text
-                if getgenv().BossRushCardPriority[text] then
-                    local button = d.Parent.Parent
-                    if button:IsA("GuiButton") or button:IsA("TextButton") or button:IsA("ImageButton") then table.insert(cardButtons, {text=text, button=button}) end
+            local descendants = frame:GetDescendants()
+            for i = 1, #descendants do
+                local d = descendants[i]
+                if d:IsA("TextLabel") and d.Parent and d.Parent:IsA("Frame") then
+                    local text = d.Text
+                    if getgenv().BossRushCardPriority[text] then
+                        local button = d.Parent.Parent
+                        if button:IsA("GuiButton") or button:IsA("TextButton") or button:IsA("ImageButton") then 
+                            table.insert(cardButtons, {text=text, button=button}) 
+                        end
+                    end
                 end
             end
-        end
+            descendants = nil
             table.sort(cardButtons, function(a,b) return a.button.AbsolutePosition.X < b.button.AbsolutePosition.X end)
             for i, c in ipairs(cardButtons) do cards[i] = { name=c.text, button=c.button } end
+            cardButtons = nil
             return #cards > 0 and cards or nil
         end)
         return ok and result or nil
@@ -1679,7 +1698,7 @@ task.spawn(function()
         return ok
     end
     while true do 
-        task.wait(0.5)
+        task.wait(1)
         if getgenv().BossRushEnabled then 
             select() 
         end 
@@ -2082,7 +2101,7 @@ task.spawn(function()
     print("[Auto Bingo] Bingo automation loaded!")
     
     while true do
-        task.wait(0.3)
+        task.wait(0.1)
         if getgenv().BingoEnabled then
             pcall(function()
                 if UseStampEvent then
@@ -2175,8 +2194,10 @@ if isInLobby then
                 
                 local available = {}
                 local scannedCount = 0
+                local children = breachesFolder:GetChildren()
                 
-                for _, part in pairs(breachesFolder:GetChildren()) do
+                for i = 1, #children do
+                    local part = children[i]
                     scannedCount = scannedCount + 1
                     
                     local breachPart = part:FindFirstChild("Breach")
@@ -2190,7 +2211,7 @@ if isInLobby then
                             
                             if proximityPrompt.ObjectText and proximityPrompt.ObjectText ~= "" then
                                 local breachName = proximityPrompt.ObjectText
-                                table.insert(available, { name = breachName, instance = part })
+                                available[#available + 1] = { name = breachName, instance = part }
                                 print("[Breach Auto-Join]   ✓ Added breach:", breachName)
                             else
                                 print("[Breach Auto-Join]   ✗ ObjectText is empty")
@@ -2202,6 +2223,7 @@ if isInLobby then
                 end
                 
                 print("[Breach Auto-Join] Scanned", scannedCount, "parts, found", #available, "breaches")
+                children = nil
                 return available
             end)
             
