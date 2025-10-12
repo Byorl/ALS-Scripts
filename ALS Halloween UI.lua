@@ -1053,7 +1053,8 @@ end)
 
 task.spawn(function()
     while true do
-        task.wait(60)
+        task.wait(20)
+        collectgarbage("collect")
         collectgarbage("collect")
         if isUnloaded then break end
     end
@@ -1215,8 +1216,15 @@ task.spawn(function()
     end
     local GuiService = game:GetService("GuiService")
     local lastEndGameUICheck = 0
+    local loopCount = 0
     while true do
         task.wait(2)
+        loopCount = loopCount + 1
+        
+        if loopCount % 10 == 0 then
+            collectgarbage("collect")
+        end
+        
         pcall(function()
             local endGameUI = LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
             if endGameUI and endGameUI:FindFirstChild("BG") and endGameUI.BG:FindFirstChild("Buttons") then
@@ -1227,28 +1235,18 @@ task.spawn(function()
                 
                 if getgenv().WebhookEnabled then
                     if tick() - lastEndGameUICheck > 5 then
-                        print("[EndGameUI] First detection, waiting for webhook to complete...")
+                        print("[EndGameUI] Waiting for webhook to complete...")
                         lastEndGameUICheck = tick()
                         
-                        local waitTime = 0
-                        while waitTime < 8 do
-                            task.wait(0.5)
-                            waitTime = waitTime + 0.5
-                            if not isProcessing and waitTime > 4 then
-                                print("[EndGameUI] Webhook completed after", waitTime, "seconds")
-                                break
-                            end
-                        end
-                    end
-                    
-                    if isProcessing then
-                        print("[EndGameUI] Still processing, waiting more...")
                         local maxWait = 0
                         while isProcessing and maxWait < 10 do
                             task.wait(0.5)
                             maxWait = maxWait + 0.5
                         end
+                        print("[EndGameUI] Webhook completed, proceeding...")
                     end
+                else
+                    print("[EndGameUI] Webhook disabled, proceeding immediately")
                 end
                 
                 local buttonToPress = nil
@@ -1284,6 +1282,12 @@ task.spawn(function()
                     until not LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
                     GuiService.SelectedObject = nil
                     print("[EndGameUI] Clicked " .. actionName .. " button")
+                    
+                    buttons = nil
+                    nextButton = nil
+                    retryButton = nil
+                    leaveButton = nil
+                    buttonToPress = nil
                 end
             elseif GuiService.SelectedObject ~= nil then 
                 GuiService.SelectedObject = nil 
@@ -1748,24 +1752,33 @@ task.spawn(function()
             print("[Webhook] Found Holder, waiting for reward buttons to load...")
             
             local waitTime = 0
-            local hasTextButtons = false
+            local lastCount = 0
+            local stableCount = 0
+            
             repeat
-                task.wait(0.1)
-                waitTime = waitTime + 0.1
+                task.wait(0.2)
+                waitTime = waitTime + 0.2
+                
                 local children = holder:GetChildren()
+                local currentCount = 0
                 for i = 1, #children do
                     if children[i]:IsA("TextButton") then
-                        hasTextButtons = true
-                        break
+                        currentCount = currentCount + 1
                     end
                 end
-            until hasTextButtons or waitTime > 3
+                
+                if currentCount == lastCount and currentCount > 0 then
+                    stableCount = stableCount + 1
+                else
+                    stableCount = 0
+                end
+                
+                lastCount = currentCount
+                print("[Webhook] TextButtons found:", currentCount, "Stable for:", stableCount * 0.2, "s")
+                
+            until (stableCount >= 3 and currentCount > 0) or waitTime > 3
             
-            if not hasTextButtons then
-                print("[Webhook] WARNING: No TextButtons found after 3 seconds!")
-            else
-                print("[Webhook] TextButtons loaded after", waitTime, "seconds")
-            end
+            print("[Webhook] Finished waiting after", waitTime, "s. Total TextButtons:", lastCount)
             
             print("[Webhook] Scanning all children...")
             
@@ -2000,6 +2013,12 @@ task.spawn(function()
             
             SendMessageEMBED(getgenv().WebhookURL, embed)
             print("[Webhook] Successfully sent!")
+            
+            rewards = nil
+            clientData = nil
+            embed = nil
+            collectgarbage("collect")
+            
             isProcessing=false
         end)
     end
@@ -2014,6 +2033,10 @@ task.spawn(function()
         if child.Name == "EndGameUI" then 
             task.wait(1)
             isProcessing = false
+            
+            collectgarbage("collect")
+            collectgarbage("collect")
+            
             print("[Webhook] EndGameUI removed, ready for next webhook")
         end 
     end)
