@@ -251,7 +251,7 @@ local windowSuccess, Window = pcall(function()
         Icon = 72399447876912,
         NotifySide = getgenv().Config.inputs.NotificationSide or "Right",
         ShowCustomCursor = getgenv().Config.toggles.ShowCustomCursor ~= false,
-        Size = UDim2.fromOffset(620, 460),
+        Size = UDim2.fromOffset(650, 460),
     })
 end)
 
@@ -311,9 +311,11 @@ GB.WhatsNew_Right = Tabs.WhatsNew:AddRightGroupbox("✨ All Features")
 GB.Main_Left = Tabs.Main:AddLeftGroupbox("🚀 Auto Join System")
 GB.Main_Right = Tabs.Main:AddRightGroupbox("⚡ Game Automation")
 GB.Ability_Left = Tabs.Ability:AddLeftGroupbox("⚔️ Auto Ability System")
+GB.Ability_Right = Tabs.Ability:AddRightGroupbox("⚔️ Unit Abilities")
 GB.Card_Left = Tabs.CardSelection:AddLeftGroupbox("🃏 Card Priority System")
 GB.Card_Right = Tabs.CardSelection:AddRightGroupbox("Card Lists")
 GB.Boss_Left = Tabs.BossRush:AddLeftGroupbox("Boss Rush Controls")
+GB.Boss_Right = Tabs.BossRush:AddRightGroupbox("Boss Rush Cards")
 GB.Breach_Left = Tabs.Breach:AddLeftGroupbox("⚡ Breach Auto-Join")
 GB.Webhook_Left = Tabs.Webhook:AddLeftGroupbox("🔔 Discord Notifications")
 GB.Seam_Left = Tabs.SeamlessFix:AddLeftGroupbox("🔄 Seamless Retry Fix")
@@ -565,8 +567,8 @@ local function buildAutoAbilityUI()
             local unitName = slotData.Value
             local abilities = getAllAbilities(unitName)
             if next(abilities) then
-                GB.Ability_Left:AddDivider()
-                GB.Ability_Left:AddLabel(unitName .. " (" .. slotName .. " • Lvl " .. tostring(slotData.Level or 0) .. ")")
+                GB.Ability_Right:AddDivider()
+                GB.Ability_Right:AddLabel(unitName .. " (" .. slotName .. " • Lvl " .. tostring(slotData.Level or 0) .. ")")
                 if not getgenv().UnitAbilities[unitName] then getgenv().UnitAbilities[unitName] = {} end
                 local sortedAbilities = {}
                 for abilityName, data in pairs(abilities) do
@@ -591,7 +593,7 @@ local function buildAutoAbilityUI()
                         cfg.useOnWave = saved.useOnWave or false
                     end
                     local abilityInfo = abilityName .. " (Lvl " .. abilityData.requiredLevel .. " • CD: " .. tostring(abilityData.cooldown) .. "s" .. (abilityData.isAttribute and " • 🔒 Attribute" or "") .. ")"
-                    addToggle(GB.Ability_Left, unitName .. "_" .. abilityName .. "_Toggle", abilityInfo, defaultToggle, function(v)
+                    addToggle(GB.Ability_Right, unitName .. "_" .. abilityName .. "_Toggle", abilityInfo, defaultToggle, function(v)
                         cfg.enabled = v
                         getgenv().Config.abilities[unitName] = getgenv().Config.abilities[unitName] or {}
                         getgenv().Config.abilities[unitName][abilityName] = getgenv().Config.abilities[unitName][abilityName] or {}
@@ -605,7 +607,7 @@ local function buildAutoAbilityUI()
                     if cfg.delayAfterBossSpawn then defaultList["Delay After Boss Spawn"] = true end
                     if cfg.useOnWave then defaultList["On Wave"] = true end
 
-                    GB.Ability_Left:AddDropdown(unitName .. "_" .. abilityName .. "_Modifiers", {
+                    GB.Ability_Right:AddDropdown(unitName .. "_" .. abilityName .. "_Modifiers", {
                         Values = {"Only On Boss","Boss In Range","Delay After Boss Spawn","On Wave"},
                         Multi = true,
                         Text = "  > Conditions",
@@ -631,7 +633,7 @@ local function buildAutoAbilityUI()
                     if Options[unitName .. "_" .. abilityName .. "_Modifiers"] then
                         Options[unitName .. "_" .. abilityName .. "_Modifiers"]:SetValue(defaultList)
                     end
-                    GB.Ability_Left:AddInput(unitName .. "_" .. abilityName .. "_Wave", {
+                    GB.Ability_Right:AddInput(unitName .. "_" .. abilityName .. "_Wave", {
                         Text = "  > Wave Number",
                         Default = (saved and saved.specificWave and tostring(saved.specificWave)) or "",
                         Numeric = true,
@@ -763,15 +765,16 @@ do
     end
 end
 
-GB.Boss_Left:AddLabel("Lower number = higher priority • Set to 999 to avoid", true)
 addToggle(GB.Boss_Left, "BossRushToggle", "Enable Boss Rush Card Selection", getgenv().BossRushEnabled, function(v)
     getgenv().BossRushEnabled = v
     getgenv().Config.toggles.BossRushToggle = v
     saveConfig(getgenv().Config)
     notify("Boss Rush", v and "Enabled" or "Disabled", 3)
 end)
-GB.Boss_Left:AddDivider()
-GB.Boss_Left:AddLabel("🎯 General Cards")
+
+GB.Boss_Right:AddLabel("Lower number = higher priority • Set to 999 to avoid", true)
+GB.Boss_Right:AddDivider()
+GB.Boss_Right:AddLabel("🎯 General Cards")
 do
     local brNames = {}
     for k in pairs(BossRushGeneral) do table.insert(brNames, k) end
@@ -787,7 +790,7 @@ do
                 for _, card in pairs(cards) do if card.CardName == cardName then cardType = card.CardType or "Buff" break end end
             end
         end)
-        GB.Boss_Left:AddInput(inputKey, {
+        GB.Boss_Right:AddInput(inputKey, {
             Text = cardName .. " ("..cardType..")",
             Default = defaultValue,
             Numeric = true,
@@ -807,8 +810,8 @@ do
 end
 
 if not isInLobby then
-    GB.Boss_Left:AddDivider()
-    GB.Boss_Left:AddLabel("🏰 Babylonia Castle")
+    GB.Boss_Right:AddDivider()
+    GB.Boss_Right:AddLabel("🏰 Babylonia Castle")
     pcall(function()
         local babyloniaModule = RS:FindFirstChild("Modules"):FindFirstChild("CardHandler"):FindFirstChild("BossRushCards"):FindFirstChild("Babylonia Castle")
         if babyloniaModule then
@@ -819,7 +822,7 @@ if not isInLobby then
                 local inputKey = "BabyloniaCastle_" .. cardName
                 if not getgenv().BossRushCardPriority[cardName] then getgenv().BossRushCardPriority[cardName] = 999 end
                 local defaultValue = getgenv().Config.inputs[inputKey] or "999"
-                GB.Boss_Left:AddInput(inputKey, {
+                GB.Boss_Right:AddInput(inputKey, {
                     Text = cardName .. " ("..cardType..")",
                     Default = defaultValue,
                     Numeric = true,
@@ -839,7 +842,7 @@ if not isInLobby then
         end
     end)
 else
-    GB.Boss_Left:AddLabel("Babylonia Castle cards are only available outside the lobby.", true)
+    GB.Boss_Right:AddLabel("Babylonia Castle cards are only available outside the lobby.", true)
 end
 
 if isInLobby then
@@ -1371,7 +1374,13 @@ task.spawn(function()
 end)
 
 task.spawn(function()
-    local GAME_SPEED = 3
+    local function getGameSpeed()
+        local ok, speed = pcall(function()
+            return RS:WaitForChild("TimeScale", 5).Value
+        end)
+        return ok and speed or 3
+    end
+    local GAME_SPEED = getGameSpeed()
     local Towers = workspace:WaitForChild("Towers", 10)
     local bossSpawnTime = nil
     local bossInRangeTracker = {}
