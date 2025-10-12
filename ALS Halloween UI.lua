@@ -440,6 +440,7 @@ GB.WhatsNew_Right = Tabs.WhatsNew:AddRightGroupbox("✨ All Features")
 GB.Main_Left = Tabs.Main:AddLeftGroupbox("🚀 Auto Join System")
 GB.Main_Right = Tabs.Main:AddRightGroupbox("⚡ Game Automation")
 GB.Ability_Left = Tabs.Ability:AddLeftGroupbox("⚔️ Auto Ability System")
+GB.Ability_Right = Tabs.Ability:AddRightGroupbox("📋 Your Units")
 GB.Card_Left = Tabs.CardSelection:AddLeftGroupbox("🃏 Card Priority System")
 GB.Card_Right = Tabs.CardSelection:AddRightGroupbox("Card Lists")
 GB.Boss_Left = Tabs.BossRush:AddLeftGroupbox("Boss Rush Controls")
@@ -674,6 +675,9 @@ addToggle(GB.Main_Right, "AutoReadyToggle", "Auto Ready", getgenv().Config.toggl
     notify("Auto Ready", val and "Enabled" or "Disabled", 3)
 end)
 
+GB.Ability_Left:AddLabel("Automatically trigger tower abilities based on conditions you set", true)
+GB.Ability_Left:AddDivider()
+
 addToggle(GB.Ability_Left, "AutoAbilityToggle", "Enable Auto Abilities", getgenv().AutoAbilitiesEnabled, function(val)
     getgenv().AutoAbilitiesEnabled = val
     getgenv().Config.toggles.AutoAbilityToggle = val
@@ -694,8 +698,8 @@ local function buildAutoAbilityUI()
             local unitName = slotData.Value
             local abilities = getAllAbilities(unitName)
             if next(abilities) then
-                GB.Ability_Left:AddDivider()
-                GB.Ability_Left:AddLabel(unitName .. " (" .. slotName .. " • Lvl " .. tostring(slotData.Level or 0) .. ")")
+                GB.Ability_Right:AddDivider()
+                GB.Ability_Right:AddLabel(unitName .. " (" .. slotName .. " • Lvl " .. tostring(slotData.Level or 0) .. ")")
                 if not getgenv().UnitAbilities[unitName] then getgenv().UnitAbilities[unitName] = {} end
                 local sortedAbilities = {}
                 for abilityName, data in pairs(abilities) do
@@ -734,7 +738,7 @@ local function buildAutoAbilityUI()
                     if cfg.delayAfterBossSpawn then defaultList["Delay After Boss Spawn"] = true end
                     if cfg.useOnWave then defaultList["On Wave"] = true end
 
-                    GB.Ability_Left:AddDropdown(unitName .. "_" .. abilityName .. "_Modifiers", {
+                    GB.Ability_Right:AddDropdown(unitName .. "_" .. abilityName .. "_Modifiers", {
                         Values = {"Only On Boss","Boss In Range","Delay After Boss Spawn","On Wave"},
                         Multi = true,
                         Text = "  > Conditions",
@@ -760,7 +764,7 @@ local function buildAutoAbilityUI()
                     if Options[unitName .. "_" .. abilityName .. "_Modifiers"] then
                         Options[unitName .. "_" .. abilityName .. "_Modifiers"]:SetValue(defaultList)
                     end
-                    GB.Ability_Left:AddInput(unitName .. "_" .. abilityName .. "_Wave", {
+                    GB.Ability_Right:AddInput(unitName .. "_" .. abilityName .. "_Wave", {
                         Text = "  > Wave Number",
                         Default = (saved and saved.specificWave and tostring(saved.specificWave)) or "",
                         Numeric = true,
@@ -2265,3 +2269,4 @@ if isInLobby then
 end
 
 SaveManagerUI:LoadAutoloadConfig()
+
