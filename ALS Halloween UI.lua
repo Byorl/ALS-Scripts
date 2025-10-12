@@ -3,7 +3,6 @@ repeat task.wait() until game:IsLoaded()
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
-print("[ALS] Waiting for game to fully load...")
 task.wait(2)
 
 local function isTeleportUIVisible()
@@ -26,7 +25,6 @@ local function isPlayerInValidState()
     return true
 end
 
-print("[ALS] Waiting for TeleportUI to disappear and valid player state...")
 local maxWaitTime = 0
 local maxWait = 20
 repeat
@@ -34,17 +32,8 @@ repeat
     maxWaitTime = maxWaitTime + 0.2
 until (not isTeleportUIVisible() and isPlayerInValidState()) or maxWaitTime > maxWait
 
-if maxWaitTime > maxWait then
-    print("[ALS] Timeout reached. Checking player state...")
-    if not isPlayerInValidState() then
-        warn("[ALS] Player not in valid state - may have failed to join game properly")
-        task.wait(3)
-        if not isPlayerInValidState() then
-            warn("[ALS] Still not in valid state after additional wait. Script may not work correctly.")
-        end
-    end
-else
-    print("[ALS] Player loaded successfully, starting script...")
+if maxWaitTime > maxWait and not isPlayerInValidState() then
+    task.wait(3)
 end
 
 task.wait(1)
@@ -402,7 +391,6 @@ local function cleanupBeforeTeleport()
         getgenv().AutoAbilitiesEnabled = nil
         getgenv().CardSelectionEnabled = nil
         getgenv().SlowerCardSelectionEnabled = nil
-        print("[ALS] ✓ Global variables cleared")
     end)
     
     pcall(function()
@@ -414,7 +402,6 @@ local function cleanupBeforeTeleport()
                 end
             end
         end
-        print("[ALS] ✓ All connections disconnected")
     end)
     
     pcall(function()
@@ -430,7 +417,6 @@ local function cleanupBeforeTeleport()
                 obj:Destroy()
             end
         end
-        print("[ALS] ✓ Workspace effects cleared")
     end)
     
     pcall(function()
@@ -439,7 +425,6 @@ local function cleanupBeforeTeleport()
                 gui:Destroy()
             end
         end
-        print("[ALS] ✓ Player GUI cleared")
     end)
     
     pcall(function()
@@ -449,7 +434,6 @@ local function cleanupBeforeTeleport()
                 gui:Destroy()
             end
         end
-        print("[ALS] ✓ CoreGui cleared")
     end)
     
     pcall(function()
@@ -459,7 +443,6 @@ local function cleanupBeforeTeleport()
                 effect:Destroy()
             end
         end
-        print("[ALS] ✓ Lighting effects cleared")
     end)
     
     pcall(function()
@@ -467,7 +450,6 @@ local function cleanupBeforeTeleport()
             collectgarbage("collect")
             task.wait(0.15)
         end
-        print("[ALS] ✓ Garbage collection completed (5x)")
     end)
     
     task.wait(0.8)
@@ -532,13 +514,6 @@ getgenv().Config.toggles = getgenv().Config.toggles or {}
 getgenv().Config.inputs = getgenv().Config.inputs or {}
 getgenv().Config.dropdowns = getgenv().Config.dropdowns or {}
 getgenv().Config.abilities = getgenv().Config.abilities or {}
-print("[Config] Loaded config for User ID: " .. USER_ID)
-print("[Config] Config path: " .. getConfigPath())
-print("[Config] Sample toggle values:")
-print("  - AutoAbilityToggle: " .. tostring(getgenv().Config.toggles.AutoAbilityToggle))
-print("  - CardSelectionToggle: " .. tostring(getgenv().Config.toggles.CardSelectionToggle))
-print("  - WebhookToggle: " .. tostring(getgenv().Config.toggles.WebhookToggle))
-print("  - AutoLeaveToggle: " .. tostring(getgenv().Config.toggles.AutoLeaveToggle))
 
 getgenv().AutoEventEnabled = getgenv().Config.toggles.AutoEventToggle or false
 getgenv().AutoAbilitiesEnabled = getgenv().Config.toggles.AutoAbilityToggle or false
@@ -564,12 +539,7 @@ getgenv().FinalExpAutoJoinEasyEnabled = getgenv().Config.toggles.FinalExpAutoJoi
 getgenv().FinalExpAutoJoinHardEnabled = getgenv().Config.toggles.FinalExpAutoJoinHardToggle or false
 getgenv().FinalExpAutoSkipShopEnabled = getgenv().Config.toggles.FinalExpAutoSkipShopToggle or false
 
-print("[Config] Auto Leave: " .. tostring(getgenv().AutoLeaveEnabled))
-print("[Config] Auto Replay: " .. tostring(getgenv().AutoFastRetryEnabled))
-print("[Config] Auto Next: " .. tostring(getgenv().AutoNextEnabled))
-print("[Config] Auto Smart: " .. tostring(getgenv().AutoSmartEnabled))
-print("[Config] Final Exp Auto Join Easy: " .. tostring(getgenv().FinalExpAutoJoinEasyEnabled))
-print("[Config] Final Exp Auto Join Hard: " .. tostring(getgenv().FinalExpAutoJoinHardEnabled))
+
 
 getgenv().WebhookURL = getgenv().Config.inputs.WebhookURL or ""
 getgenv().MaxSeamlessRounds = tonumber(getgenv().Config.inputs.SeamlessRounds) or 4
@@ -712,7 +682,6 @@ while not windowCreated and windowAttempts < 3 do
     if windowSuccess and result then
         Window = result
         windowCreated = true
-        print("[UI] Window created successfully!")
     else
         warn("[UI] Failed to create window (Attempt " .. windowAttempts .. "/3):", result)
         task.wait(1)
@@ -723,7 +692,6 @@ while not windowCreated and windowAttempts < 3 do
                 Size = UDim2.fromOffset(700, 460),
             })
             windowCreated = true
-            print("[UI] Window created with fallback settings")
         end
     end
 end
@@ -731,32 +699,32 @@ end
 task.wait(0.5)
 
 local UpdatesSection = Window:Section({
-    Title = "📰 Updates",
+    Title = "Updates",
     Icon = "newspaper",
 })
 
 local MainSection = Window:Section({
-    Title = "🎮 Main",
+    Title = "Main",
     Icon = "home",
 })
 
 local CombatSection = Window:Section({
-    Title = "⚔️ Combat",
+    Title = "Combat",
     Icon = "swords",
 })
 
 local ModesSection = Window:Section({
-    Title = "🎯 Game Modes",
+    Title = "Game Modes",
     Icon = "gamepad-2",
 })
 
 local AutomationSection = Window:Section({
-    Title = "🤖 Automation",
+    Title = "Automation",
     Icon = "zap",
 })
 
 local SettingsSection = Window:Section({
-    Title = "⚙️ Settings",
+    Title = "Settings",
     Icon = "settings",
 })
 
@@ -1298,12 +1266,13 @@ local function buildAutoAbilityUI()
                         Desc = abilityDesc,
                         Default = defaultToggle,
                         Callback = function(v)
-                        cfg.enabled = v
-                        getgenv().Config.abilities[unitName] = getgenv().Config.abilities[unitName] or {}
-                        getgenv().Config.abilities[unitName][abilityName] = getgenv().Config.abilities[unitName][abilityName] or {}
-                        getgenv().Config.abilities[unitName][abilityName].enabled = v
-                        saveConfig(getgenv().Config)
-                    end)
+                            cfg.enabled = v
+                            getgenv().Config.abilities[unitName] = getgenv().Config.abilities[unitName] or {}
+                            getgenv().Config.abilities[unitName][abilityName] = getgenv().Config.abilities[unitName][abilityName] or {}
+                            getgenv().Config.abilities[unitName][abilityName].enabled = v
+                            saveConfig(getgenv().Config)
+                        end,
+                    })
 
                     local defaultList = {}
                     if cfg.onlyOnBoss then defaultList["Only On Boss"] = true end
@@ -2190,9 +2159,9 @@ end)
 
 if isInLobby then
     task.spawn(function()
-        local finalExpRemote = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("FinalExpeditionStartEvent")
+        local finalExpRemote = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("FinalExpeditionStart")
         if not finalExpRemote then
-            warn("[Final Expedition] FinalExpeditionStartEvent not found")
+            warn("[Final Expedition] FinalExpeditionStart not found")
             return
         end
         while true do
