@@ -40,13 +40,11 @@ if isfile("ALSHalloweenEvent/autoexec.txt") then
         end)
     else
         print("[Auto Execute] queueteleport not found, using fallback methods")
-        -- Fallback method 1: TeleportInitFailed
         TeleportService.TeleportInitFailed:Connect(function()
             task.wait(2)
             loadstring(game:HttpGet(SCRIPT_URL))()
         end)
         
-        -- Fallback method 2: CoreGui DescendantRemoving
         game:GetService("CoreGui").DescendantRemoving:Connect(function(descendant)
             if descendant.Name == "Roblox" then
                 task.wait(0.5)
