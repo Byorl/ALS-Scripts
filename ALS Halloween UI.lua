@@ -194,10 +194,16 @@ getgenv().AutoFastRetryEnabled = getgenv().Config.toggles.AutoFastRetryToggle or
 getgenv().AutoNextEnabled = getgenv().Config.toggles.AutoNextToggle or false
 getgenv().AutoSmartEnabled = getgenv().Config.toggles.AutoSmartToggle or false
 
+getgenv().FinalExpAutoJoinEasyEnabled = getgenv().Config.toggles.FinalExpAutoJoinEasyToggle or false
+getgenv().FinalExpAutoJoinHardEnabled = getgenv().Config.toggles.FinalExpAutoJoinHardToggle or false
+getgenv().FinalExpAutoSkipShopEnabled = getgenv().Config.toggles.FinalExpAutoSkipShopToggle or false
+
 print("[Config] Auto Leave: " .. tostring(getgenv().AutoLeaveEnabled))
 print("[Config] Auto Replay: " .. tostring(getgenv().AutoFastRetryEnabled))
 print("[Config] Auto Next: " .. tostring(getgenv().AutoNextEnabled))
 print("[Config] Auto Smart: " .. tostring(getgenv().AutoSmartEnabled))
+print("[Config] Final Exp Auto Join Easy: " .. tostring(getgenv().FinalExpAutoJoinEasyEnabled))
+print("[Config] Final Exp Auto Join Hard: " .. tostring(getgenv().FinalExpAutoJoinHardEnabled))
 
 getgenv().WebhookURL = getgenv().Config.inputs.WebhookURL or ""
 getgenv().MaxSeamlessRounds = tonumber(getgenv().Config.inputs.SeamlessRounds) or 4
@@ -369,6 +375,7 @@ local Tabs = {
     CardSelection = Window:AddTab("Card Selection", "layout-grid"),
     BossRush = Window:AddTab("Boss Rush", "shield"),
     Breach = Window:AddTab("Breach", "triangle-alert"),
+    FinalExpedition = Window:AddTab("Final Expedition", "map"),
     Webhook = Window:AddTab("Webhook", "send"),
     SeamlessFix = Window:AddTab("Seamless Fix", "refresh-cw"),
     Event = Window:AddTab("Event", "gift"),
@@ -390,6 +397,8 @@ GB.Card_Right = Tabs.CardSelection:AddRightGroupbox("Card Lists")
 GB.Boss_Left = Tabs.BossRush:AddLeftGroupbox("Boss Rush Controls")
 GB.Boss_Right = Tabs.BossRush:AddRightGroupbox("Boss Rush Cards")
 GB.Breach_Left = Tabs.Breach:AddLeftGroupbox("⚡ Breach Auto-Join")
+GB.FinalExp_Left = Tabs.FinalExpedition:AddLeftGroupbox("🗺️ Auto Join")
+GB.FinalExp_Right = Tabs.FinalExpedition:AddRightGroupbox("⚙️ Automation")
 GB.Webhook_Left = Tabs.Webhook:AddLeftGroupbox("🔔 Discord Notifications")
 GB.Seam_Left = Tabs.SeamlessFix:AddLeftGroupbox("🔄 Seamless Retry Fix")
 GB.Event_Left = Tabs.Event:AddLeftGroupbox("🎃 Halloween 2025 Event")
@@ -397,6 +406,13 @@ GB.Misc_Left = Tabs.Misc:AddLeftGroupbox("⚡ Performance")
 GB.Misc_Right = Tabs.Misc:AddRightGroupbox("🔒 Safety & UI")
 GB.Settings_Left = Tabs.Settings:AddLeftGroupbox("💾 Config Management")
 GB.Settings_Right = Tabs.Settings:AddRightGroupbox("UI Settings")
+
+GB.WhatsNew_Left:AddLabel("�️ Fiinal Expedition Added!", true)
+GB.WhatsNew_Left:AddLabel("• New dedicated tab for Final Expedition", true)
+GB.WhatsNew_Left:AddLabel("• Auto Join Easy/Hard modes (Lobby)", true)
+GB.WhatsNew_Left:AddLabel("• Auto Skip Shop - selects dungeons automatically", true)
+GB.WhatsNew_Left:AddLabel("• Auto Leave on last room (Wave 10)", true)
+GB.WhatsNew_Left:AddDivider()
 
 GB.WhatsNew_Left:AddLabel("📱 Mobile Optimizations v2.0", true)
 GB.WhatsNew_Left:AddLabel("• Enhanced mobile executor compatibility", true)
@@ -456,6 +472,12 @@ GB.WhatsNew_Right:AddDivider()
 GB.WhatsNew_Right:AddLabel("🚨 Breach Auto-Join (Lobby)", true)
 GB.WhatsNew_Right:AddLabel("• Auto-join available breaches", true)
 GB.WhatsNew_Right:AddLabel("• Toggle individual breaches", true)
+GB.WhatsNew_Right:AddDivider()
+
+GB.WhatsNew_Right:AddLabel("�️ Fihnal Expedition (NEW!)", true)
+GB.WhatsNew_Right:AddLabel("• Auto Join Easy/Hard modes", true)
+GB.WhatsNew_Right:AddLabel("• Auto Skip Shop selections", true)
+GB.WhatsNew_Right:AddLabel("• Auto Leave on last room", true)
 GB.WhatsNew_Right:AddDivider()
 
 GB.WhatsNew_Right:AddLabel("🔔 Webhook Notifications", true)
@@ -987,6 +1009,40 @@ else
     GB.Breach_Left:AddLabel("The Auto Breach can only be used in the lobby.", true)
 end
 
+if isInLobby then
+    GB.FinalExp_Left:AddLabel("Automatically join Final Expedition", true)
+    
+    addToggle(GB.FinalExp_Left, "FinalExpAutoJoinEasyToggle", "Auto Join Easy", getgenv().FinalExpAutoJoinEasyEnabled, function(v)
+        getgenv().FinalExpAutoJoinEasyEnabled = v
+        getgenv().Config.toggles.FinalExpAutoJoinEasyToggle = v
+        saveConfig(getgenv().Config)
+        notify("Final Expedition", v and "Auto Join Easy Enabled" or "Auto Join Easy Disabled", 3)
+    end)
+    
+    addToggle(GB.FinalExp_Left, "FinalExpAutoJoinHardToggle", "Auto Join Hard", getgenv().FinalExpAutoJoinHardEnabled, function(v)
+        getgenv().FinalExpAutoJoinHardEnabled = v
+        getgenv().Config.toggles.FinalExpAutoJoinHardToggle = v
+        saveConfig(getgenv().Config)
+        notify("Final Expedition", v and "Auto Join Hard Enabled" or "Auto Join Hard Disabled", 3)
+    end)
+    
+    GB.FinalExp_Left:AddLabel("Note: Only enable ONE auto join option at a time", true)
+else
+    GB.FinalExp_Left:AddLabel("Auto Join features are only available in the lobby.", true)
+end
+
+GB.FinalExp_Right:AddLabel("Automation features for Final Expedition", true)
+
+addToggle(GB.FinalExp_Right, "FinalExpAutoSkipShopToggle", "Auto Skip Shop", getgenv().FinalExpAutoSkipShopEnabled, function(v)
+    getgenv().FinalExpAutoSkipShopEnabled = v
+    getgenv().Config.toggles.FinalExpAutoSkipShopToggle = v
+    saveConfig(getgenv().Config)
+    notify("Final Expedition", v and "Auto Skip Shop Enabled" or "Auto Skip Shop Disabled", 3)
+end)
+
+GB.FinalExp_Right:AddLabel("Auto Skip Shop: Automatically selects dungeon options", true)
+GB.FinalExp_Right:AddLabel("Use Auto Leave/Replay/Next in Main tab for end game", true)
+
 addToggle(GB.Webhook_Left, "WebhookToggle", "Enable Webhook Notifications", getgenv().WebhookEnabled, function(v)
     getgenv().WebhookEnabled = v
     getgenv().Config.toggles.WebhookToggle = v
@@ -1488,6 +1544,76 @@ task.spawn(function()
     end
 end)
 
+if isInLobby then
+    task.spawn(function()
+        local finalExpRemote = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("FinalExpeditionStartEvent")
+        if not finalExpRemote then
+            warn("[Final Expedition] FinalExpeditionStartEvent not found")
+            return
+        end
+        
+        while true do
+            task.wait(2)
+            
+            if getgenv().FinalExpAutoJoinEasyEnabled then
+                local success = pcall(function()
+                    finalExpRemote:FireServer("Easy")
+                    print("[Final Expedition] Joining Easy mode...")
+                end)
+                if not success then
+                    warn("[Final Expedition] Failed to join Easy mode")
+                end
+            elseif getgenv().FinalExpAutoJoinHardEnabled then
+                local success = pcall(function()
+                    finalExpRemote:FireServer("Hard")
+                    print("[Final Expedition] Joining Hard mode...")
+                end)
+                if not success then
+                    warn("[Final Expedition] Failed to join Hard mode")
+                end
+            end
+            
+            if isUnloaded then break end
+        end
+    end)
+end
+
+if not isInLobby then
+    task.spawn(function()
+        local abilitySelection = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("AbilitySelection")
+        if not abilitySelection then
+            warn("[Final Expedition] AbilitySelection remote not found")
+            return
+        end
+        
+        task.spawn(function()
+            while true do
+                task.wait(5)
+                if getgenv().FinalExpAutoSkipShopEnabled then
+                    pcall(function()
+                        abilitySelection:FireServer("FinalExpeditionSelection", "Double_Dungeon")
+                        print("[Final Expedition] Selected Double_Dungeon")
+                    end)
+                end
+                if isUnloaded then break end
+            end
+        end)
+        
+        task.spawn(function()
+            while true do
+                task.wait(5)
+                if getgenv().FinalExpAutoSkipShopEnabled then
+                    pcall(function()
+                        abilitySelection:FireServer("FinalExpeditionSelection", "Dungeon")
+                        print("[Final Expedition] Selected Dungeon")
+                    end)
+                end
+                if isUnloaded then break end
+            end
+        end)
+    end)
+end
+
 local isProcessing = false
 task.spawn(function()
     local function press(key)
@@ -1609,7 +1735,9 @@ task.spawn(function()
                     print("[Auto Action] " .. actionName .. " completed successfully!")
                 else
                     print("[Auto Action] No button to press")
-                elseif GuiService.SelectedObject ~= nil then
+                end
+                
+                if GuiService.SelectedObject ~= nil then
                     GuiService.SelectedObject = nil
                 end
             end
