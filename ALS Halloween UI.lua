@@ -1,5 +1,10 @@
 repeat task.wait() until game:IsLoaded()
 
+print("==============================================")
+print("ALS SCRIPT VERSION: FIXED-2025-01-12-v2")
+print("If you see AddRightGroupbox error, you're running old cached code!")
+print("==============================================")
+
 local repo = "https://raw.githubusercontent.com/deividcomsono/Obsidian/main/"
 local Library = loadstring(game:HttpGet(repo .. "Library.lua"))()
 local ThemeManager = loadstring(game:HttpGet(repo .. "addons/ThemeManager.lua"))()
@@ -22,7 +27,7 @@ local function checkIsInLobby()
 end
 local isInLobby = checkIsInLobby()
 
-local SCRIPT_URL = "https://raw.githubusercontent.com/Byorl/ALS-Scripts/refs/heads/main/ALS%20Halloween%20UI.lua"
+local SCRIPT_URL = ""
 
 local queueteleport = queue_on_teleport or queueonteleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport)
 
@@ -35,39 +40,7 @@ else
     print("[Auto Execute] WARNING: No queueteleport function found!")
 end
 
-if isfile("ALSHalloweenEvent/autoexec.txt") then
-    print("[Auto Execute] Enabled - Setting up teleport hook...")
-    
-    if queueteleport then
-        print("[Auto Execute] Using queueteleport method")
-        LocalPlayer.OnTeleport:Connect(function(State)
-            print("[Auto Execute] OnTeleport fired! State:", State)
-            local success, err = pcall(function()
-                queueteleport("loadstring(game:HttpGet('" .. SCRIPT_URL .. "'))()")
-            end)
-            if success then
-                print("[Auto Execute] Successfully queued script!")
-            else
-                warn("[Auto Execute] Failed to queue:", err)
-            end
-        end)
-    else
-        print("[Auto Execute] Using fallback methods (queueteleport not found)")
-        TeleportService.TeleportInitFailed:Connect(function()
-            task.wait(2)
-            loadstring(game:HttpGet(SCRIPT_URL))()
-        end)
-        
-        game:GetService("CoreGui").DescendantRemoving:Connect(function(descendant)
-            if descendant.Name == "Roblox" then
-                task.wait(0.5)
-                loadstring(game:HttpGet(SCRIPT_URL))()
-            end
-        end)
-    end
-else
-    print("[Auto Execute] Disabled - Enable in Misc tab")
-end
+print("[Auto Execute] Setup deferred until after UI loads")
 
 local CONFIG_FOLDER = "ALSHalloweenEvent"
 local CONFIG_FILE = "config.json"
@@ -363,21 +336,25 @@ end
 ToggleButton.MouseButton1Click:Connect(toggleUIKey)
 
 local GB = {}
+print("[UI] Creating groupboxes...")
+
 GB.Main_Left = Tabs.Main:AddLeftGroupbox("🚀 Auto Join System")
-GB.Main_Right = Tabs.Main:AddRightGroupbox("⚡ Game Automation")
+GB.Main_Right = Tabs.Main:AddLeftGroupbox("⚡ Game Automation")
 GB.Ability_Left = Tabs.Ability:AddLeftGroupbox("⚔️ Auto Ability System")
-GB.Ability_Right = Tabs.Ability:AddRightGroupbox("📋 Your Units")
+GB.Ability_Right = Tabs.Ability:AddLeftGroupbox("📋 Your Units")
 GB.Card_Left = Tabs.CardSelection:AddLeftGroupbox("🃏 Card Priority System")
-GB.Card_Right = Tabs.CardSelection:AddRightGroupbox("Card Lists")
+GB.Card_Right = Tabs.CardSelection:AddLeftGroupbox("Card Lists")
 GB.Boss_Left = Tabs.BossRush:AddLeftGroupbox("Boss Rush Controls")
 GB.Breach_Left = Tabs.Breach:AddLeftGroupbox("⚡ Breach Auto-Join")
 GB.Webhook_Left = Tabs.Webhook:AddLeftGroupbox("🔔 Discord Notifications")
 GB.Seam_Left = Tabs.SeamlessFix:AddLeftGroupbox("🔄 Seamless Retry Fix")
 GB.Event_Left = Tabs.Event:AddLeftGroupbox("🎃 Halloween 2025 Event")
 GB.Misc_Left = Tabs.Misc:AddLeftGroupbox("⚡ Performance")
-GB.Misc_Right = Tabs.Misc:AddRightGroupbox("🔒 Safety & UI")
+GB.Misc_Right = Tabs.Misc:AddLeftGroupbox("🔒 Safety & UI")
 GB.Settings_Left = Tabs.Settings:AddLeftGroupbox("💾 Config Management")
-GB.Settings_Right = Tabs.Settings:AddRightGroupbox("UI Settings")
+GB.Settings_Right = Tabs.Settings:AddLeftGroupbox("UI Settings")
+
+print("[UI] All groupboxes created successfully!")
 
 
 local Options = Library.Options
@@ -990,15 +967,81 @@ addToggle(GB.Misc_Right, "AntiAFKToggle", "Anti-AFK", getgenv().AntiAFKEnabled, 
 end)
 addToggle(GB.Misc_Right, "AutoExecuteToggle", "Auto Execute", getgenv().Config.toggles.AutoExecuteToggle or false, function(v)
     getgenv().Config.toggles.AutoExecuteToggle = v
+    getgenv().AutoExecuteEnabled = v
     saveConfig(getgenv().Config)
     if v then
         writefile("ALSHalloweenEvent/autoexec.txt", "true")
         notify("Auto Execute", "Will reload on teleport", 3)
+        
+        if queueteleport then
+            print("[Auto Execute] Setting up queueteleport method")
+            LocalPlayer.OnTeleport:Connect(function(State)
+                if not getgenv().AutoExecuteEnabled then return end
+                print("[Auto Execute] OnTeleport fired! State:", State)
+                local success, err = pcall(function()
+                    queueteleport("loadstring(game:HttpGet('" .. SCRIPT_URL .. "'))()")
+                end)
+                if success then
+                    print("[Auto Execute] Successfully queued script!")
+                else
+                    warn("[Auto Execute] Failed to queue:", err)
+                end
+            end)
+        else
+            print("[Auto Execute] Setting up fallback methods")
+            TeleportService.TeleportInitFailed:Connect(function()
+                if not getgenv().AutoExecuteEnabled then return end
+                task.wait(2)
+                loadstring(game:HttpGet(SCRIPT_URL))()
+            end)
+            
+            game:GetService("CoreGui").DescendantRemoving:Connect(function(descendant)
+                if not getgenv().AutoExecuteEnabled then return end
+                if descendant.Name == "Roblox" then
+                    task.wait(0.5)
+                    loadstring(game:HttpGet(SCRIPT_URL))()
+                end
+            end)
+        end
     else
         if isfile("ALSHalloweenEvent/autoexec.txt") then delfile("ALSHalloweenEvent/autoexec.txt") end
         notify("Auto Execute", "Disabled", 3)
     end
 end)
+
+if getgenv().Config.toggles.AutoExecuteToggle then
+    getgenv().AutoExecuteEnabled = true
+    if queueteleport then
+        print("[Auto Execute] Initializing queueteleport method")
+        LocalPlayer.OnTeleport:Connect(function(State)
+            if not getgenv().AutoExecuteEnabled then return end
+            print("[Auto Execute] OnTeleport fired! State:", State)
+            local success, err = pcall(function()
+                queueteleport("loadstring(game:HttpGet('" .. SCRIPT_URL .. "'))()")
+            end)
+            if success then
+                print("[Auto Execute] Successfully queued script!")
+            else
+                warn("[Auto Execute] Failed to queue:", err)
+            end
+        end)
+    else
+        print("[Auto Execute] Initializing fallback methods")
+        TeleportService.TeleportInitFailed:Connect(function()
+            if not getgenv().AutoExecuteEnabled then return end
+            task.wait(2)
+            loadstring(game:HttpGet(SCRIPT_URL))()
+        end)
+        
+        game:GetService("CoreGui").DescendantRemoving:Connect(function(descendant)
+            if not getgenv().AutoExecuteEnabled then return end
+            if descendant.Name == "Roblox" then
+                task.wait(0.5)
+                loadstring(game:HttpGet(SCRIPT_URL))()
+            end
+        end)
+    end
+end
 
 GB.Settings_Left:AddLabel("Your settings are automatically saved to: " .. CONFIG_FOLDER .. "/" .. CONFIG_FILE, true)
 GB.Settings_Left:AddButton("Force Save Config Now", function()
@@ -1263,14 +1306,31 @@ task.spawn(function()
 end)
 
 task.spawn(function()
+    print("[Auto Event] Initializing...")
     local eventsFolder = RS:FindFirstChild("Events")
     local halloweenFolder = eventsFolder and eventsFolder:FindFirstChild("Hallowen2025")
     local enterEvent = halloweenFolder and halloweenFolder:FindFirstChild("Enter")
     local startEvent = halloweenFolder and halloweenFolder:FindFirstChild("Start")
+    
+    print("[Auto Event] Events found - Enter:", enterEvent ~= nil, "Start:", startEvent ~= nil)
+    
     while true do
         task.wait(0.5)
-        if getgenv().AutoEventEnabled and enterEvent and startEvent then
-            pcall(function() enterEvent:FireServer(); startEvent:FireServer() end)
+        if getgenv().AutoEventEnabled then
+            if enterEvent and startEvent then
+                print("[Auto Event] Enabled - Firing events...")
+                local success, err = pcall(function() 
+                    enterEvent:FireServer()
+                    startEvent:FireServer()
+                end)
+                if success then
+                    print("[Auto Event] ✓ Events fired successfully")
+                else
+                    warn("[Auto Event] ✗ Error:", err)
+                end
+            else
+                print("[Auto Event] ✗ Events not found (Enter:", enterEvent ~= nil, "Start:", startEvent ~= nil, ")")
+            end
         end
         if isUnloaded then break end
     end
@@ -1292,22 +1352,37 @@ task.spawn(function()
             endGameUIDetectedTime = tick()
         end
     end)
+    print("[Auto Actions] Initializing (Leave/Replay/Next)...")
     while true do
         task.wait(1)
-        pcall(function()
+        local success, err = pcall(function()
             local endGameUI = LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
             if endGameUI and endGameUI:FindFirstChild("BG") and endGameUI.BG:FindFirstChild("Buttons") then
-                if hasProcessedCurrentUI then return end
+                print("[Auto Actions] EndGameUI detected")
+                if hasProcessedCurrentUI then 
+                    print("[Auto Actions] Already processed this UI")
+                    return 
+                end
                 if getgenv().WebhookEnabled then
                     local timeSinceDetection = tick() - endGameUIDetectedTime
-                    if timeSinceDetection < 3 then return end
-                    if isProcessing then return end
+                    if timeSinceDetection < 3 then 
+                        print("[Auto Actions] Waiting for webhook (", math.floor(3 - timeSinceDetection), "s remaining)")
+                        return 
+                    end
+                    if isProcessing then 
+                        print("[Auto Actions] Webhook is processing")
+                        return 
+                    end
                 end
                 local buttons = endGameUI.BG.Buttons
                 local nextButton = buttons:FindFirstChild("Next")
                 local retryButton = buttons:FindFirstChild("Retry")
                 local leaveButton = buttons:FindFirstChild("Leave")
                 local buttonToPress, actionName = nil, ""
+                
+                print("[Auto Actions] Buttons - Next:", nextButton ~= nil, "Retry:", retryButton ~= nil, "Leave:", leaveButton ~= nil)
+                print("[Auto Actions] Toggles - Smart:", getgenv().AutoSmartEnabled, "Next:", getgenv().AutoNextEnabled, "Replay:", getgenv().AutoFastRetryEnabled, "Leave:", getgenv().AutoLeaveEnabled)
+                
                 if getgenv().AutoSmartEnabled then
                     if nextButton and nextButton.Visible then buttonToPress = nextButton actionName = "Next"
                     elseif retryButton and retryButton.Visible then buttonToPress = retryButton actionName = "Replay"
@@ -1319,25 +1394,33 @@ task.spawn(function()
                 elseif getgenv().AutoLeaveEnabled and leaveButton then
                     buttonToPress = leaveButton actionName = "Leave"
                 end
+                
                 if buttonToPress then
+                    print("[Auto Actions] ✓ Pressing:", actionName)
                     hasProcessedCurrentUI = true
                     GuiService.SelectedObject = buttonToPress
                     repeat press(Enum.KeyCode.Return) task.wait(0.5) until not LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
                     GuiService.SelectedObject = nil
-                elseif GuiService.SelectedObject ~= nil then
-                    GuiService.SelectedObject = nil
+                    print("[Auto Actions] ✓ Action completed:", actionName)
+                else
+                    print("[Auto Actions] ✗ No button to press (all toggles disabled or buttons not available)")
                 end
             end
         end)
+        if not success then
+            warn("[Auto Actions] Error:", err)
+        end
         if isUnloaded then break end
     end
 end)
 
 task.spawn(function()
+    print("[Auto Ready] Initializing...")
     while true do
         task.wait(1)
         if getgenv().AutoReadyEnabled then
-            pcall(function()
+            print("[Auto Ready] Enabled - Checking for ready button...")
+            local success, err = pcall(function()
                 local bottomGui = LocalPlayer.PlayerGui:FindFirstChild("Bottom")
                 if bottomGui then
                     local frame = bottomGui:FindFirstChild("Frame")
@@ -1354,16 +1437,27 @@ task.spawn(function()
                                         local playerReady = remotes and remotes:FindFirstChild("PlayerReady")
                                         if playerReady then
                                             playerReady:FireServer()
-                                            print("[Auto Ready] Player ready fired")
+                                            print("[Auto Ready] ✓ Player ready fired")
                                             task.wait(2)
+                                        else
+                                            print("[Auto Ready] ✗ PlayerReady remote not found")
                                         end
+                                    else
+                                        print("[Auto Ready] Start button not visible or text mismatch")
                                     end
+                                else
+                                    print("[Auto Ready] TextButton not found")
                                 end
                             end
                         end
                     end
+                else
+                    print("[Auto Ready] Bottom GUI not found")
                 end
             end)
+            if not success then
+                warn("[Auto Ready] Error:", err)
+            end
         end
         if isUnloaded then break end
     end
@@ -1656,9 +1750,22 @@ task.spawn(function()
         end)
         return ok
     end
+    print("[Auto Card] Initializing...")
     while true do
         task.wait(1)
-        if getgenv().CardSelectionEnabled then selectCard() elseif getgenv().SlowerCardSelectionEnabled then selectCardSlower() end
+        if getgenv().CardSelectionEnabled then 
+            print("[Auto Card] Fast mode enabled - Selecting card...")
+            local result = selectCard()
+            if result then
+                print("[Auto Card] ✓ Card selected (fast mode)")
+            end
+        elseif getgenv().SlowerCardSelectionEnabled then 
+            print("[Auto Card] Slow mode enabled - Selecting card...")
+            local result = selectCardSlower()
+            if result then
+                print("[Auto Card] ✓ Card selected (slow mode)")
+            end
+        end
         if isUnloaded then break end
     end
 end)
@@ -1966,27 +2073,43 @@ task.spawn(function()
     print("[Auto Bingo] Bingo automation loaded!")
     
     while true do
-        task.wait(1) -- Changed from 0.1 to 1 second to avoid spam
+        task.wait(1)
         if getgenv().BingoEnabled then
-            print("[Auto Bingo] Running bingo automation...")
-            pcall(function()
+            print("[Auto Bingo] Enabled - Running automation...")
+            local success, err = pcall(function()
                 if UseStampEvent then 
+                    print("[Auto Bingo] Using stamps...")
                     for i=1,25 do 
                         UseStampEvent:FireServer()
                     end
-                    print("[Auto Bingo] Used 25 stamps")
+                    print("[Auto Bingo] ✓ Used 25 stamps")
+                else
+                    print("[Auto Bingo] ✗ UseStampEvent not found")
                 end
+                
                 if ClaimRewardEvent then 
+                    print("[Auto Bingo] Claiming rewards...")
                     for i=1,25 do 
                         ClaimRewardEvent:InvokeServer(i)
                     end
-                    print("[Auto Bingo] Claimed rewards")
+                    print("[Auto Bingo] ✓ Claimed rewards")
+                else
+                    print("[Auto Bingo] ✗ ClaimRewardEvent not found")
                 end
+                
                 if CompleteBoardEvent then 
+                    print("[Auto Bingo] Completing board...")
                     CompleteBoardEvent:InvokeServer()
-                    print("[Auto Bingo] Completed board")
+                    print("[Auto Bingo] ✓ Completed board")
+                else
+                    print("[Auto Bingo] ✗ CompleteBoardEvent not found")
                 end
             end)
+            if not success then
+                warn("[Auto Bingo] Error:", err)
+            end
+        else
+            print("[Auto Bingo] Disabled - Waiting...")
         end
         if isUnloaded then break end
     end
@@ -2019,51 +2142,59 @@ task.spawn(function()
     print("[Auto Capsules] Capsule automation loaded!")
     
     while true do
-        task.wait(1) -- Changed from 0.1 to 1 second
+        task.wait(1)
         if getgenv().CapsuleEnabled then
-            print("[Auto Capsules] Running capsule automation...")
-            local clientData = getClientData()
-            if clientData then
-                local candyBasket = clientData.CandyBasket or 0
-                print("[Auto Capsules] Candy Basket:", candyBasket)
-                
-                local capsuleAmount = 0
-                if clientData.ItemData and clientData.ItemData.HalloweenCapsule2025 then 
-                    capsuleAmount = clientData.ItemData.HalloweenCapsule2025.Amount or 0 
-                end
-                
-                -- Purchase capsules
-                if candyBasket >= 100000 then 
-                    pcall(function() 
+            print("[Auto Capsules] Enabled - Running automation...")
+            local success, err = pcall(function()
+                local clientData = getClientData()
+                if clientData then
+                    local candyBasket = clientData.CandyBasket or 0
+                    print("[Auto Capsules] Candy Basket:", candyBasket)
+                    
+                    local capsuleAmount = 0
+                    if clientData.ItemData and clientData.ItemData.HalloweenCapsule2025 then 
+                        capsuleAmount = clientData.ItemData.HalloweenCapsule2025.Amount or 0 
+                    end
+                    print("[Auto Capsules] Current capsules:", capsuleAmount)
+                    
+                    if candyBasket >= 100000 then 
+                        print("[Auto Capsules] Purchasing 100 capsules...")
                         PurchaseEvent:InvokeServer(1, 100) 
-                        print("[Auto Capsules] Purchased 100 capsules")
-                    end)
-                elseif candyBasket >= 10000 then 
-                    pcall(function() 
+                        print("[Auto Capsules] ✓ Purchased 100 capsules")
+                    elseif candyBasket >= 10000 then 
+                        print("[Auto Capsules] Purchasing 10 capsules...")
                         PurchaseEvent:InvokeServer(1, 10) 
-                        print("[Auto Capsules] Purchased 10 capsules")
-                    end)
-                elseif candyBasket >= 1000 then 
-                    pcall(function() 
+                        print("[Auto Capsules] ✓ Purchased 10 capsules")
+                    elseif candyBasket >= 1000 then 
+                        print("[Auto Capsules] Purchasing 1 capsule...")
                         PurchaseEvent:InvokeServer(1, 1) 
-                        print("[Auto Capsules] Purchased 1 capsule")
-                    end)
-                end
-                
-                -- Refresh data and open capsules
-                task.wait(0.5)
-                clientData = getClientData()
-                if clientData and clientData.ItemData and clientData.ItemData.HalloweenCapsule2025 then 
-                    capsuleAmount = clientData.ItemData.HalloweenCapsule2025.Amount or 0 
-                end
-                
-                if capsuleAmount > 0 then 
-                    pcall(function() 
+                        print("[Auto Capsules] ✓ Purchased 1 capsule")
+                    else
+                        print("[Auto Capsules] Not enough candy (need 1000+)")
+                    end
+                    
+                    task.wait(0.5)
+                    clientData = getClientData()
+                    if clientData and clientData.ItemData and clientData.ItemData.HalloweenCapsule2025 then 
+                        capsuleAmount = clientData.ItemData.HalloweenCapsule2025.Amount or 0 
+                    end
+                    
+                    if capsuleAmount > 0 then 
+                        print("[Auto Capsules] Opening", capsuleAmount, "capsules...")
                         OpenCapsuleEvent:FireServer("HalloweenCapsule2025", capsuleAmount) 
-                        print("[Auto Capsules] Opened", capsuleAmount, "capsules")
-                    end)
+                        print("[Auto Capsules] ✓ Opened", capsuleAmount, "capsules")
+                    else
+                        print("[Auto Capsules] No capsules to open")
+                    end
+                else
+                    print("[Auto Capsules] ✗ ClientData not available")
                 end
+            end)
+            if not success then
+                warn("[Auto Capsules] Error:", err)
             end
+        else
+            print("[Auto Capsules] Disabled - Waiting...")
         end
         if isUnloaded then break end
     end
