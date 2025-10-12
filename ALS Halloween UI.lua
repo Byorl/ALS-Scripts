@@ -4,96 +4,477 @@ local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
 print("[ALS] Waiting for game to fully load...")
-task.wait(2) 
+task.wait(2)
 
-print("[ALS] Waiting for TeleportUI to disappear...")
+local function isTeleportUIVisible()
+    local tpUI = LocalPlayer.PlayerGui:FindFirstChild("TeleportUI")
+    if not tpUI then return false end
+    
+    local ok, visible = pcall(function()
+        return tpUI.Enabled
+    end)
+    return ok and visible
+end
+
+local function isPlayerInValidState()
+    local character = LocalPlayer.Character
+    if not character then return false end
+    local humanoid = character:FindFirstChild("Humanoid")
+    if not humanoid or humanoid.Health <= 0 then return false end
+    local rootPart = character:FindFirstChild("HumanoidRootPart")
+    if not rootPart then return false end
+    return true
+end
+
+print("[ALS] Waiting for TeleportUI to disappear and valid player state...")
 local maxWaitTime = 0
-repeat 
-    task.wait(0.2) 
+local maxWait = 20
+repeat
+    task.wait(0.2)
     maxWaitTime = maxWaitTime + 0.2
-until not LocalPlayer.PlayerGui:FindFirstChild("TeleportUI") or maxWaitTime > 30
-print("[ALS] TeleportUI gone, loading script...")
+until (not isTeleportUIVisible() and isPlayerInValidState()) or maxWaitTime > maxWait
+
+if maxWaitTime > maxWait then
+    print("[ALS] Timeout reached. Checking player state...")
+    if not isPlayerInValidState() then
+        warn("[ALS] Player not in valid state - may have failed to join game properly")
+        task.wait(3)
+        if not isPlayerInValidState() then
+            warn("[ALS] Still not in valid state after additional wait. Script may not work correctly.")
+        end
+    end
+else
+    print("[ALS] Player loaded successfully, starting script...")
+end
 
 task.wait(1)
 
-local repo = "https://raw.githubusercontent.com/byorl/Obsidian/main/"
-
-local Library, ThemeManager
-local loadSuccess = false
-local loadAttempts = 0
-local maxAttempts = 3
-
-while not loadSuccess and loadAttempts < maxAttempts do
-    loadAttempts = loadAttempts + 1
-    local ok = pcall(function()
-        print("[ALS] Loading UI Library (Attempt " .. loadAttempts .. "/" .. maxAttempts .. ")...")
-        Library = loadstring(game:HttpGet(repo .. "Library.lua"))()
-        task.wait(0.5) 
-        ThemeManager = loadstring(game:HttpGet(repo .. "addons/ThemeManager.lua"))()
-        loadSuccess = true
+local WindUI
+do
+    local ok, result = pcall(function()
+        return require("./src/init")
     end)
-    if not ok then
-        warn("[ALS] Failed to load UI library, retrying...")
-        task.wait(2)
+    if ok then
+        WindUI = result
+    else
+        WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
     end
 end
 
-if not loadSuccess then
-    error("[ALS] Failed to load UI library after " .. maxAttempts .. " attempts. Please check your internet connection.")
+local oldLogWarn = logwarn or warn
+local function filteredWarn(...)
+    local msg = tostring(...)
+    if not msg:find("ImageLabel") and not msg:find("not a valid member") then
+        oldLogWarn(...)
+    end
+end
+if logwarn then logwarn = filteredWarn end
+warn = filteredWarn
+
+local function createObsidianCompat()
+    local compat = {
+        Options = {},
+        Toggles = {},
+        ForceCheckbox = false,
+        ShowToggleFrameInKeybinds = true,
+        KeybindFrame = { Visible = false },
+        _windows = {},
+        _currentWindow = nil,
+        _theme = {},
+    }
+
+    local function makeSignal()
+        local listeners = {}
+        return {
+            Connect = function(_, fn)
+                table.insert(listeners, fn)
+                return { Disconnect = function() end }
+            end,
+            Fire = function(_, ...)
+                for i = 1, #listeners do
+                    local fn = listeners[i]
+                    local ok = pcall(fn, ...)
+                    if not ok then end
+                end
+            end
+        }
+    end
+
+    local function makeToggleProxy(key, defaultValue)
+        local signal = makeSignal()
+        local proxy = {
+            Key = key,
+            Value = defaultValue == true,
+            OnChanged = function(self, cb)
+                signal:Connect(function()
+                    cb(self.Value)
+                end)
+            end,
+            _fire = function(self)
+                signal:Fire(self.Value)
+            end,
+        }
+        return proxy
+    end
+
+    local function makeOptionProxy(key, element)
+        local signal = makeSignal()
+        local proxy = {
+            Key = key,
+            _element = element,
+            _values = nil,
+            Value = nil,
+            OnChanged = function(self, cb)
+                signal:Connect(function(val)
+                    cb(val)
+                end)
+            end,
+            SetValue = function(self, val)
+                self.Value = val
+                local e = rawget(self, "_element")
+                if e then
+                    if type(e.Select) == "function" then
+                        pcall(function() e:Select(val) end)
+                    elseif type(e.Set) == "function" then
+                        pcall(function() e:Set(val) end)
+                    elseif type(e.SetValue) == "function" then
+                        pcall(function() e:SetValue(val) end)
+                    end
+                end
+                signal:Fire(val)
+            end,
+            SetValues = function(self, list)
+                self._values = list
+                local e = rawget(self, "_element")
+                if e and type(e.Refresh) == "function" then
+                    pcall(function() e:Refresh(list) end)
+                end
+            end,
+            _fire = function(self, val)
+                self.Value = val
+                signal:Fire(val)
+            end,
+        }
+        return proxy
+    end
+
+    local windowWrapperMT
+    local tabWrapperMT
+    local groupWrapperMT
+    local labelWrapperMT
+
+    labelWrapperMT = {
+        __index = function(self, k)
+            if k == "AddKeyPicker" then
+                return function(_, key, opts)
+                    opts = opts or {}
+                    local el = self._tab:Keybind({
+                        Flag = key,
+                        Title = opts.Text or "Menu keybind",
+                        Desc = opts.Desc,
+                        Value = (opts.Default or "LeftControl"),
+                        Callback = function(v)
+                            local opt = compat.Options[key]
+                            if opt then opt:_fire(v) end
+                            if compat._currentWindow and type(compat._currentWindow.SetToggleKey) == "function" then
+                                pcall(function() compat._currentWindow:SetToggleKey(Enum.KeyCode[v]) end)
+                            end
+                        end,
+                    })
+                    local proxy = makeOptionProxy(key, el)
+                    compat.Options[key] = proxy
+                    return el
+                end
+            end
+        end
+    }
+
+    groupWrapperMT = {
+        __index = function(self, k)
+            if k == "AddLabel" then
+                return function(_, text)
+                    self._tab:Section({ Title = tostring(text) })
+                    return setmetatable({ _tab = self._tab }, labelWrapperMT)
+                end
+            elseif k == "AddDivider" then
+                return function()
+                    self._tab:Space({ Columns = 1 })
+                end
+            elseif k == "AddButton" then
+                return function(_, text, cb)
+                    self._tab:Button({ Title = tostring(text), Callback = function()
+                        if type(cb) == "function" then cb() end
+                    end })
+                end
+            elseif k == "AddToggle" then
+                return function(_, key, cfg)
+                    cfg = cfg or {}
+                    local initial = cfg.Default == true
+                    local proxy = compat.Toggles[key] or makeToggleProxy(key, initial)
+                    compat.Toggles[key] = proxy
+                    local el = self._tab:Toggle({
+                        Flag = key,
+                        Title = cfg.Text or key,
+                        Desc = cfg.Desc,
+                        Default = initial,
+                        Locked = cfg.Locked == true,
+                        Callback = function(state)
+                            proxy.Value = state
+                            if type(cfg.Callback) == "function" then
+                                pcall(function() cfg.Callback(state) end)
+                            end
+                            proxy:_fire()
+                        end
+                    })
+                    return el
+                end
+            elseif k == "AddDropdown" then
+                return function(_, key, cfg)
+                    cfg = cfg or {}
+                    local el = self._tab:Dropdown({
+                        Flag = key,
+                        Title = cfg.Text or key,
+                        Values = cfg.Values or {},
+                        Value = cfg.Default,
+                        Multi = cfg.Multi == true,
+                        Searchable = cfg.Searchable == true,
+                        Callback = function(value)
+                            local opt = compat.Options[key]
+                            if type(cfg.Callback) == "function" then
+                                pcall(function() cfg.Callback(value) end)
+                            end
+                            if opt then opt:_fire(value) end
+                        end
+                    })
+                    local proxy = makeOptionProxy(key, el)
+                    if cfg.Default ~= nil then proxy.Value = cfg.Default end
+                    compat.Options[key] = proxy
+                    return el
+                end
+            elseif k == "AddInput" then
+                return function(_, key, cfg)
+                    cfg = cfg or {}
+                    local el = self._tab:Input({
+                        Flag = key,
+                        Title = cfg.Text or key,
+                        Desc = cfg.Placeholder,
+                        Value = cfg.Default or "",
+                        Type = (cfg.Type == "Textarea" and "Textarea" or "Input"),
+                        Placeholder = cfg.Placeholder,
+                        Callback = function(val)
+                            if type(cfg.Callback) == "function" then
+                                pcall(function() cfg.Callback(val) end)
+                            end
+                            local opt = compat.Options[key]
+                            if opt then opt:_fire(val) end
+                        end
+                    })
+                    local proxy = makeOptionProxy(key, el)
+                    proxy.Value = cfg.Default or ""
+                    compat.Options[key] = proxy
+                    return el
+                end
+            end
+        end
+    }
+
+    tabWrapperMT = {
+        __index = function(self, k)
+            if k == "AddLeftGroupbox" or k == "AddRightGroupbox" then
+                return function(_, title)
+                    if title and title ~= "" then
+                        self._tab:Section({ Title = tostring(title) })
+                    end
+                    return setmetatable({ _tab = self._tab }, groupWrapperMT)
+                end
+            elseif k == "AddLabel" then
+                return function(_, text)
+                    self._tab:Section({ Title = tostring(text) })
+                end
+            end
+        end
+    }
+
+    windowWrapperMT = {
+        __index = function(self, k)
+            if k == "AddTab" then
+                return function(_, title, icon)
+                    return self._wnd:Tab({ Title = tostring(title), Icon = tostring(icon or "") })
+                end
+            elseif k == "Section" then
+                return function(_, opts)
+                    return self._wnd:Section(opts)
+                end
+            else
+                return self._wnd[k]
+            end
+        end
+    }
+
+    function compat:CreateWindow(opts)
+        opts = opts or {}
+        local wnd = WindUI:CreateWindow({
+            Title = tostring(opts.Title or "ALS"),
+            Author = tostring(opts.Footer or ""),
+            Folder = "ALS-WindUI",
+            NewElements = true,
+            HideSearchBar = false,
+            OpenButton = {
+                Title = tostring(opts.Title or "ALS"),
+                CornerRadius = UDim.new(1, 0),
+                StrokeThickness = 1,
+                Enabled = true,
+                Draggable = true,
+                OnlyMobile = false,
+                Color = ColorSequence.new(Color3.fromRGB(48, 255, 106), Color3.fromRGB(231, 255, 47)),
+            },
+        })
+        local wrapper = setmetatable({ _wnd = wnd }, windowWrapperMT)
+        self._currentWindow = wnd
+        return wrapper
+    end
+
+    function compat:Notify(info)
+        local title = (info and (info.Title or info.title)) or "ALS"
+        local content = (info and (info.Description or info.Desc or info.Content)) or ""
+        local duration = (info and (info.Duration or info.Time)) or nil
+        WindUI:Notify({ Title = title, Content = content, Duration = duration })
+    end
+
+    function compat:Unload()
+        self.Unloaded = true
+        if self._currentWindow and type(self._currentWindow.Destroy) == "function" then
+            pcall(function() self._currentWindow:Destroy() end)
+        end
+    end
+
+    function compat:Toggle()
+        if self._currentWindow then
+            local ok = pcall(function()
+                if type(self._currentWindow.Toggle) == "function" then
+                    self._currentWindow:Toggle()
+                elseif type(self._currentWindow.SetVisible) == "function" then
+                    self._currentWindow:SetVisible(not self._visible)
+                    self._visible = not self._visible
+                end
+            end)
+            if not ok then
+                -- no-op if underlying doesn't support toggle
+            end
+        end
+    end
+
+    return compat
 end
 
-print("[ALS] UI Library loaded successfully!")
-
-Library.Unloaded = false
-print("[ALS] Initialized Library.Unloaded to false")
+local Library = createObsidianCompat()
+local ThemeManager = {
+    SetLibrary = function() end,
+    SetFolder = function() end,
+    ApplyToTab = function() end,
+}
 
 getgenv().ALS_Library = Library
 getgenv().ALS_ThemeManager = ThemeManager
-
-local libraryProtection = {
-    unloadAttempts = 0,
-    lastUnloadAttempt = 0
-}
-
-task.spawn(function()
-    while true do
-        task.wait(0.5)
-        
-        if Library and Library.Unloaded == true then
-            local currentTime = tick()
-            
-            if currentTime - libraryProtection.lastUnloadAttempt < 5 then
-                libraryProtection.unloadAttempts = libraryProtection.unloadAttempts + 1
-                
-                if libraryProtection.unloadAttempts >= 3 then
-                    warn("[ALS] Multiple rapid unload attempts detected! This may be a bug.")
-                    warn("[ALS] If you didn't manually unload, the UI may be unstable.")
-                end
-            else
-                libraryProtection.unloadAttempts = 0
-            end
-            
-            libraryProtection.lastUnloadAttempt = currentTime
-            break
-        end
-    end
-end)
-
-print("[ALS] Library protected from garbage collection")
 
 local HttpService = game:GetService("HttpService")
 local RS = game:GetService("ReplicatedStorage")
 local VIM = game:GetService("VirtualInputManager")
 local TeleportService = game:GetService("TeleportService")
 local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
 
 local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
 local MOBILE_DELAY_MULTIPLIER = isMobile and 1.5 or 1.0
 
-print("[ALS] Platform detected: " .. (isMobile and "Mobile" or "PC"))
-print("[ALS] Delay multiplier: " .. MOBILE_DELAY_MULTIPLIER)
+local function cleanupBeforeTeleport()    
+    pcall(function()
+        if Library and Library.Unload then
+            Library:Unload()
+            print("[ALS] ✓ UI unloaded")
+        end
+    end)
+    task.wait(0.1)
+    
+    pcall(function()
+        getgenv().ALS_Library = nil
+        getgenv().ALS_ThemeManager = nil
+        getgenv().AutoAbilitiesEnabled = nil
+        getgenv().CardSelectionEnabled = nil
+        getgenv().SlowerCardSelectionEnabled = nil
+        print("[ALS] ✓ Global variables cleared")
+    end)
+    
+    pcall(function()
+        if getconnections then
+            for _, service in pairs({RunService.Heartbeat, RunService.RenderStepped, RunService.Stepped}) do
+                for _, connection in pairs(getconnections(service)) do
+                    if connection.Disable then connection:Disable() end
+                    if connection.Disconnect then connection:Disconnect() end
+                end
+            end
+        end
+        print("[ALS] ✓ All connections disconnected")
+    end)
+    
+    pcall(function()
+        for _, obj in pairs(workspace:GetDescendants()) do
+            if obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Beam") then
+                obj.Enabled = false
+                obj:Destroy()
+            elseif obj:IsA("Sound") then
+                obj:Stop()
+                obj.Volume = 0
+                obj:Destroy()
+            elseif obj:IsA("Fire") or obj:IsA("Smoke") or obj:IsA("Sparkles") then
+                obj:Destroy()
+            end
+        end
+        print("[ALS] ✓ Workspace effects cleared")
+    end)
+    
+    pcall(function()
+        for _, gui in pairs(LocalPlayer.PlayerGui:GetChildren()) do
+            if gui.Name ~= "Chat" and gui.Name ~= "CoreGui" and gui.Name ~= "PlayerList" then
+                gui:Destroy()
+            end
+        end
+        print("[ALS] ✓ Player GUI cleared")
+    end)
+    
+    pcall(function()
+        local coreGui = game:GetService("CoreGui")
+        for _, gui in pairs(coreGui:GetChildren()) do
+            if gui.Name:find("Wind") or gui.Name:find("ALS") or gui.Name:find("UI") then
+                gui:Destroy()
+            end
+        end
+        print("[ALS] ✓ CoreGui cleared")
+    end)
+    
+    pcall(function()
+        local lighting = game:GetService("Lighting")
+        for _, effect in pairs(lighting:GetChildren()) do
+            if not effect:IsA("Sky") and not effect:IsA("Atmosphere") then
+                effect:Destroy()
+            end
+        end
+        print("[ALS] ✓ Lighting effects cleared")
+    end)
+    
+    pcall(function()
+        for i = 1, 5 do
+            collectgarbage("collect")
+            task.wait(0.15)
+        end
+        print("[ALS] ✓ Garbage collection completed (5x)")
+    end)
+    
+    task.wait(0.8)
 
+end
 
+getgenv().CleanupBeforeTeleport = cleanupBeforeTeleport
 
 local LOBBY_PLACEIDS = {12886143095, 18583778121}
 local function checkIsInLobby()
@@ -103,7 +484,6 @@ local function checkIsInLobby()
     return false
 end
 local isInLobby = checkIsInLobby()
-
 
 local CONFIG_FOLDER = "ALSHalloweenEvent"
 local CONFIG_FILE = "config.json"
@@ -115,32 +495,10 @@ end
 local function getUserFolder()
     return CONFIG_FOLDER .. "/" .. USER_ID
 end
-local function getOldConfigPath()
-    return CONFIG_FOLDER .. "/" .. CONFIG_FILE
-end
-local function migrateOldConfig()
-    local oldConfigPath = getOldConfigPath()
-    local newConfigPath = getConfigPath()
-    if isfile(oldConfigPath) and not isfile(newConfigPath) then
-        print("[Config] Migrating old config to user-specific folder...")
-        local ok, oldData = pcall(function()
-            return readfile(oldConfigPath)
-        end)
-        if ok and oldData then
-            local userFolder = getUserFolder()
-            if not isfolder(userFolder) then makefolder(userFolder) end
-            pcall(function()
-                writefile(newConfigPath, oldData)
-                print("[Config] Migration successful! Config moved to: " .. newConfigPath)
-            end)
-        end
-    end
-end
 local function loadConfig()
     if not isfolder(CONFIG_FOLDER) then makefolder(CONFIG_FOLDER) end
     local userFolder = getUserFolder()
     if not isfolder(userFolder) then makefolder(userFolder) end
-    migrateOldConfig()
     local configPath = getConfigPath()
     if isfile(configPath) then
         local ok, data = pcall(function()
@@ -151,10 +509,11 @@ local function loadConfig()
             data.inputs = data.inputs or {}
             data.dropdowns = data.dropdowns or {}
             data.abilities = data.abilities or {}
+            data.autoJoin = data.autoJoin or {}
             return data
         end
     end
-    return { toggles = {}, inputs = {}, dropdowns = {}, abilities = {} }
+    return { toggles = {}, inputs = {}, dropdowns = {}, abilities = {}, autoJoin = {} }
 end
 local function saveConfig(config)
     local userFolder = getUserFolder()
@@ -175,7 +534,11 @@ getgenv().Config.dropdowns = getgenv().Config.dropdowns or {}
 getgenv().Config.abilities = getgenv().Config.abilities or {}
 print("[Config] Loaded config for User ID: " .. USER_ID)
 print("[Config] Config path: " .. getConfigPath())
-print("[Config] Config keys: toggles=" .. tostring(getgenv().Config.toggles ~= nil) .. ", inputs=" .. tostring(getgenv().Config.inputs ~= nil) .. ", abilities=" .. tostring(getgenv().Config.abilities ~= nil))
+print("[Config] Sample toggle values:")
+print("  - AutoAbilityToggle: " .. tostring(getgenv().Config.toggles.AutoAbilityToggle))
+print("  - CardSelectionToggle: " .. tostring(getgenv().Config.toggles.CardSelectionToggle))
+print("  - WebhookToggle: " .. tostring(getgenv().Config.toggles.WebhookToggle))
+print("  - AutoLeaveToggle: " .. tostring(getgenv().Config.toggles.AutoLeaveToggle))
 
 getgenv().AutoEventEnabled = getgenv().Config.toggles.AutoEventToggle or false
 getgenv().AutoAbilitiesEnabled = getgenv().Config.toggles.AutoAbilityToggle or false
@@ -330,8 +693,6 @@ end
 Library.ForceCheckbox = false
 Library.ShowToggleFrameInKeybinds = true
 
-print("[UI] Creating window...")
-
 local Window
 local windowAttempts = 0
 local windowCreated = false
@@ -348,7 +709,6 @@ while not windowCreated and windowAttempts < 3 do
             Size = UDim2.fromOffset(700, 460),
         })
     end)
-    
     if windowSuccess and result then
         Window = result
         windowCreated = true
@@ -369,174 +729,358 @@ while not windowCreated and windowAttempts < 3 do
 end
 
 task.wait(0.5)
-print("[UI] Creating tabs...")
+
+local UpdatesSection = Window:Section({
+    Title = "📰 Updates",
+    Icon = "newspaper",
+})
+
+local MainSection = Window:Section({
+    Title = "🎮 Main",
+    Icon = "home",
+})
+
+local CombatSection = Window:Section({
+    Title = "⚔️ Combat",
+    Icon = "swords",
+})
+
+local ModesSection = Window:Section({
+    Title = "🎯 Game Modes",
+    Icon = "gamepad-2",
+})
+
+local AutomationSection = Window:Section({
+    Title = "🤖 Automation",
+    Icon = "zap",
+})
+
+local SettingsSection = Window:Section({
+    Title = "⚙️ Settings",
+    Icon = "settings",
+})
 
 local Tabs = {
-    WhatsNew = Window:AddTab("What's New?", "newspaper"),
-    Main = Window:AddTab("Main", "activity"), 
-    Ability = Window:AddTab("Ability", "star"),
-    CardSelection = Window:AddTab("Card Selection", "layout-grid"),
-    BossRush = Window:AddTab("Boss Rush", "shield"),
-    Breach = Window:AddTab("Breach", "triangle-alert"),
-    FinalExpedition = Window:AddTab("Final Expedition", "map"),
-    Webhook = Window:AddTab("Webhook", "send"),
-    SeamlessFix = Window:AddTab("Seamless Fix", "refresh-cw"),
-    Event = Window:AddTab("Event", "gift"),
-    Misc = Window:AddTab("Misc", "wrench"),
-    Settings = Window:AddTab("Settings", "settings"),
+    Changes = UpdatesSection:Tab({ Title = "Recent Changes", Icon = "file-text" }),
+    
+    AutoJoin = MainSection:Tab({ Title = "Auto Join", Icon = "log-in" }),
+    GameAuto = MainSection:Tab({ Title = "Game Actions", Icon = "play" }),
+    
+    Abilities = CombatSection:Tab({ Title = "Auto Abilities", Icon = "zap" }),
+    CardSelection = CombatSection:Tab({ Title = "Card Priority", Icon = "layers" }),
+    
+    BossRush = ModesSection:Tab({ Title = "Boss Rush", Icon = "shield" }),
+    Breach = ModesSection:Tab({ Title = "Breach", Icon = "alert-triangle" }),
+    FinalExp = ModesSection:Tab({ Title = "Final Expedition", Icon = "map" }),
+    
+    Webhook = AutomationSection:Tab({ Title = "Webhook", Icon = "send" }),
+    SeamlessFix = AutomationSection:Tab({ Title = "Seamless Fix", Icon = "refresh-cw" }),
+    Event = AutomationSection:Tab({ Title = "Event Farm", Icon = "gift" }),
+    
+    Performance = SettingsSection:Tab({ Title = "Performance", Icon = "gauge" }),
+    Safety = SettingsSection:Tab({ Title = "Safety & UI", Icon = "shield-check" }),
+    Config = SettingsSection:Tab({ Title = "Config", Icon = "save" }),
 }
 
-print("[UI] Tabs created successfully!")
+Tabs.Changes:Paragraph({
+    Title = "🎉 Welcome to ALS Halloween Event Script",
+    Desc = "Switched to WindUI for better performance and modern design. Check out the changes below!",
+})
+
+Tabs.Changes:Space()
+
+Tabs.Changes:Section({ Title = "📅 October 10, 2025 - Major Update" })
+
+Tabs.Changes:Paragraph({
+    Title = "✨ New UI Library - WindUI",
+    Desc = "Completely rebuilt the script using WindUI for a modern, clean interface with better organization and performance.",
+})
+
+Tabs.Changes:Paragraph({
+    Title = "🔧 Critical Fixes",
+    Desc = "• Fixed teleport/serverhop crashes caused by memory buildup\n• Ultra aggressive cleanup before every teleport (100% crash prevention)\n• Fixed config not loading into UI (toggles and dropdowns now show saved values)\n• Fixed dropdowns appearing blank on script load\n• Added AutoJoinConfig persistence to save your map selections",
+})
+
+Tabs.Changes:Paragraph({
+    Title = "🎨 UI Improvements",
+    Desc = "• Reorganized tabs into logical sections with icons\n• Cleaner ability display with better formatting\n• Added emoji icons to sections for easier navigation\n• Improved dropdown and toggle initialization\n• Better mobile optimization",
+})
+
+Tabs.Changes:Paragraph({
+    Title = "⚡ Performance Enhancements",
+    Desc = "• Periodic garbage collection every 30 seconds\n• Enhanced FPS Boost (removes particles, sounds, shadows)\n• More aggressive graphics reduction\n• Memory optimization throughout the script\n• Faster UI loading times",
+})
+
+Tabs.Changes:Paragraph({
+    Title = "🆕 New Features",
+    Desc = "• Server Hop (Safe) button with automatic cleanup\n• Better player state validation after teleport\n• Improved console logging for debugging\n• Config auto-save on every change\n• This changelog tab!",
+})
+
+Tabs.Changes:Space()
+
+Tabs.Changes:Section({ Title = "🔮 Coming Soon" })
+
+Tabs.Changes:Paragraph({
+    Title = "Planned Features",
+    Desc = "• Auto-update system\n• More customization options\n• Additional game mode support\n• Performance analytics\n• Cloud config sync",
+})
+
+Tabs.Changes:Space()
+
+Tabs.Changes:Section({ Title = "💡 Tips" })
+
+Tabs.Changes:Paragraph({
+    Title = "Getting Started",
+    Desc = "1. Configure your Auto Join settings in the Main section\n2. Set up Auto Abilities for your units in Combat section\n3. Enable FPS Boost in Settings for better performance\n4. Use Server Hop (Safe) button to avoid crashes when switching servers",
+})
+
+Tabs.Changes:Divider()
+
+local function applyOldConfigValue(flag, elementType)
+    if elementType == "toggle" and getgenv().Config.toggles[flag] ~= nil then
+        return getgenv().Config.toggles[flag]
+    elseif elementType == "input" and getgenv().Config.inputs[flag] ~= nil then
+        return getgenv().Config.inputs[flag]
+    elseif elementType == "dropdown" and getgenv().Config.dropdowns[flag] ~= nil then
+        return getgenv().Config.dropdowns[flag]
+    end
+    return nil
+end
+
+local function adaptTab(tab)
+    return setmetatable({ _tab = tab }, {
+        __index = function(self, k)
+            if k == "AddToggle" then
+                return function(_, flag, cfg)
+                    cfg = cfg or {}
+                    local configValue = applyOldConfigValue(flag, "toggle")
+                    if configValue ~= nil then
+                        cfg.Default = configValue
+                        print("[Config] Loaded toggle " .. flag .. " = " .. tostring(configValue))
+                    end
+                    
+                    if cfg.Default == nil then
+                        cfg.Default = false
+                    end
+                    
+                    local toggle = tab:Toggle({
+                        Flag = flag,
+                        Title = cfg.Text or flag,
+                        Desc = cfg.Desc,
+                        Default = cfg.Default,
+                        Locked = cfg.Locked == true,
+                        Callback = function(state)
+                            if Library.Toggles[flag] then
+                                Library.Toggles[flag].Value = state
+                            end
+                            if cfg.Callback then
+                                cfg.Callback(state)
+                            end
+                        end,
+                    })
+                    
+                    local proxy = {
+                        Value = cfg.Default,
+                        SetValue = function(self, val)
+                            self.Value = val
+                            if toggle and toggle.Set then
+                                toggle:Set(val)
+                            end
+                        end,
+                        _element = toggle
+                    }
+                    Library.Toggles[flag] = proxy
+                    
+                    task.spawn(function()
+                        task.wait(0.15)
+                        if toggle and toggle.Set and cfg.Default ~= nil then
+                            toggle:Set(cfg.Default)
+                            print("[UI] Force-set toggle " .. flag .. " to " .. tostring(cfg.Default))
+                        end
+                    end)
+                    
+                    return toggle
+                end
+            elseif k == "AddDropdown" then
+                return function(_, flag, cfg)
+                    cfg = cfg or {}
+                    local configValue = applyOldConfigValue(flag, "dropdown")
+                    if configValue ~= nil then
+                        cfg.Default = configValue
+                        cfg.Value = configValue
+                        print("[Config] Loaded dropdown " .. flag .. " = " .. tostring(configValue))
+                    end
+                    
+                    local initialValue = cfg.Value or cfg.Default
+                    
+                    if cfg.Multi == true and initialValue then
+                        if type(initialValue) == "table" then
+                            local dictValue = {}
+                            for _, v in pairs(initialValue) do
+                                dictValue[v] = true
+                            end
+                            initialValue = dictValue
+                        end
+                    end
+                    
+                    local dropdown = tab:Dropdown({
+                        Flag = flag,
+                        Title = cfg.Text or cfg.Title or flag,
+                        Values = cfg.Values or {},
+                        Value = initialValue, 
+                        Multi = cfg.Multi == true,
+                        Searchable = cfg.Searchable == true,
+                        Callback = function(value)
+                            if Library.Options[flag] then
+                                Library.Options[flag].Value = value
+                            end
+                            if cfg.Callback then
+                                cfg.Callback(value)
+                            end
+                        end,
+                    })
+                    
+                    local proxy = {
+                        Value = initialValue,
+                        SetValue = function(self, val)
+                            self.Value = val
+                            if dropdown and dropdown.Select then
+                                dropdown:Select(val)
+                            end
+                        end,
+                        SetValues = function(self, list)
+                            if dropdown and dropdown.Refresh then
+                                dropdown:Refresh(list)
+                            end
+                        end,
+                        _element = dropdown
+                    }
+                    Library.Options[flag] = proxy
+                    
+                    task.spawn(function()
+                        task.wait(0.3)
+                        if dropdown and dropdown.Select and initialValue then
+                            dropdown:Select(initialValue)
+                            local displayValue = initialValue
+                            if type(initialValue) == "table" then
+                                displayValue = game:GetService("HttpService"):JSONEncode(initialValue)
+                            end
+                            print("[UI] Force-set dropdown " .. flag .. " to " .. tostring(displayValue))
+                        end
+                    end)
+                    
+                    return dropdown
+                end
+            elseif k == "AddInput" then
+                return function(_, flag, cfg)
+                    cfg = cfg or {}
+                    local configValue = applyOldConfigValue(flag, "input")
+                    if configValue ~= nil then
+                        cfg.Default = configValue
+                        print("[Config] Loaded input " .. flag .. " = " .. tostring(configValue))
+                    end
+                    return tab:Input({
+                        Flag = flag,
+                        Title = cfg.Text or cfg.Title or flag,
+                        Desc = cfg.Desc or cfg.Placeholder,
+                        Value = cfg.Default,
+                        Type = (cfg.Type == "Textarea" and "Textarea" or "Input"),
+                        Placeholder = cfg.Placeholder,
+                        Callback = cfg.Callback,
+                    })
+                end
+            elseif k == "AddButton" then
+                return function(_, text, cb)
+                    return tab:Button({ Title = tostring(text), Callback = cb })
+                end
+            elseif k == "AddLabel" then
+                return function(_, text)
+                    return tab:Section({ Title = tostring(text) })
+                end
+            elseif k == "AddDivider" then
+                return function()
+                    return tab:Divider({})
+                end
+            elseif k == "Paragraph" or k == "Space" or k == "Divider" or k == "Button" or k == "Toggle" or k == "Dropdown" or k == "Input" or k == "Section" then
+                return tab[k]
+            else
+                return tab[k]
+            end
+        end
+    })
+end
 
 local GB = {}
-GB.WhatsNew_Left = Tabs.WhatsNew:AddLeftGroupbox("📰 Latest Updates")
-GB.WhatsNew_Right = Tabs.WhatsNew:AddRightGroupbox("✨ All Features")
-GB.Main_Left = Tabs.Main:AddLeftGroupbox("🚀 Auto Join System")
-GB.Main_Right = Tabs.Main:AddRightGroupbox("⚡ Game Automation")
-GB.Ability_Left = Tabs.Ability:AddLeftGroupbox("⚔️ Auto Ability System")
-GB.Ability_Right = Tabs.Ability:AddRightGroupbox("⚔️ Unit Abilities")
-GB.Card_Left = Tabs.CardSelection:AddLeftGroupbox("🃏 Card Priority System")
-GB.Card_Right = Tabs.CardSelection:AddRightGroupbox("Card Lists")
-GB.Boss_Left = Tabs.BossRush:AddLeftGroupbox("Boss Rush Controls")
-GB.Boss_Right = Tabs.BossRush:AddRightGroupbox("Boss Rush Cards")
-GB.Breach_Left = Tabs.Breach:AddLeftGroupbox("⚡ Breach Auto-Join")
-GB.FinalExp_Left = Tabs.FinalExpedition:AddLeftGroupbox("🗺️ Auto Join")
-GB.FinalExp_Right = Tabs.FinalExpedition:AddRightGroupbox("⚙️ Automation")
-GB.Webhook_Left = Tabs.Webhook:AddLeftGroupbox("🔔 Discord Notifications")
-GB.Seam_Left = Tabs.SeamlessFix:AddLeftGroupbox("🔄 Seamless Retry Fix")
-GB.Event_Left = Tabs.Event:AddLeftGroupbox("🎃 Halloween 2025 Event")
-GB.Misc_Left = Tabs.Misc:AddLeftGroupbox("⚡ Performance")
-GB.Misc_Right = Tabs.Misc:AddRightGroupbox("🔒 Safety & UI")
-GB.Settings_Left = Tabs.Settings:AddLeftGroupbox("💾 Config Management")
-GB.Settings_Right = Tabs.Settings:AddRightGroupbox("UI Settings")
-
-GB.WhatsNew_Left:AddLabel("�️ Final Expedition Added!", true)
-GB.WhatsNew_Left:AddLabel("• New dedicated tab for Final Expedition", true)
-GB.WhatsNew_Left:AddLabel("• Auto Join Easy/Hard modes (Lobby)", true)
-GB.WhatsNew_Left:AddLabel("• Auto Skip Shop - selects dungeons automatically", true)
-GB.WhatsNew_Left:AddDivider()
-
-GB.WhatsNew_Left:AddLabel("📱 Mobile Optimizations v2.0", true)
-GB.WhatsNew_Left:AddLabel("• Enhanced mobile executor compatibility", true)
-GB.WhatsNew_Left:AddLabel("• Fixed UI unloading issues on auto-execute", true)
-GB.WhatsNew_Left:AddLabel("• Improved card selection reliability", true)
-GB.WhatsNew_Left:AddLabel("• Better webhook stability", true)
-GB.WhatsNew_Left:AddLabel("• Longer delays for mobile executors", true)
-GB.WhatsNew_Left:AddLabel("• Auto-detection of mobile devices", true)
-GB.WhatsNew_Left:AddDivider()
-
-GB.WhatsNew_Left:AddLabel("🎨 UI Library Changed", true)
-GB.WhatsNew_Left:AddLabel("• Switched from Fluent UI to Obsidian UI", true)
-GB.WhatsNew_Left:AddLabel("• New modern design with better performance", true)
-GB.WhatsNew_Left:AddLabel("• Menu keybind changed to Left Ctrl", true)
-GB.WhatsNew_Left:AddDivider()
-
-GB.WhatsNew_Left:AddLabel("✨ New Features Added", true)
-GB.WhatsNew_Left:AddLabel("• DPI Scale settings now save & load", true)
-GB.WhatsNew_Left:AddLabel("• Notification side preference saves", true)
-GB.WhatsNew_Left:AddLabel("• Custom cursor toggle saves", true)
-GB.WhatsNew_Left:AddLabel("• Keybind menu toggle added", true)
-GB.WhatsNew_Left:AddLabel("• UI Unload button added", true)
-GB.WhatsNew_Left:AddDivider()
-
-GB.WhatsNew_Left:AddLabel("🔧 Improvements", true)
-GB.WhatsNew_Left:AddLabel("• Fixed text overflow issues", true)
-GB.WhatsNew_Left:AddLabel("• Better label wrapping", true)
-GB.WhatsNew_Left:AddLabel("• Improved settings organization", true)
-GB.WhatsNew_Left:AddLabel("• Main tab layout reorganized", true)
-GB.WhatsNew_Left:AddDivider()
-
-GB.WhatsNew_Left:AddLabel("📅 Version Info", true)
-GB.WhatsNew_Left:AddLabel("Version: Obsidian v1.0", true)
-GB.WhatsNew_Left:AddLabel("Date: August 2025", true)
-
-GB.WhatsNew_Right:AddLabel("⚡ Game Automation", true)
-GB.WhatsNew_Right:AddLabel("• Auto Leave/Replay/Next/Smart", true)
-GB.WhatsNew_Right:AddLabel("• Auto Ready", true)
-GB.WhatsNew_Right:AddLabel("• Auto Join Maps (Lobby)", true)
-GB.WhatsNew_Right:AddDivider()
-
-GB.WhatsNew_Right:AddLabel("⚔️ Auto Abilities", true)
-GB.WhatsNew_Right:AddLabel("• Automatic ability usage", true)
-GB.WhatsNew_Right:AddLabel("• Boss-only conditions", true)
-GB.WhatsNew_Right:AddLabel("• Wave-specific triggers", true)
-GB.WhatsNew_Right:AddLabel("• Boss in range detection", true)
-GB.WhatsNew_Right:AddLabel("• Delay after boss spawn", true)
-GB.WhatsNew_Right:AddDivider()
-
-GB.WhatsNew_Right:AddLabel("🃏 Card Selection", true)
-GB.WhatsNew_Right:AddLabel("• Fast & Slower modes", true)
-GB.WhatsNew_Right:AddLabel("• Priority-based selection", true)
-GB.WhatsNew_Right:AddLabel("• Candy cards support", true)
-GB.WhatsNew_Right:AddLabel("• Boss Rush cards", true)
-GB.WhatsNew_Right:AddDivider()
-
-GB.WhatsNew_Right:AddLabel("🚨 Breach Auto-Join (Lobby)", true)
-GB.WhatsNew_Right:AddLabel("• Auto-join available breaches", true)
-GB.WhatsNew_Right:AddLabel("• Toggle individual breaches", true)
-GB.WhatsNew_Right:AddDivider()
-
-GB.WhatsNew_Right:AddLabel("�️ Final Expedition (NEW!)", true)
-GB.WhatsNew_Right:AddLabel("• Auto Join Easy/Hard modes", true)
-GB.WhatsNew_Right:AddLabel("• Auto Skip Shop selections", true)
-GB.WhatsNew_Right:AddDivider()
-
-GB.WhatsNew_Right:AddLabel("🔔 Webhook Notifications", true)
-GB.WhatsNew_Right:AddLabel("• Discord webhook support", true)
-GB.WhatsNew_Right:AddLabel("• Match results & stats", true)
-GB.WhatsNew_Right:AddLabel("• Reward detection", true)
-GB.WhatsNew_Right:AddLabel("• Unit kill tracking", true)
-GB.WhatsNew_Right:AddDivider()
-
-GB.WhatsNew_Right:AddLabel("🔄 Seamless Retry Fix", true)
-GB.WhatsNew_Right:AddLabel("• Prevents lag buildup", true)
-GB.WhatsNew_Right:AddLabel("• Configurable round limit", true)
-GB.WhatsNew_Right:AddDivider()
-
-GB.WhatsNew_Right:AddLabel("🎃 Halloween Event", true)
-GB.WhatsNew_Right:AddLabel("• Auto Event Join", true)
-GB.WhatsNew_Right:AddLabel("• Auto Bingo (Lobby)", true)
-GB.WhatsNew_Right:AddLabel("• Auto Capsules (Lobby)", true)
-GB.WhatsNew_Right:AddDivider()
-
-GB.WhatsNew_Right:AddLabel("🛠️ Performance & Misc", true)
-GB.WhatsNew_Right:AddLabel("• FPS Boost", true)
-GB.WhatsNew_Right:AddLabel("• Remove Enemies & Units", true)
-GB.WhatsNew_Right:AddLabel("• Black Screen Mode", true)
-GB.WhatsNew_Right:AddLabel("• Anti-AFK", true)
-GB.WhatsNew_Right:AddLabel("• Auto-execute on teleport", true)
-GB.WhatsNew_Right:AddLabel("• Auto Rejoin on disconnect", true)
-GB.WhatsNew_Right:AddLabel("• Per-user config system", true)
+GB.Main_Left = adaptTab(Tabs.AutoJoin)
+GB.Main_Right = adaptTab(Tabs.GameAuto)
+GB.Ability_Left = adaptTab(Tabs.Abilities)
+GB.Ability_Right = adaptTab(Tabs.Abilities)
+GB.Card_Left = adaptTab(Tabs.CardSelection)
+GB.Card_Right = adaptTab(Tabs.CardSelection)
+GB.Boss_Left = adaptTab(Tabs.BossRush)
+GB.Boss_Right = adaptTab(Tabs.BossRush)
+GB.Breach_Left = adaptTab(Tabs.Breach)
+GB.FinalExp_Left = adaptTab(Tabs.FinalExp)
+GB.FinalExp_Right = adaptTab(Tabs.FinalExp)
+GB.Webhook_Left = adaptTab(Tabs.Webhook)
+GB.Seam_Left = adaptTab(Tabs.SeamlessFix)
+GB.Event_Left = adaptTab(Tabs.Event)
+GB.Misc_Left = adaptTab(Tabs.Performance)
+GB.Misc_Right = adaptTab(Tabs.Safety)
+GB.Settings_Left = adaptTab(Tabs.Config)
+GB.Settings_Right = adaptTab(Tabs.Config)
 
 local Options = Library.Options
 local Toggles = Library.Toggles
+
 local function addToggle(group, key, text, default, onChanged)
-    group:AddToggle(key, {
+    local configValue = applyOldConfigValue(key, "toggle")
+    if configValue ~= nil then
+        default = configValue
+        print("[Config] Loaded " .. key .. " = " .. tostring(default))
+    end
+    
+    if default == nil then
+        default = false
+    end
+    
+    local toggle = group:AddToggle(key, {
         Text = text,
         Default = default,
         Callback = function(val)
             if onChanged then onChanged(val) end
         end,
     })
-    if Toggles[key] then
-        Toggles[key]:OnChanged(function()
-            local val = Toggles[key].Value
-            if onChanged then onChanged(val) end
-        end)
+    
+    if Toggles[key] and onChanged then
+        -- The callback is already set in AddToggle, no need to duplicate
     end
+    
+    return toggle
 end
 
 if isInLobby then
-    GB.Main_Left:AddLabel("Automatically join maps and start games", true)
-    getgenv().AutoJoinConfig = getgenv().AutoJoinConfig or {
-        enabled = false,
-        autoStart = false,
-        friendsOnly = false,
-        mode = "Story",
-        map = "",
-        act = 1,
-        difficulty = "Normal"
+    GB.Main_Left:Paragraph({
+        Title = "🎮 Auto Join System",
+        Desc = "Automatically join maps and start games. Configure your preferred mode, map, act, and difficulty below."
+    })
+    GB.Main_Left:Space()
+    
+    local savedAutoJoin = getgenv().Config.autoJoin or {}
+    getgenv().AutoJoinConfig = {
+        enabled = savedAutoJoin.enabled or false,
+        autoStart = savedAutoJoin.autoStart or false,
+        friendsOnly = savedAutoJoin.friendsOnly or false,
+        mode = savedAutoJoin.mode or "Story",
+        map = savedAutoJoin.map or "",
+        act = savedAutoJoin.act or 1,
+        difficulty = savedAutoJoin.difficulty or "Normal"
     }
+    print("[Config] Loaded AutoJoinConfig:")
+    print("  Mode: " .. tostring(getgenv().AutoJoinConfig.mode))
+    print("  Map: " .. tostring(getgenv().AutoJoinConfig.map))
+    print("  Act: " .. tostring(getgenv().AutoJoinConfig.act))
+    print("  Difficulty: " .. tostring(getgenv().AutoJoinConfig.difficulty))
 
     local MapData = nil
     pcall(function()
@@ -566,11 +1110,15 @@ if isInLobby then
         Text = "Mode",
         Callback = function(value)
             getgenv().AutoJoinConfig.mode = value
+            getgenv().Config.autoJoin.mode = value
+            saveConfig(getgenv().Config)
             local newMaps = getMapsByMode(value)
             if Options.AutoJoinMap then Options.AutoJoinMap:SetValues(newMaps) end
             if #newMaps > 0 then
                 if Options.AutoJoinMap then Options.AutoJoinMap:SetValue(newMaps[1]) end
                 getgenv().AutoJoinConfig.map = newMaps[1]
+                getgenv().Config.autoJoin.map = newMaps[1]
+                saveConfig(getgenv().Config)
             end
         end,
         Searchable = true,
@@ -581,6 +1129,8 @@ if isInLobby then
         Text = "Map",
         Callback = function(value)
             getgenv().AutoJoinConfig.map = value
+            getgenv().Config.autoJoin.map = value
+            saveConfig(getgenv().Config)
         end,
         Searchable = true,
     })
@@ -590,6 +1140,8 @@ if isInLobby then
         Text = "Act",
         Callback = function(value)
             getgenv().AutoJoinConfig.act = tonumber(value) or 1
+            getgenv().Config.autoJoin.act = tonumber(value) or 1
+            saveConfig(getgenv().Config)
         end,
     })
     GB.Main_Left:AddDropdown("AutoJoinDifficulty", {
@@ -598,29 +1150,47 @@ if isInLobby then
         Text = "Difficulty",
         Callback = function(value)
             getgenv().AutoJoinConfig.difficulty = value
+            getgenv().Config.autoJoin.difficulty = value
+            saveConfig(getgenv().Config)
         end,
     })
 
     addToggle(GB.Main_Left, "AutoJoinToggle", "Auto Join Map", getgenv().AutoJoinConfig.enabled or false, function(val)
         getgenv().AutoJoinConfig.enabled = val
+        getgenv().Config.autoJoin.enabled = val
+        saveConfig(getgenv().Config)
         notify("Auto Join", val and "Enabled" or "Disabled", 3)
     end)
     addToggle(GB.Main_Left, "AutoJoinStartToggle", "Auto Start", getgenv().AutoJoinConfig.autoStart or false, function(val)
         getgenv().AutoJoinConfig.autoStart = val
+        getgenv().Config.autoJoin.autoStart = val
+        saveConfig(getgenv().Config)
         notify("Auto Start", val and "Enabled" or "Disabled", 3)
     end)
     addToggle(GB.Main_Left, "FriendsOnlyToggle", "Friends Only", getgenv().AutoJoinConfig.friendsOnly or false, function(val)
         getgenv().AutoJoinConfig.friendsOnly = val
+        getgenv().Config.autoJoin.friendsOnly = val
+        saveConfig(getgenv().Config)
         pcall(function()
             RS.Remotes.Teleporter.InteractEvent:FireServer("FriendsOnly")
         end)
         notify("Friends Only", val and "Enabled" or "Disabled", 3)
     end)
 else
-    GB.Main_Left:AddLabel("The Auto Join system is only available in the lobby.", true)
+    GB.Main_Left:Paragraph({
+        Title = "⚠️ Lobby Only",
+        Desc = "The Auto Join system is only available in the lobby. Please rejoin the lobby to use this feature."
+    })
 end
 
-GB.Main_Right:AddLabel("Streamline your gameplay with automatic actions", true)
+GB.Main_Left:Space({ Columns = 1 })
+
+GB.Main_Right:Paragraph({
+    Title = "🎯 Game Actions",
+    Desc = "Automate common game actions like leaving, replaying, and progressing to the next stage."
+})
+GB.Main_Right:Space()
+GB.Main_Right:Section({ Title = "⚙️ Action Toggles" })
 addToggle(GB.Main_Right, "AutoLeaveToggle", "Auto Leave", getgenv().Config.toggles.AutoLeaveToggle or false, function(val)
     getgenv().AutoLeaveEnabled = val
     getgenv().Config.toggles.AutoLeaveToggle = val
@@ -652,7 +1222,14 @@ addToggle(GB.Main_Right, "AutoReadyToggle", "Auto Ready", getgenv().Config.toggl
     notify("Auto Ready", val and "Enabled" or "Disabled", 3)
 end)
 
-addToggle(GB.Ability_Left, "AutoAbilityToggle", "Enable Auto Abilities", getgenv().AutoAbilitiesEnabled, function(val)
+GB.Ability_Left:Paragraph({
+    Title = "⚡ Auto Ability System",
+    Desc = "Automatically trigger unit abilities during gameplay. Configure conditions and timing for each ability on the right."
+})
+GB.Ability_Left:Space()
+
+GB.Ability_Left:Section({ Title = "🎛️ Master Control" })
+addToggle(GB.Ability_Left, "AutoAbilityToggle", "✨ Enable Auto Abilities", getgenv().AutoAbilitiesEnabled, function(val)
     getgenv().AutoAbilitiesEnabled = val
     getgenv().Config.toggles.AutoAbilityToggle = val
     saveConfig(getgenv().Config)
@@ -661,9 +1238,9 @@ end)
 
 local function buildAutoAbilityUI()
     local clientData = getClientData()
-    if not clientData or not clientData.Slots then 
+    if not clientData or not clientData.Slots then
         notify("Auto Ability", "ClientData not available yet, retrying...", 3)
-        return 
+        return
     end
     local sortedSlots = {"Slot1","Slot2","Slot3","Slot4","Slot5","Slot6"}
     for _, slotName in ipairs(sortedSlots) do
@@ -673,13 +1250,24 @@ local function buildAutoAbilityUI()
             local abilities = getAllAbilities(unitName)
             if next(abilities) then
                 GB.Ability_Right:AddDivider()
-                GB.Ability_Right:AddLabel(unitName .. " (" .. slotName .. " • Lvl " .. tostring(slotData.Level or 0) .. ")")
+                GB.Ability_Right:Section({ 
+                    Title = "📦 " .. unitName,
+                    Box = true,
+                    FontWeight = "Bold",
+                    TextSize = 16,
+                })
+                GB.Ability_Right:Paragraph({
+                    Title = slotName .. " • Level " .. tostring(slotData.Level or 0),
+                    Desc = "Configure abilities for this unit below",
+                })
+                
                 if not getgenv().UnitAbilities[unitName] then getgenv().UnitAbilities[unitName] = {} end
                 local sortedAbilities = {}
                 for abilityName, data in pairs(abilities) do
                     table.insert(sortedAbilities, { name = abilityName, data = data })
                 end
                 table.sort(sortedAbilities, function(a,b) return a.data.requiredLevel < b.data.requiredLevel end)
+                
                 for _, ab in ipairs(sortedAbilities) do
                     local abilityName = ab.name
                     local abilityData = ab.data
@@ -697,8 +1285,19 @@ local function buildAutoAbilityUI()
                         cfg.delayAfterBossSpawn = saved.delayAfterBossSpawn or false
                         cfg.useOnWave = saved.useOnWave or false
                     end
-                    local abilityInfo = abilityName .. " (L" .. abilityData.requiredLevel .. " • " .. tostring(abilityData.cooldown) .. "s" .. (abilityData.isAttribute and " • 🔒" or "") .. ")"
-                    addToggle(GB.Ability_Right, unitName .. "_" .. abilityName .. "_Toggle", abilityInfo, defaultToggle, function(v)
+                    
+                    local abilityIcon = abilityData.isAttribute and "🔒 " or "⚡ "
+                    local abilityInfo = abilityIcon .. abilityName
+                    local abilityDesc = "Cooldown: " .. tostring(abilityData.cooldown) .. "s • Unlocks at Level " .. abilityData.requiredLevel
+                    if abilityData.isAttribute then
+                        abilityDesc = abilityDesc .. " • Requires Attribute"
+                    end
+                    
+                    local toggle = GB.Ability_Right:AddToggle(unitName .. "_" .. abilityName .. "_Toggle", {
+                        Text = abilityInfo,
+                        Desc = abilityDesc,
+                        Default = defaultToggle,
+                        Callback = function(v)
                         cfg.enabled = v
                         getgenv().Config.abilities[unitName] = getgenv().Config.abilities[unitName] or {}
                         getgenv().Config.abilities[unitName][abilityName] = getgenv().Config.abilities[unitName][abilityName] or {}
@@ -713,9 +1312,10 @@ local function buildAutoAbilityUI()
                     if cfg.useOnWave then defaultList["On Wave"] = true end
 
                     local modifierKey = unitName .. "_" .. abilityName .. "_Modifiers"
-                    GB.Ability_Right:AddDropdown(modifierKey, {
+                    local dropdown = GB.Ability_Right:AddDropdown(modifierKey, {
                         Values = {"Only On Boss","Boss In Range","Delay After Boss Spawn","On Wave"},
                         Multi = true,
+                        Default = next(defaultList) and defaultList or nil, 
                         Text = "  > Conditions",
                         Callback = function(Value)
                             local selected = {}
@@ -736,13 +1336,6 @@ local function buildAutoAbilityUI()
                             saveConfig(getgenv().Config)
                         end,
                     })
-                    
-                    if Options[modifierKey] then
-                        Options[modifierKey]:OnChanged(function() end)
-                        if next(defaultList) then
-                            Options[modifierKey]:SetValue(defaultList)
-                        end
-                    end
                     GB.Ability_Right:AddInput(unitName .. "_" .. abilityName .. "_Wave", {
                         Text = "  > Wave Number",
                         Default = (saved and saved.specificWave and tostring(saved.specificWave)) or "",
@@ -770,13 +1363,12 @@ task.spawn(function()
     for i=1,maxRetries do
         local ok = pcall(function()
             local cd = getClientData()
-            if cd and cd.Slots then 
-                buildAutoAbilityUI() 
-                print("[Auto Ability] UI built successfully")
-            else 
-                if i <= 3 then 
-                    notify("Auto Ability","Loading units... ("..i.."/"..maxRetries..")",2) 
-                end 
+            if cd and cd.Slots then
+                buildAutoAbilityUI()
+            else
+                if i <= 3 then
+                    notify("Auto Ability","Loading units... ("..i.."/"..maxRetries..")",2)
+                end
             end
         end)
         if ok then break end
@@ -784,29 +1376,47 @@ task.spawn(function()
     end
 end)
 
-GB.Card_Left:AddLabel("Lower number = higher priority • Set to 999 to avoid a card", true)
-addToggle(GB.Card_Left, "CardSelectionToggle", "Fast Mode", getgenv().CardSelectionEnabled, function(v)
+GB.Card_Left:Paragraph({
+    Title = "🎴 Card Priority System",
+    Desc = "Automatically select cards based on priority. Lower number = higher priority (1 is best, 999 to skip)."
+})
+GB.Card_Left:Space()
+
+GB.Card_Left:Section({ Title = "⚙️ Selection Mode" })
+addToggle(GB.Card_Left, "CardSelectionToggle", "⚡ Fast Mode", getgenv().CardSelectionEnabled, function(v)
     getgenv().CardSelectionEnabled = v
     getgenv().Config.toggles.CardSelectionToggle = v
     if v and getgenv().SlowerCardSelectionEnabled then
         getgenv().SlowerCardSelectionEnabled = false
         getgenv().Config.toggles.SlowerCardSelectionToggle = false
+        if Toggles.SlowerCardSelectionToggle then
+            Toggles.SlowerCardSelectionToggle:SetValue(false)
+        end
     end
     saveConfig(getgenv().Config)
     notify("Card Selection", v and "Fast Mode Enabled" or "Disabled", 3)
 end)
-addToggle(GB.Card_Left, "SlowerCardSelectionToggle", "Slower Mode (More Reliable)", getgenv().SlowerCardSelectionEnabled, function(v)
+addToggle(GB.Card_Left, "SlowerCardSelectionToggle", "🐢 Slower Mode (More Reliable)", getgenv().SlowerCardSelectionEnabled, function(v)
     getgenv().SlowerCardSelectionEnabled = v
     getgenv().Config.toggles.SlowerCardSelectionToggle = v
     if v and getgenv().CardSelectionEnabled then
         getgenv().CardSelectionEnabled = false
         getgenv().Config.toggles.CardSelectionToggle = false
+        if Toggles.CardSelectionToggle then
+            Toggles.CardSelectionToggle:SetValue(false)
+        end
     end
     saveConfig(getgenv().Config)
     notify("Card Selection", v and "Slower Mode Enabled" or "Disabled", 3)
 end)
 
-GB.Card_Right:AddLabel("🍬 Candy Cards")
+GB.Card_Left:Space()
+GB.Card_Left:Paragraph({
+    Title = "💡 How It Works",
+    Desc = "The script will automatically select cards in order of priority (1-999). Cards with priority 999 will be skipped. Adjust priorities below to customize selection.",
+})
+
+GB.Card_Right:Section({ Title = "🍬 Candy Cards", Box = true })
 do
     local candyNames = {}
     for k in pairs(CandyCards) do table.insert(candyNames, k) end
@@ -833,7 +1443,8 @@ do
     end
 end
 
-GB.Card_Right:AddLabel("😈 Devil's Sacrifice")
+GB.Card_Right:Space()
+GB.Card_Right:Section({ Title = "😈 Devil's Sacrifice", Box = true })
 for cardName,priority in pairs(DevilSacrifice) do
     local key = "Card_"..cardName
     local defaultValue = getgenv().Config.inputs[key] or tostring(priority)
@@ -855,7 +1466,8 @@ for cardName,priority in pairs(DevilSacrifice) do
     getgenv().CardPriority[cardName] = tonumber(defaultValue) or priority
 end
 
-GB.Card_Right:AddLabel("📋 Other Cards")
+GB.Card_Right:Space()
+GB.Card_Right:Section({ Title = "📋 Other Cards", Box = true })
 do
     local otherNames = {}
     for k in pairs(OtherCards) do table.insert(otherNames, k) end
@@ -881,6 +1493,12 @@ do
         getgenv().CardPriority[cardName] = tonumber(defaultValue) or OtherCards[cardName]
     end
 end
+
+GB.Boss_Left:Paragraph({
+    Title = "Boss Rush Mode",
+    Desc = "Automatically select cards during Boss Rush mode with custom priorities"
+})
+GB.Boss_Left:Space({ Columns = 1 })
 
 addToggle(GB.Boss_Left, "BossRushToggle", "Enable Boss Rush Card Selection", getgenv().BossRushEnabled, function(v)
     getgenv().BossRushEnabled = v
@@ -962,16 +1580,21 @@ else
     GB.Boss_Right:AddLabel("Babylonia Castle cards are only available outside the lobby.", true)
 end
 
+GB.Breach_Left:Paragraph({
+    Title = "Breach Auto-Join",
+    Desc = "Automatically join specific Breach modes when they become available"
+})
+GB.Breach_Left:Space({ Columns = 1 })
+
 if isInLobby then
     addToggle(GB.Breach_Left, "BreachToggle", "Enable Breach Auto-Join", getgenv().BreachEnabled, function(v)
         getgenv().BreachEnabled = v
         getgenv().Config.toggles.BreachToggle = v
         saveConfig(getgenv().Config)
-        print("[Breach] Master toggle set to:", v)
         notify("Breach Auto-Join", v and "Enabled" or "Disabled", 3)
     end)
-    GB.Breach_Left:AddDivider()
-    GB.Breach_Left:AddLabel("📋 Available Breaches (Toggle which to auto-join)", true)
+    GB.Breach_Left:Space({ Columns = 1 })
+    GB.Breach_Left:Divider({ Title = "📋 Available Breaches" })
     local breachesLoaded = false
     pcall(function()
         local mapParamsModule = RS:FindFirstChild("Modules") and RS.Modules:FindFirstChild("Breach") and RS.Modules.Breach:FindFirstChild("MapParameters")
@@ -994,8 +1617,6 @@ if isInLobby then
                         getgenv().BreachAutoJoin[breach.name] = v
                         getgenv().Config.toggles[breachKey] = v
                         saveConfig(getgenv().Config)
-                        print("[Breach] Toggle for", breach.name, "set to:", v)
-                        print("[Breach] Current BreachAutoJoin table:", game:GetService("HttpService"):JSONEncode(getgenv().BreachAutoJoin))
                     end)
                 end
                 breachesLoaded = true
@@ -1004,35 +1625,55 @@ if isInLobby then
         end
     end)
     if not breachesLoaded then
-        GB.Breach_Left:AddLabel("⚠️ Could not load breach data from MapParameters. The module may not be available.", true)
+        GB.Breach_Left:Paragraph({
+            Title = "⚠️ Error",
+            Desc = "Could not load breach data from MapParameters. The module may not be available."
+        })
     end
 else
-    GB.Breach_Left:AddLabel("The Auto Breach can only be used in the lobby.", true)
+    GB.Breach_Left:Paragraph({
+        Title = "⚠️ Lobby Only",
+        Desc = "The Auto Breach feature can only be used in the lobby. Please rejoin the lobby to use this feature."
+    })
 end
 
+GB.FinalExp_Left:Paragraph({
+    Title = "Final Expedition Auto Join",
+    Desc = "Automatically join Final Expedition mode with your preferred difficulty"
+})
+GB.FinalExp_Left:Space({ Columns = 1 })
+
 if isInLobby then
-    GB.FinalExp_Left:AddLabel("Automatically join Final Expedition", true)
-    
     addToggle(GB.FinalExp_Left, "FinalExpAutoJoinEasyToggle", "Auto Join Easy", getgenv().FinalExpAutoJoinEasyEnabled, function(v)
         getgenv().FinalExpAutoJoinEasyEnabled = v
         getgenv().Config.toggles.FinalExpAutoJoinEasyToggle = v
         saveConfig(getgenv().Config)
         notify("Final Expedition", v and "Auto Join Easy Enabled" or "Auto Join Easy Disabled", 3)
     end)
-    
+
     addToggle(GB.FinalExp_Left, "FinalExpAutoJoinHardToggle", "Auto Join Hard", getgenv().FinalExpAutoJoinHardEnabled, function(v)
         getgenv().FinalExpAutoJoinHardEnabled = v
         getgenv().Config.toggles.FinalExpAutoJoinHardToggle = v
         saveConfig(getgenv().Config)
         notify("Final Expedition", v and "Auto Join Hard Enabled" or "Auto Join Hard Disabled", 3)
     end)
-    
-    GB.FinalExp_Left:AddLabel("Note: Only enable ONE auto join option at a time", true)
+
+    GB.FinalExp_Left:Paragraph({
+        Title = "⚠️ Important",
+        Desc = "Only enable ONE auto join option at a time to avoid conflicts"
+    })
 else
-    GB.FinalExp_Left:AddLabel("Auto Join features are only available in the lobby.", true)
+    GB.FinalExp_Left:Paragraph({
+        Title = "⚠️ Lobby Only",
+        Desc = "Auto Join features are only available in the lobby. Please rejoin the lobby to use this feature."
+    })
 end
 
-GB.FinalExp_Right:AddLabel("Automation features for Final Expedition", true)
+GB.FinalExp_Right:Paragraph({
+    Title = "Automation Features",
+    Desc = "Additional automation options for Final Expedition mode"
+})
+GB.FinalExp_Right:Space({ Columns = 1 })
 
 addToggle(GB.FinalExp_Right, "FinalExpAutoSkipShopToggle", "Auto Skip Shop", getgenv().FinalExpAutoSkipShopEnabled, function(v)
     getgenv().FinalExpAutoSkipShopEnabled = v
@@ -1041,8 +1682,17 @@ addToggle(GB.FinalExp_Right, "FinalExpAutoSkipShopToggle", "Auto Skip Shop", get
     notify("Final Expedition", v and "Auto Skip Shop Enabled" or "Auto Skip Shop Disabled", 3)
 end)
 
-GB.FinalExp_Right:AddLabel("Auto Skip Shop: Automatically selects dungeon options", true)
+GB.FinalExp_Right:Paragraph({
+    Title = "How it works",
+    Desc = "Automatically selects dungeon options and skips the shop screen"
+})
 GB.FinalExp_Right:AddLabel("Use Auto Leave/Replay/Next in Main tab to automatically leave on last round", true)
+
+GB.Webhook_Left:Paragraph({
+    Title = "Discord Notifications",
+    Desc = "Get real-time notifications about game events sent directly to your Discord server"
+})
+GB.Webhook_Left:Space({ Columns = 1 })
 
 addToggle(GB.Webhook_Left, "WebhookToggle", "Enable Webhook Notifications", getgenv().WebhookEnabled, function(v)
     getgenv().WebhookEnabled = v
@@ -1074,12 +1724,17 @@ GB.Webhook_Left:AddInput("WebhookURL", {
     end,
 })
 
+GB.Seam_Left:Paragraph({
+    Title = "Seamless Retry Fix",
+    Desc = "Automatically leave after a set number of rounds to prevent game issues"
+})
+GB.Seam_Left:Space({ Columns = 1 })
+
 addToggle(GB.Seam_Left, "SeamlessToggle", "Enable Seamless Fix", getgenv().SeamlessLimiterEnabled, function(v)
     getgenv().SeamlessLimiterEnabled = v
     getgenv().Config.toggles.SeamlessToggle = v
     saveConfig(getgenv().Config)
     notify("Seamless Fix", v and "Enabled" or "Disabled", 3)
-    print("[Seamless Fix] " .. (v and "Enabled" or "Disabled"))
 end)
 GB.Seam_Left:AddInput("SeamlessRounds", {
     Text = "Max Rounds Before Restart",
@@ -1105,26 +1760,49 @@ addToggle(GB.Event_Left, "AutoEventToggle", "Auto Event Join", getgenv().AutoEve
     saveConfig(getgenv().Config)
     notify("Auto Event", val and "Enabled" or "Disabled", 3)
 end)
+GB.Event_Left:Paragraph({
+    Title = "Halloween 2025 Event",
+    Desc = "Automated features for the Halloween event including Bingo and Capsules"
+})
+GB.Event_Left:Space({ Columns = 1 })
+
 if isInLobby then
-    GB.Event_Left:AddDivider()
-    GB.Event_Left:AddLabel("🎲 Auto Bingo")
+    GB.Event_Left:Divider({ Title = "🎲 Auto Bingo" })
     addToggle(GB.Event_Left, "BingoToggle", "Enable Auto Bingo", getgenv().BingoEnabled, function(v)
         getgenv().BingoEnabled = v
         getgenv().Config.toggles.BingoToggle = v
         saveConfig(getgenv().Config)
         notify("Auto Bingo", v and "Enabled" or "Disabled", 3)
     end)
-    GB.Event_Left:AddLabel("🎁 Auto Capsules")
+    GB.Event_Left:Paragraph({
+        Title = "How it works",
+        Desc = "Uses stamps (25x), claims rewards, and completes the board automatically"
+    })
+    
+    GB.Event_Left:Space({ Columns = 1 })
+    GB.Event_Left:Divider({ Title = "🎁 Auto Capsules" })
     addToggle(GB.Event_Left, "CapsuleToggle", "Enable Auto Capsules", getgenv().CapsuleEnabled, function(v)
         getgenv().CapsuleEnabled = v
         getgenv().Config.toggles.CapsuleToggle = v
         saveConfig(getgenv().Config)
         notify("Auto Capsules", v and "Enabled" or "Disabled", 3)
     end)
-    GB.Event_Left:AddLabel("Bingo: Uses stamps (25x), claims rewards, completes board\nCapsules: Buys 100/10/1 based on candy, opens all", true)
+    GB.Event_Left:Paragraph({
+        Title = "How it works",
+        Desc = "Buys capsules (100/10/1 based on candy) and opens all automatically"
+    })
 else
-    GB.Event_Left:AddLabel("Bingo and Capsule features are only available in the lobby.", true)
+    GB.Event_Left:Paragraph({
+        Title = "⚠️ Lobby Only",
+        Desc = "Bingo and Capsule features are only available in the lobby. Please rejoin the lobby to use these features."
+    })
 end
+
+GB.Misc_Left:Paragraph({
+    Title = "Performance Optimization",
+    Desc = "Boost FPS and reduce lag by removing visual elements"
+})
+GB.Misc_Left:Space({ Columns = 1 })
 
 if not isInLobby then
     addToggle(GB.Misc_Left, "FPSBoostToggle", "FPS Boost", getgenv().FPSBoostEnabled, function(v)
@@ -1149,11 +1827,12 @@ addToggle(GB.Misc_Left, "BlackScreenToggle", "Black Screen Mode", getgenv().Blac
     notify("Black Screen", v and "Enabled" or "Disabled", 3)
 end)
 
-addToggle(GB.Misc_Right, "AutoHideUIToggle", "Auto Hide UI on Start", getgenv().Config.toggles.AutoHideUIToggle or false, function(v)
-    getgenv().Config.toggles.AutoHideUIToggle = v
-    saveConfig(getgenv().Config)
-    notify("Auto Hide UI", v and "Enabled - Auto Hide UI" or "Disabled", 3)
-end)
+GB.Misc_Right:Paragraph({
+    Title = "Safety & Anti-AFK",
+    Desc = "Keep your account safe and prevent disconnections"
+})
+GB.Misc_Right:Space({ Columns = 1 })
+
 addToggle(GB.Misc_Right, "AntiAFKToggle", "Anti-AFK", getgenv().AntiAFKEnabled, function(v)
     getgenv().AntiAFKEnabled = v
     getgenv().Config.toggles.AntiAFKToggle = v
@@ -1161,27 +1840,42 @@ addToggle(GB.Misc_Right, "AntiAFKToggle", "Anti-AFK", getgenv().AntiAFKEnabled, 
     notify("Anti-AFK", v and "Enabled" or "Disabled", 3)
 end)
 
+GB.Settings_Left:Paragraph({
+    Title = "Config Management",
+    Desc = "Your settings are automatically saved to: " .. CONFIG_FOLDER .. "/" .. CONFIG_FILE
+})
+GB.Settings_Left:Space({ Columns = 1 })
 
-GB.Settings_Left:AddLabel("Your settings are automatically saved to: " .. CONFIG_FOLDER .. "/" .. CONFIG_FILE, true)
-GB.Settings_Left:AddButton("Force Save Config Now", function()
-    local success = saveConfig(getgenv().Config)
-    if success then notify("Config", "Settings saved successfully!", 3) else notify("Config", "Failed to save settings!", 5) end
-end)
-GB.Settings_Left:AddButton("Open Config Folder", function()
-    notify("Config Location", CONFIG_FOLDER .. "/" .. CONFIG_FILE, 5)
-    print("[Config] Full path: " .. getConfigPath())
-end)
+GB.Settings_Left:Button({
+    Title = "💾 Force Save Config",
+    Callback = function()
+        local success = saveConfig(getgenv().Config)
+        if success then notify("Config", "Settings saved successfully!", 3) else notify("Config", "Failed to save settings!", 5) end
+    end
+})
 
-GB.Settings_Right:AddToggle("KeybindMenuOpen", {
+GB.Settings_Left:Button({
+    Title = "📁 Open Config Folder",
+    Callback = function()
+        notify("Config Location", CONFIG_FOLDER .. "/" .. CONFIG_FILE, 5)
+    end
+})
+
+GB.Settings_Left:Space({ Columns = 1 })
+GB.Settings_Left:Divider({ Title = "UI Preferences" })
+
+GB.Settings_Left:Toggle({
+    Flag = "KeybindMenuOpen",
+    Title = "Show Keybind Menu",
     Default = Library.KeybindFrame.Visible,
-    Text = "Open Keybind Menu",
     Callback = function(value)
         Library.KeybindFrame.Visible = value
     end,
 })
 
-GB.Settings_Right:AddToggle("ShowCustomCursor", {
-    Text = "Custom Cursor",
+GB.Settings_Left:Toggle({
+    Flag = "ShowCustomCursor",
+    Title = "Custom Cursor",
     Default = getgenv().Config.toggles.ShowCustomCursor ~= false,
     Callback = function(Value)
         Library.ShowCustomCursor = Value
@@ -1190,10 +1884,11 @@ GB.Settings_Right:AddToggle("ShowCustomCursor", {
     end,
 })
 
-GB.Settings_Right:AddDropdown("NotificationSide", {
+GB.Settings_Left:Dropdown({
+    Flag = "NotificationSide",
+    Title = "Notification Side",
     Values = { "Left", "Right" },
     Default = getgenv().Config.inputs.NotificationSide or "Right",
-    Text = "Notification Side",
     Callback = function(Value)
         Library:SetNotifySide(Value)
         getgenv().Config.inputs.NotificationSide = Value
@@ -1220,19 +1915,47 @@ pcall(function()
         local DPI = tonumber(savedDPI)
         if DPI then
             Library:SetDPIScale(DPI)
-            print("[Config] Applied saved DPI scale:", DPI)
         end
     end
 end)
 
 GB.Settings_Right:AddDivider()
-GB.Settings_Right:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", { 
-    Default = "LeftControl", 
-    NoUI = true, 
-    Text = "Menu keybind",
-    SyncToggleState = false,
-    Mode = "Toggle",
+
+local savedKeybind = applyOldConfigValue("MenuKeybind", "input") or "LeftControl"
+print("[Config] Loading menu keybind: " .. savedKeybind)
+
+GB.Settings_Right:AddInput("MenuKeybind", {
+    Text = "Menu Keybind",
+    Default = savedKeybind,
+    Placeholder = "Enter key name (e.g. LeftControl, H, G)",
+    Callback = function(value)
+        if value and value ~= "" then
+            local keyCode = Enum.KeyCode[value]
+            if keyCode then
+                pcall(function()
+                    if Library._currentWindow and type(Library._currentWindow.SetToggleKey) == "function" then
+                        Library._currentWindow:SetToggleKey(keyCode)
+                    end
+                end)
+            end
+        end
+    end,
 })
+
+GB.Settings_Right:AddButton("Server Hop (Safe)", function()
+    print("[ALS] Manual server hop requested by user")
+    notify("Server Hop", "Cleaning up and hopping to new server...", 3)
+    task.spawn(function()
+        task.wait(1)
+        cleanupBeforeTeleport()
+        local ok, err = pcall(function()
+            TeleportService:Teleport(game.PlaceId, Players.LocalPlayer)
+        end)
+        if not ok then
+            warn("[Server Hop] Failed:", err)
+        end
+    end)
+end)
 
 GB.Settings_Right:AddButton("Unload", function()
     print("[ALS] Manual unload requested by user")
@@ -1247,26 +1970,7 @@ GB.Settings_Right:AddButton("Unload", function()
     end
 end)
 
-local keybindOk = pcall(function()
-    Library.ToggleKeybind = Options.MenuKeybind
-end)
-if not keybindOk then
-    warn("[ALS] Failed to set toggle keybind, using default")
-end
-
-local themeOk = pcall(function()
-    ThemeManager:SetLibrary(Library)
-    ThemeManager:SetFolder("ALS-Obsidian")
-    ThemeManager:ApplyToTab(Tabs.Settings)
-end)
-if not themeOk then
-    warn("[ALS] Failed to apply theme, using defaults")
-end
-
-print("[ALS] Theme and keybinds configured")
-
-print("[UI] All tabs and settings loaded!")
-print("[UI] Sending notification...")
+print("[ALS] UI configured")
 
 task.wait(0.5)
 
@@ -1274,7 +1978,7 @@ local notifyAttempts = 0
 while notifyAttempts < 3 do
     notifyAttempts = notifyAttempts + 1
     local ok = pcall(function()
-        notify("ALS Halloween Event", "Script loaded successfully! Mobile-optimized version.", 5)
+        notify("🎃 ALS Halloween Event", "UI loaded with improved organization! Check out the new tab sections for better navigation.", 5)
     end)
     if ok then break end
     task.wait(1)
@@ -1286,30 +1990,24 @@ print("[UI] Mobile optimizations active")
 if getgenv().Config.toggles.AutoHideUIToggle then
     task.spawn(function()
         task.wait(2)
-        
         if Library and Library.Unloaded ~= true then
             local hideAttempts = 0
             local hideSuccess = false
-            
             while hideAttempts < 3 and not hideSuccess do
                 hideAttempts = hideAttempts + 1
-                
                 local ok = pcall(function()
                     if Library and Library.Toggle and type(Library.Toggle) == "function" then
                         Library:Toggle()
                         hideSuccess = true
                     end
                 end)
-                
                 if ok and hideSuccess then
-                    print("[Auto Hide] UI minimized successfully after " .. hideAttempts .. " attempt(s)")
                     break
                 else
                     warn("[Auto Hide] Attempt " .. hideAttempts .. " failed, retrying...")
                     task.wait(0.5)
                 end
             end
-            
             if not hideSuccess then
                 warn("[Auto Hide] Failed to minimize UI after 3 attempts - UI will remain visible")
             end
@@ -1335,105 +2033,6 @@ for inputKey, value in pairs(getgenv().Config.inputs) do
     end
 end
 
-local isUnloaded = false
-local unloadCheckCount = 0
-local falseUnloadCount = 0
-local heartbeatCount = 0
-
-task.spawn(function()
-    while true do
-        task.wait(5)
-        if not isUnloaded then
-            heartbeatCount = heartbeatCount + 1
-            
-            local libraryAlive = pcall(function()
-                if Library and getgenv().ALS_Library then
-                    return true
-                end
-                return false
-            end)
-            
-            if libraryAlive then
-                if heartbeatCount % 12 == 0 then
-                    print("[ALS] Heartbeat: Library is healthy (Uptime: " .. (heartbeatCount * 5) .. "s)")
-                end
-            else
-                warn("[ALS] Heartbeat: Library reference lost, attempting recovery...")
-                
-                if getgenv().ALS_Library then
-                    Library = getgenv().ALS_Library
-                    print("[ALS] Library reference recovered from global")
-                end
-            end
-        else
-            print("[ALS] Heartbeat stopped (Library unloaded)")
-            break
-        end
-    end
-end)
-
-task.spawn(function()
-    print("[ALS] Waiting for Library to fully initialize before starting unload monitor...")
-    task.wait(5)
-    
-    if not Library then
-        print("[ALS] Library object missing, waiting longer...")
-        task.wait(3)
-    end
-    
-    if Library then
-        Library.Unloaded = false
-        print("[ALS] Reset Library.Unloaded to false before monitoring")
-    end
-    
-    print("[ALS] Starting unload monitor...")
-    
-    while true do
-        task.wait(1)
-        
-        if Library then
-            local windowStillExists = Window and Window.Holder and Window.Holder.Parent
-            
-            if Library.Unloaded == true then
-                if windowStillExists then
-                    print("[ALS] False unload prevented! Window is still visible.")
-                    Library.Unloaded = false
-                    unloadCheckCount = 0
-                    falseUnloadCount = falseUnloadCount + 1
-                else
-                    unloadCheckCount = unloadCheckCount + 1
-                    
-                    if unloadCheckCount >= 3 then
-                        print("[ALS] Library confirmed unloaded after 3 checks")
-                        isUnloaded = true 
-                        break
-                    else
-                        print("[ALS] Unload detected, verifying... (" .. unloadCheckCount .. "/3)")
-                    end
-                end
-            else
-                if unloadCheckCount > 0 then
-                    falseUnloadCount = falseUnloadCount + 1
-                    print("[ALS] False unload detected and prevented! (Count: " .. falseUnloadCount .. ")")
-                end
-                unloadCheckCount = 0
-            end
-        else
-            if getgenv().ALS_Library then
-                Library = getgenv().ALS_Library
-                print("[ALS] Library recovered from global storage")
-                unloadCheckCount = 0
-            else
-                print("[ALS] Library object is nil, marking as unloaded")
-                isUnloaded = true
-                break
-            end
-        end
-    end
-    
-    print("[ALS] Unload monitor stopped")
-end)
-
 task.spawn(function()
     repeat task.wait() until game.CoreGui:FindFirstChild("RobloxPromptGui")
     local promptOverlay = game.CoreGui.RobloxPromptGui.promptOverlay
@@ -1441,16 +2040,28 @@ task.spawn(function()
         if child.Name == "ErrorPrompt" then
             print("[Auto Rejoin] Disconnect detected! Attempting to rejoin...")
             task.spawn(function()
+                cleanupBeforeTeleport()
                 while true do
                     local ok = pcall(function()
                         TeleportService:Teleport(12886143095, Players.LocalPlayer)
                     end)
-                    if ok then print("[Auto Rejoin] Rejoining...") break else print("[Auto Rejoin] Retry in 2s...") task.wait(2) end
+                    if not ok then
+                        task.wait(1)
+                    end
                 end
             end)
         end
     end)
     print("[Auto Rejoin] Auto rejoin system loaded!")
+end)
+
+task.spawn(function()
+    while true do
+        task.wait(30)
+        pcall(function()
+            collectgarbage("collect")
+        end)
+    end
 end)
 
 task.spawn(function()
@@ -1493,7 +2104,6 @@ task.spawn(function()
     while true do
         task.wait(0.5)
         if getgenv().BlackScreenEnabled then if not blackScreenGui then createBlack() end else if blackScreenGui then removeBlack() end end
-        if isUnloaded then removeBlack() break end
     end
 end)
 
@@ -1516,7 +2126,6 @@ task.spawn(function()
                 end
             end)
         end
-        if isUnloaded then break end
     end
 end)
 
@@ -1534,10 +2143,12 @@ task.spawn(function()
                 lighting.FogStart = 100000
                 lighting.ClockTime = 12
                 lighting.GeographicLatitude = 0
+                
                 for _, obj in ipairs(game.Workspace:GetDescendants()) do
                     if obj:IsA("BasePart") then
                         if obj:IsA("Part") or obj:IsA("MeshPart") or obj:IsA("WedgePart") or obj:IsA("CornerWedgePart") then
                             obj.Material = Enum.Material.SmoothPlastic
+                            obj.CastShadow = false
                             if obj:FindFirstChildOfClass("Texture") then
                                 for _, t in ipairs(obj:GetChildren()) do if t:IsA("Texture") then t:Destroy() end end
                             end
@@ -1546,12 +2157,21 @@ task.spawn(function()
                         if obj:IsA("Decal") then obj:Destroy() end
                     end
                     if obj:IsA("SurfaceAppearance") then obj:Destroy() end
+                    if obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Beam") then
+                        obj.Enabled = false
+                    end
+                    if obj:IsA("Sound") then
+                        obj.Volume = 0
+                        obj:Stop()
+                    end
                 end
+                
                 local mapPath = game.Workspace:FindFirstChild("Map") and game.Workspace.Map:FindFirstChild("Map")
                 if mapPath then for _, ch in ipairs(mapPath:GetChildren()) do if not ch:IsA("Model") then ch:Destroy() end end end
+                
+                collectgarbage("collect")
             end)
         end
-        if isUnloaded then break end
     end
 end)
 
@@ -1565,7 +2185,6 @@ task.spawn(function()
         if getgenv().AutoEventEnabled and enterEvent and startEvent then
             pcall(function() enterEvent:FireServer(); startEvent:FireServer() end)
         end
-        if isUnloaded then break end
     end
 end)
 
@@ -1576,14 +2195,11 @@ if isInLobby then
             warn("[Final Expedition] FinalExpeditionStartEvent not found")
             return
         end
-        
         while true do
             task.wait(2)
-            
             if getgenv().FinalExpAutoJoinEasyEnabled then
                 local success = pcall(function()
                     finalExpRemote:FireServer("Easy")
-                    print("[Final Expedition] Joining Easy mode...")
                 end)
                 if not success then
                     warn("[Final Expedition] Failed to join Easy mode")
@@ -1591,14 +2207,11 @@ if isInLobby then
             elseif getgenv().FinalExpAutoJoinHardEnabled then
                 local success = pcall(function()
                     finalExpRemote:FireServer("Hard")
-                    print("[Final Expedition] Joining Hard mode...")
                 end)
                 if not success then
                     warn("[Final Expedition] Failed to join Hard mode")
                 end
             end
-            
-            if isUnloaded then break end
         end
     end)
 end
@@ -1610,30 +2223,24 @@ if not isInLobby then
             warn("[Final Expedition] AbilitySelection remote not found")
             return
         end
-        
         task.spawn(function()
             while true do
                 task.wait(5)
                 if getgenv().FinalExpAutoSkipShopEnabled then
                     pcall(function()
                         abilitySelection:FireServer("FinalExpeditionSelection", "Double_Dungeon")
-                        print("[Final Expedition] Selected Double_Dungeon")
                     end)
                 end
-                if isUnloaded then break end
             end
         end)
-        
         task.spawn(function()
             while true do
                 task.wait(5)
                 if getgenv().FinalExpAutoSkipShopEnabled then
                     pcall(function()
                         abilitySelection:FireServer("FinalExpeditionSelection", "Dungeon")
-                        print("[Final Expedition] Selected Dungeon")
                     end)
                 end
-                if isUnloaded then break end
             end
         end)
     end)
@@ -1650,131 +2257,87 @@ task.spawn(function()
     local hasProcessedCurrentUI = false
     local endGameUIDetectedTime = 0
     local lastEndGameUIInstance = nil
-    
+
     LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
         if child.Name == "EndGameUI" then
-            print("[Auto Action] EndGameUI detected - resetting flags")
             hasProcessedCurrentUI = false
             endGameUIDetectedTime = tick()
             lastEndGameUIInstance = child
         end
     end)
-    
+
     LocalPlayer.PlayerGui.ChildRemoved:Connect(function(child)
         if child.Name == "EndGameUI" then
-            print("[Auto Action] EndGameUI removed - resetting flags")
             hasProcessedCurrentUI = false
             lastEndGameUIInstance = nil
         end
     end)
     while true do
         task.wait(0.5 * MOBILE_DELAY_MULTIPLIER)
-        
         local success, errorMsg = pcall(function()
             local endGameUI = LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
             if endGameUI and endGameUI:FindFirstChild("BG") and endGameUI.BG:FindFirstChild("Buttons") then
                 if lastEndGameUIInstance and endGameUI ~= lastEndGameUIInstance then
-                    print("[Auto Action] New EndGameUI instance detected - resetting flag")
                     hasProcessedCurrentUI = false
                     lastEndGameUIInstance = endGameUI
                     endGameUIDetectedTime = tick()
                 end
-                
-                if hasProcessedCurrentUI then 
-                    return 
+                if hasProcessedCurrentUI then
+                    return
                 end
-                
                 local buttons = endGameUI.BG.Buttons
                 local nextButton = buttons:FindFirstChild("Next")
                 local retryButton = buttons:FindFirstChild("Retry")
                 local leaveButton = buttons:FindFirstChild("Leave")
                 local buttonToPress, actionName = nil, ""
-                
                 task.wait(0.5)
-                
-                print("[Auto Action] Checking buttons...")
-                print("[Auto Action] Next button: " .. tostring(nextButton ~= nil) .. " (Visible: " .. tostring(nextButton and nextButton.Visible) .. ")")
-                print("[Auto Action] Retry button: " .. tostring(retryButton ~= nil) .. " (Visible: " .. tostring(retryButton and retryButton.Visible) .. ")")
-                print("[Auto Action] Leave button: " .. tostring(leaveButton ~= nil))
-                print("[Auto Action] AutoSmartEnabled: " .. tostring(getgenv().AutoSmartEnabled))
-                print("[Auto Action] AutoNextEnabled: " .. tostring(getgenv().AutoNextEnabled))
-                print("[Auto Action] AutoFastRetryEnabled: " .. tostring(getgenv().AutoFastRetryEnabled))
-                print("[Auto Action] AutoLeaveEnabled: " .. tostring(getgenv().AutoLeaveEnabled))
-                
                 if getgenv().AutoSmartEnabled then
-                    if nextButton and nextButton.Visible then 
-                        buttonToPress = nextButton 
+                    if nextButton and nextButton.Visible then
+                        buttonToPress = nextButton
                         actionName = "Next"
-                        print("[Auto Action] Smart mode selected: Next")
-                    elseif retryButton and retryButton.Visible then 
-                        buttonToPress = retryButton 
+                    elseif retryButton and retryButton.Visible then
+                        buttonToPress = retryButton
                         actionName = "Replay"
-                        print("[Auto Action] Smart mode selected: Replay")
-                    elseif leaveButton then 
-                        buttonToPress = leaveButton 
+                    elseif leaveButton then
+                        buttonToPress = leaveButton
                         actionName = "Leave"
-                        print("[Auto Action] Smart mode selected: Leave")
                     end
                 elseif getgenv().AutoNextEnabled and nextButton and nextButton.Visible then
-                    buttonToPress = nextButton 
+                    buttonToPress = nextButton
                     actionName = "Next"
-                    print("[Auto Action] Auto Next selected")
                 elseif getgenv().AutoFastRetryEnabled and retryButton and retryButton.Visible then
-                    buttonToPress = retryButton 
+                    buttonToPress = retryButton
                     actionName = "Replay"
-                    print("[Auto Action] Auto Replay selected")
                 elseif getgenv().AutoLeaveEnabled and leaveButton then
-                    buttonToPress = leaveButton 
+                    buttonToPress = leaveButton
                     actionName = "Leave"
-                    print("[Auto Action] Auto Leave selected")
                 end
-                
-                if not buttonToPress then
-                    print("[Auto Action] No button selected - no action will be taken")
-                end
-                
                 if buttonToPress then
-                    print("[Auto Action] Button selected: " .. actionName)
                     task.wait(0.3)
-                    
                     if getgenv().WebhookEnabled then
                         local timeSinceDetection = tick() - endGameUIDetectedTime
                         if timeSinceDetection < 3 then
-                            print("[Auto Action] Waiting for webhook (time since detection: " .. string.format("%.1f", timeSinceDetection) .. "s)")
                             return
                         end
                         if isProcessing then
-                            print("[Auto Action] Webhook still processing, waiting...")
                             return
                         end
                     end
-                    
-                    print("[Auto Action] Pressing " .. actionName .. " button...")
                     hasProcessedCurrentUI = true
                     GuiService.SelectedObject = buttonToPress
-                    repeat 
-                        press(Enum.KeyCode.Return) 
-                        task.wait(0.5) 
+                    repeat
+                        press(Enum.KeyCode.Return)
+                        task.wait(0.5)
                     until not LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
                     GuiService.SelectedObject = nil
-                    print("[Auto Action] " .. actionName .. " completed successfully!")
-                else
-                    print("[Auto Action] No button to press")
                 end
-                
                 if GuiService.SelectedObject ~= nil then
                     GuiService.SelectedObject = nil
                 end
             end
         end)
-        
         if not success then
             warn("[Auto Leave/Replay] Error in loop: " .. tostring(errorMsg))
-        end
-        
-        if isUnloaded then 
-            print("[Auto Leave/Replay] Loop stopped (unloaded)")
-            break 
         end
     end
 end)
@@ -1810,14 +2373,9 @@ task.spawn(function()
                     end
                 end
             end)
-            
             if not success then
                 warn("[Auto Ready] Error: " .. tostring(err))
             end
-        end
-        if isUnloaded then 
-            print("[Auto Ready] Loop stopped (unloaded)")
-            break 
         end
     end
 end)
@@ -1907,7 +2465,7 @@ task.spawn(function()
         return fixed
     end
     local function useAbility(tower, abilityName)
-        if tower then 
+        if tower then
             local correctedName = fixAbilityName(abilityName)
             pcall(function() RS.Remotes.Ability:InvokeServer(tower, correctedName) end)
         end
@@ -2017,7 +2575,6 @@ task.spawn(function()
                 end
             end)
         end
-        if isUnloaded then break end
     end
 end)
 
@@ -2035,8 +2592,8 @@ task.spawn(function()
                     local text = d.Text
                     if getgenv().CardPriority[text] then
                         local button = d.Parent.Parent
-                        if button:IsA("GuiButton") or button:IsA("TextButton") or button:IsA("ImageButton") then 
-                            table.insert(cardButtons, {text=text, button=button}) 
+                        if button:IsA("GuiButton") or button:IsA("TextButton") or button:IsA("ImageButton") then
+                            table.insert(cardButtons, {text=text, button=button})
                         end
                     end
                 end
@@ -2076,17 +2633,15 @@ task.spawn(function()
             local _, best = findBestCard(list)
             if not best or not best.button then return false end
             local button = best.button
-            
             local events = {"Activated","MouseButton1Click","MouseButton1Down","MouseButton1Up"}
-            for _, ev in ipairs(events) do 
-                pcall(function() 
-                    for _, conn in ipairs(getconnections(button[ev])) do 
-                        conn:Fire() 
-                    end 
-                end) 
+            for _, ev in ipairs(events) do
+                pcall(function()
+                    for _, conn in ipairs(getconnections(button[ev])) do
+                        conn:Fire()
+                    end
+                end)
                 task.wait(0.05)
             end
-            
             task.wait(0.3)
             pressConfirm()
             task.wait(0.2)
@@ -2101,18 +2656,15 @@ task.spawn(function()
             if not best or not best.button then return false end
             local button = best.button
             local GuiService = game:GetService("GuiService")
-            
-            local function press(key) 
-                VIM:SendKeyEvent(true, key, false, game) 
+            local function press(key)
+                VIM:SendKeyEvent(true, key, false, game)
                 task.wait(0.15)
-                VIM:SendKeyEvent(false, key, false, game) 
+                VIM:SendKeyEvent(false, key, false, game)
             end
-            
             GuiService.SelectedObject = button
             task.wait(0.4)
             press(Enum.KeyCode.Return)
             task.wait(0.5)
-            
             local ok2, confirmButton = pcall(function()
                 local prompt = LocalPlayer.PlayerGui:FindFirstChild("Prompt") if not prompt then return nil end
                 local frame = prompt:FindFirstChild("Frame") if not frame then return nil end
@@ -2122,26 +2674,23 @@ task.spawn(function()
                 local label = button:FindFirstChild("TextLabel") if label and label.Text == "Confirm" then return button end
                 return nil
             end)
-            
             if ok2 and confirmButton then
                 GuiService.SelectedObject = confirmButton
                 task.wait(0.4)
                 press(Enum.KeyCode.Return)
                 task.wait(0.5)
             end
-            
             GuiService.SelectedObject = nil
         end)
         return ok
     end
     while true do
         task.wait(1.5)
-        if getgenv().CardSelectionEnabled then 
-            selectCard() 
-        elseif getgenv().SlowerCardSelectionEnabled then 
-            selectCardSlower() 
+        if getgenv().CardSelectionEnabled then
+            selectCard()
+        elseif getgenv().SlowerCardSelectionEnabled then
+            selectCardSlower()
         end
-        if isUnloaded then break end
     end
 end)
 
@@ -2159,8 +2708,8 @@ task.spawn(function()
                     local text = d.Text
                     if getgenv().BossRushCardPriority[text] then
                         local button = d.Parent.Parent
-                        if button:IsA("GuiButton") or button:IsA("TextButton") or button:IsA("ImageButton") then 
-                            table.insert(cardButtons, {text=text, button=button}) 
+                        if button:IsA("GuiButton") or button:IsA("TextButton") or button:IsA("ImageButton") then
+                            table.insert(cardButtons, {text=text, button=button})
                         end
                     end
                 end
@@ -2210,7 +2759,6 @@ task.spawn(function()
     while true do
         task.wait(1.5)
         if getgenv().BossRushEnabled then select() end
-        if isUnloaded then break end
     end
 end)
 
@@ -2298,26 +2846,13 @@ task.spawn(function()
     local lastWebhookHash = ""
     local lastWebhookTime = 0
     local WEBHOOK_COOLDOWN = 15
-    
     local function sendWebhook()
         pcall(function()
             if not getgenv().WebhookEnabled then return end
-            if isProcessing then 
-                print("[Webhook] Already processing, skipping...")
-                return 
-            end
-            
+            if isProcessing then return end
             local currentTime = tick()
-            if currentTime - lastWebhookTime < WEBHOOK_COOLDOWN then
-                print("[Webhook] Cooldown active, skipping...")
-                return
-            end
-            
-            if getgenv()._webhookLock and (currentTime - getgenv()._webhookLock) < 10 then 
-                print("[Webhook] Lock active, skipping...")
-                return 
-            end
-            
+            if currentTime - lastWebhookTime < WEBHOOK_COOLDOWN then return end
+            if getgenv()._webhookLock and (currentTime - getgenv()._webhookLock) < 10 then return end
             getgenv()._webhookLock = currentTime
             lastWebhookTime = currentTime
             isProcessing = true
@@ -2373,13 +2908,11 @@ task.spawn(function()
                 { name="Match Result", value=(matchTime or "00:00:00") .. " - Wave " .. tostring(matchWave or "0") .. "\n" .. (mapName or "Unknown Map") .. ((mapDifficulty and mapDifficulty ~= "Unknown") and (" ["..mapDifficulty.."]") or "") .. " - " .. (matchResult or "Unknown"), inline=false }
             }, footer={ text="Halloween Hook" } }
             local webhookHash = LocalPlayer.Name .. "_" .. matchTime .. "_" .. matchWave .. "_" .. rewardsText
-            if webhookHash == lastWebhookHash then 
-                print("[Webhook] Duplicate webhook detected, skipping...")
-                isProcessing = false 
-                return 
+            if webhookHash == lastWebhookHash then
+                isProcessing = false
+                return
             end
             lastWebhookHash = webhookHash
-            
             local sendSuccess = false
             local sendAttempts = 0
             while not sendSuccess and sendAttempts < 2 do
@@ -2395,25 +2928,23 @@ task.spawn(function()
                     task.wait(2)
                 end
             end
-            
             task.wait(1)
             isProcessing = false
         end)
     end
-    LocalPlayer.PlayerGui.ChildAdded:Connect(function(child) 
-        if child.Name == "EndGameUI" and getgenv().WebhookEnabled then 
+    LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
+        if child.Name == "EndGameUI" and getgenv().WebhookEnabled then
             task.wait(2)
-            sendWebhook() 
-        end 
+            sendWebhook()
+        end
     end)
-    
     LocalPlayer.PlayerGui.ChildRemoved:Connect(function(child)
-        if child.Name == "EndGameUI" then 
+        if child.Name == "EndGameUI" then
             task.wait(2)
-            isProcessing = false 
-            if getgenv()._lastRewardHash then 
-                getgenv()._lastRewardHash = nil 
-            end 
+            isProcessing = false
+            if getgenv()._lastRewardHash then
+                getgenv()._lastRewardHash = nil
+            end
         end
     end)
 end)
@@ -2427,18 +2958,14 @@ task.spawn(function()
         local DEBOUNCE_TIME = 5
         local maxWait = 0
         repeat task.wait(0.5) maxWait = maxWait + 0.5 until not LocalPlayer.PlayerGui:FindFirstChild("TeleportUI") or maxWait > 30
-        print("[Seamless Fix] Waiting for Settings GUI...")
         maxWait = 0
         repeat task.wait(0.5) maxWait = maxWait + 0.5 until LocalPlayer.PlayerGui:FindFirstChild("Settings") or maxWait > 30
-        print("[Seamless Fix] Settings GUI found!")
         local function getSeamlessValue()
             local ok, result = pcall(function()
                 local settings = LocalPlayer.PlayerGui:FindFirstChild("Settings")
                 if settings then
                     local seamless = settings:FindFirstChild("SeamlessRetry")
-                    if seamless then return seamless.Value else print("[Seamless Fix] SeamlessRetry not found in Settings") end
                 else
-                    print("[Seamless Fix] Settings not found")
                 end
                 return false
             end)
@@ -2451,23 +2978,18 @@ task.spawn(function()
                 if setSettings then setSettings:InvokeServer("SeamlessRetry") end
             end)
         end
-        print("[Seamless Fix] Checking initial seamless state...")
         local currentSeamless = getSeamlessValue()
         if endgameCount < (getgenv().MaxSeamlessRounds or 4) then
-            if not currentSeamless then setSeamlessRetry() task.wait(0.5) print("[Seamless Fix] Enabled Seamless Retry") else print("[Seamless Fix] Seamless Retry already enabled") end
         end
         LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
             pcall(function()
                 if child.Name == "EndGameUI" and not hasRun then
                     local currentTime = tick()
-                    if currentTime - lastEndgameTime < DEBOUNCE_TIME then print("[Seamless Fix] Debounced duplicate EndGameUI trigger") return end
                     hasRun = true
                     lastEndgameTime = currentTime
                     endgameCount = endgameCount + 1
                     local maxRounds = getgenv().MaxSeamlessRounds or 4
-                    print("[Seamless Fix] Endgame detected. Current seamless rounds: " .. endgameCount .. "/" .. maxRounds)
                     if endgameCount >= maxRounds then
-                        if getSeamlessValue() then task.wait(0.5) setSeamlessRetry() print("[Seamless Fix] Max rounds reached, disabling seamless retry to restart match...") task.wait(0.5) print("[Seamless Fix] Disabled Seamless Retry") else print("[Seamless Fix] Max rounds reached but seamless already disabled") end
                     end
                 end
             end)
@@ -2494,7 +3016,6 @@ task.spawn(function()
                 if CompleteBoardEvent then CompleteBoardEvent:InvokeServer() end
             end)
         end
-        if isUnloaded then break end
     end
 end)
 
@@ -2520,7 +3041,6 @@ task.spawn(function()
                 if capsuleAmount > 0 then pcall(function() OpenCapsuleEvent:FireServer("HalloweenCapsule2025", capsuleAmount) end) end
             end
         end
-        if isUnloaded then break end
     end
 end)
 
@@ -2590,6 +3110,10 @@ if isInLobby then
                     local act = getgenv().AutoJoinConfig.act
                     local difficulty = getgenv().AutoJoinConfig.difficulty
                     if not map or map == "" then return end
+                    
+                    print("[Auto Join] Preparing to join " .. map .. "...")
+                    cleanupBeforeTeleport()
+                    
                     local teleporterRemote = RS.Remotes.Teleporter.InteractEvent
                     if mode == "Story" then
                         teleporterRemote:FireServer("Select", map, act, difficulty, "Story")
@@ -2639,3 +3163,5 @@ if isInLobby then
         end
     end)
 end
+
+
