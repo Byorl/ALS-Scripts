@@ -1227,15 +1227,15 @@ task.spawn(function()
                 
                 if getgenv().WebhookEnabled then
                     if tick() - lastEndGameUICheck > 5 then
-                        print("[EndGameUI] First detection, waiting 3 seconds for webhook...")
-                        task.wait(1)
+                        print("[EndGameUI] First detection, waiting 4 seconds for webhook...")
+                        task.wait(4)
                         lastEndGameUICheck = tick()
                     end
                     
                     if isProcessing then
                         print("[EndGameUI] Waiting for webhook to complete...")
                         local maxWait = 0
-                        while isProcessing and maxWait < 10 do
+                        while isProcessing and maxWait < 15 do
                             task.wait(0.5)
                             maxWait = maxWait + 0.5
                         end
@@ -1890,7 +1890,7 @@ task.spawn(function()
             isProcessing = true
             hasRun = tick()
             
-            task.wait(2.5)
+            task.wait(3)
             
             print("[Webhook] Capturing rewards...")
             local rewards = getRewards()
@@ -1979,8 +1979,8 @@ task.spawn(function()
     end
     LocalPlayer.PlayerGui.ChildAdded:Connect(function(child) 
         if child.Name == "EndGameUI" and getgenv().WebhookEnabled then 
-            print("[Webhook] EndGameUI detected")
-            task.wait(0.1)
+            print("[Webhook] EndGameUI detected, waiting for UI to populate...")
+            task.wait(0.5)
             sendWebhook() 
         end 
     end)
