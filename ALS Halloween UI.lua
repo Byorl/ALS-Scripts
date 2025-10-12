@@ -1216,7 +1216,17 @@ task.spawn(function()
     end
     local GuiService = game:GetService("GuiService")
     local lastEndGameUICheck = 0
+    local hasProcessedCurrentUI = false
     local loopCount = 0
+    
+    -- Track when EndGameUI appears/disappears
+    LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
+        if child.Name == "EndGameUI" then
+            hasProcessedCurrentUI = false
+            lastEndGameUICheck = 0
+        end
+    end)
+    
     while true do
         task.wait(2)
         loopCount = loopCount + 1
@@ -1228,25 +1238,36 @@ task.spawn(function()
         pcall(function()
             local endGameUI = LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
             if endGameUI and endGameUI:FindFirstChild("BG") and endGameUI.BG:FindFirstChild("Buttons") then
+                
+                -- Skip if we already processed this EndGameUI
+                if hasProcessedCurrentUI then
+                    return
+                end
+                
                 local buttons = endGameUI.BG.Buttons
                 local nextButton = buttons:FindFirstChild("Next")
                 local retryButton = buttons:FindFirstChild("Retry")
                 local leaveButton = buttons:FindFirstChild("Leave")
                 
+                -- Wait for webhook if enabled
                 if getgenv().WebhookEnabled then
-                    if tick() - lastEndGameUICheck > 5 then
+                    if tick() - lastEndGameUICheck < 5 then
+                        -- Still waiting for webhook
+                        return
+                    end
+                    
+                    if lastEndGameUICheck == 0 then
                         print("[EndGameUI] Waiting for webhook to complete...")
                         lastEndGameUICheck = tick()
-                        
-                        local maxWait = 0
-                        while isProcessing and maxWait < 10 do
-                            task.wait(0.5)
-                            maxWait = maxWait + 0.5
-                        end
-                        print("[EndGameUI] Webhook completed, proceeding...")
+                        return
                     end
-                else
-                    print("[EndGameUI] Webhook disabled, proceeding immediately")
+                    
+                    if isProcessing then
+                        print("[EndGameUI] Webhook still processing...")
+                        return
+                    end
+                    
+                    print("[EndGameUI] Webhook completed, proceeding...")
                 end
                 
                 local buttonToPress = nil
@@ -1275,6 +1296,7 @@ task.spawn(function()
                 end
                 
                 if buttonToPress then
+                    hasProcessedCurrentUI = true
                     GuiService.SelectedObject = buttonToPress
                     repeat 
                         press(Enum.KeyCode.Return)
