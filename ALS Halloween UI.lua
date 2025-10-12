@@ -1257,15 +1257,26 @@ local function buildAutoAbilityUI()
                         saveConfig(getgenv().Config)
                     end)
 
+                    local modifierKey = unitName .. "_" .. abilityName .. "_Modifiers"
+                    
                     local defaultList = {}
                     if cfg.onlyOnBoss then defaultList["Only On Boss"] = true end
                     if cfg.requireBossInRange then defaultList["Boss In Range"] = true end
                     if cfg.delayAfterBossSpawn then defaultList["Delay After Boss Spawn"] = true end
                     if cfg.useOnWave then defaultList["On Wave"] = true end
                     
+                    local savedDropdown = getgenv().Config.dropdowns[modifierKey]
+                    if savedDropdown and type(savedDropdown) == "table" then
+                        for k,v in pairs(savedDropdown) do
+                            if type(k) == "number" and type(v) == "string" then
+                                defaultList[v] = true
+                            elseif v == true then
+                                defaultList[k] = true
+                            end
+                        end
+                    end
+                    
                     local dropdownDefault = next(defaultList) and defaultList or nil
-
-                    local modifierKey = unitName .. "_" .. abilityName .. "_Modifiers"
                     local dropdown = GB.Ability_Right:AddDropdown(modifierKey, {
                         Values = {"Only On Boss","Boss In Range","Delay After Boss Spawn","On Wave"},
                         Multi = true,
@@ -1275,7 +1286,13 @@ local function buildAutoAbilityUI()
                         Callback = function(Value)
                             local selected = {}
                             if type(Value) == "table" then
-                                for k,v in pairs(Value) do if v == true then selected[k] = true end end
+                                for k,v in pairs(Value) do 
+                                    if v == true then 
+                                        selected[k] = true 
+                                    elseif type(k) == "number" and type(v) == "string" then
+                                        selected[v] = true
+                                    end
+                                end
                             end
                             cfg.onlyOnBoss = selected["Only On Boss"] or false
                             cfg.requireBossInRange = selected["Boss In Range"] or false
