@@ -6,15 +6,23 @@ if getgenv().ALS_SCRIPT_LOADED then
     if getgenv().ALS_Library and not getgenv().ALS_Library.Unloaded then
         pcall(function()
             getgenv().ALS_Library:Unload()
-            print("[ALS] Unloaded old UI")
+            print("[ALS] Unloaded old UI library")
         end)
     end
     
     local CoreGui = game:GetService("CoreGui")
+    
     local oldToggleGui = CoreGui:FindFirstChild("ALS_Obsidian_Toggle")
     if oldToggleGui then
         oldToggleGui:Destroy()
         print("[ALS] Removed old toggle button")
+    end
+    
+    for _, child in pairs(CoreGui:GetChildren()) do
+        if child:IsA("ScreenGui") and child:FindFirstChild("Obsidian") then
+            child:Destroy()
+            print("[ALS] Removed old Obsidian UI:", child.Name)
+        end
     end
     
     task.wait(0.5)
@@ -345,10 +353,18 @@ Library:OnUnload(function()
     print("[ALS] UI unloaded, cleaning up...")
     
     local CoreGui = game:GetService("CoreGui")
+    
     local toggleGui = CoreGui:FindFirstChild("ALS_Obsidian_Toggle")
     if toggleGui then
         toggleGui:Destroy()
         print("[ALS] Removed toggle button")
+    end
+    
+    for _, child in pairs(CoreGui:GetChildren()) do
+        if child:IsA("ScreenGui") and child:FindFirstChild("Obsidian") then
+            child:Destroy()
+            print("[ALS] Removed Obsidian UI:", child.Name)
+        end
     end
     
     getgenv().ALS_SCRIPT_LOADED = false
@@ -1168,6 +1184,7 @@ GB.Settings_Right:AddButton("Unload", function()
     print("[ALS] Unloading script...")
     
     local CoreGui = game:GetService("CoreGui")
+    
     local toggleGui = CoreGui:FindFirstChild("ALS_Obsidian_Toggle")
     if toggleGui then
         toggleGui:Destroy()
@@ -1175,9 +1192,6 @@ GB.Settings_Right:AddButton("Unload", function()
     end
     
     Library:Unload()
-    
-    getgenv().ALS_SCRIPT_LOADED = false
-    getgenv().ALS_Library = nil
     
     print("[ALS] Script fully unloaded!")
 end)
