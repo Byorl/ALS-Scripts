@@ -709,7 +709,7 @@ addToggle(GB.Card_Left, "CardSelectionToggle", "Fast Mode", getgenv().CardSelect
     saveConfig(getgenv().Config)
     notify("Card Selection", v and "Fast Mode Enabled" or "Disabled", 3)
 end)
-addToggle(GB.Card_Left, "SlowerCardSelectionToggle", "Slower Mode (More Reliable)", getgenv().SlowerCardSelectionEnabled, function(v)
+addToggle(GB.Card_Left, "SlowerCardSelectionToggle", "Slower Mode", getgenv().SlowerCardSelectionEnabled, function(v)
     getgenv().SlowerCardSelectionEnabled = v
     getgenv().Config.toggles.SlowerCardSelectionToggle = v
     if v and getgenv().CardSelectionEnabled then
@@ -797,7 +797,7 @@ do
 end
 
 GB.Boss_Left:AddLabel("Lower number = higher priority • Set to 999 to avoid", true)
-addToggle(GB.Boss_Left, "BossRushToggle", "Enable Boss Rush Card Selection", getgenv().BossRushEnabled, function(v)
+addToggle(GB.Boss_Left, "BossRushToggle", "Boss Rush Card Selection", getgenv().BossRushEnabled, function(v)
     getgenv().BossRushEnabled = v
     getgenv().Config.toggles.BossRushToggle = v
     saveConfig(getgenv().Config)
@@ -923,7 +923,7 @@ else
     GB.Breach_Left:AddLabel("The Auto Breach can only be used in the lobby.", true)
 end
 
-addToggle(GB.Webhook_Left, "WebhookToggle", "Enable Webhook Notifications", getgenv().WebhookEnabled, function(v)
+addToggle(GB.Webhook_Left, "WebhookToggle", "Webhook Notifications", getgenv().WebhookEnabled, function(v)
     getgenv().WebhookEnabled = v
     getgenv().Config.toggles.WebhookToggle = v
     saveConfig(getgenv().Config)
@@ -1028,10 +1028,10 @@ addToggle(GB.Misc_Left, "BlackScreenToggle", "Black Screen Mode", getgenv().Blac
     notify("Black Screen", v and "Enabled" or "Disabled", 3)
 end)
 
-addToggle(GB.Misc_Right, "AutoHideUIToggle", "Auto Hide UI on Start", getgenv().Config.toggles.AutoHideUIToggle or false, function(v)
+addToggle(GB.Misc_Right, "AutoHideUIToggle", "Auto Hide UI", getgenv().Config.toggles.AutoHideUIToggle or false, function(v)
     getgenv().Config.toggles.AutoHideUIToggle = v
     saveConfig(getgenv().Config)
-    notify("Auto Hide UI", v and "Enabled - Auto Hide UI" or "Disabled", 3)
+    notify("Auto Hide UI", v and "UI will hide on startup" or "Disabled", 3)
 end)
 addToggle(GB.Misc_Right, "AntiAFKToggle", "Anti-AFK", getgenv().AntiAFKEnabled, function(v)
     getgenv().AntiAFKEnabled = v
@@ -1039,12 +1039,12 @@ addToggle(GB.Misc_Right, "AntiAFKToggle", "Anti-AFK", getgenv().AntiAFKEnabled, 
     saveConfig(getgenv().Config)
     notify("Anti-AFK", v and "Enabled" or "Disabled", 3)
 end)
-addToggle(GB.Misc_Right, "AutoExecuteToggle", "Auto Execute on Teleport", getgenv().Config.toggles.AutoExecuteToggle or false, function(v)
+addToggle(GB.Misc_Right, "AutoExecuteToggle", "Auto Execute", getgenv().Config.toggles.AutoExecuteToggle or false, function(v)
     getgenv().Config.toggles.AutoExecuteToggle = v
     saveConfig(getgenv().Config)
     if v then
         writefile("ALSHalloweenEvent/autoexec.txt", "true")
-        notify("Auto Execute", "Enabled - Script will reload on teleport", 3)
+        notify("Auto Execute", "Will reload on teleport", 3)
     else
         if isfile("ALSHalloweenEvent/autoexec.txt") then delfile("ALSHalloweenEvent/autoexec.txt") end
         notify("Auto Execute", "Disabled", 3)
