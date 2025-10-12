@@ -1294,9 +1294,16 @@ local function buildAutoAbilityUI()
                     
                     if dropdownDefault and next(dropdownDefault) then
                         task.spawn(function()
-                            task.wait(0.4)
+                            task.wait(0.5)
+                            if dropdown and dropdown.Select then
+                                pcall(function()
+                                    dropdown:Select(dropdownDefault)
+                                end)
+                            end
                             if Options[modifierKey] and Options[modifierKey].SetValue then
-                                Options[modifierKey]:SetValue(dropdownDefault)
+                                pcall(function()
+                                    Options[modifierKey]:SetValue(dropdownDefault)
+                                end)
                             end
                         end)
                     end
@@ -2426,7 +2433,7 @@ task.spawn(function()
         local key = towerName .. "_" .. abilityName
         local last = abilityCooldowns[key]
         if not last then return false end
-        return (tick() - last) < (d.cooldown / GAME_SPEED)
+        return (tick() - last) < ((d.cooldown / GAME_SPEED) + 1)
     end
     local function setAbilityUsed(towerName, abilityName) abilityCooldowns[towerName.."_"..abilityName] = tick() end
     local function hasAbilityBeenUnlocked(towerName, abilityName, towerLevel)
@@ -2511,6 +2518,16 @@ task.spawn(function()
                         local infoName = getTowerInfoName(tower)
                         local towerLevel = getUpgradeLevel(tower)
                         for abilityName, cfg in pairs(abilitiesConfig) do
+                            local savedCfg = getgenv().Config.abilities[unitName] and getgenv().Config.abilities[unitName][abilityName]
+                            if savedCfg then
+                                cfg.enabled = savedCfg.enabled
+                                cfg.onlyOnBoss = savedCfg.onlyOnBoss or false
+                                cfg.useOnWave = savedCfg.useOnWave or false
+                                cfg.specificWave = savedCfg.specificWave
+                                cfg.requireBossInRange = savedCfg.requireBossInRange or false
+                                cfg.delayAfterBossSpawn = savedCfg.delayAfterBossSpawn or false
+                            end
+                            
                             if cfg.enabled then
                                 local shouldUse = true
                                 if not hasAbilityBeenUnlocked(infoName, abilityName, towerLevel) then shouldUse=false end
