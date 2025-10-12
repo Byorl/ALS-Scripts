@@ -1242,9 +1242,12 @@ task.spawn(function()
     local GuiService = game:GetService("GuiService")
     local hasProcessedCurrentUI = false
     
+    local endGameUIDetectedTime = 0
+    
     LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
         if child.Name == "EndGameUI" then
             hasProcessedCurrentUI = false
+            endGameUIDetectedTime = tick()
         end
     end)
     
@@ -1259,14 +1262,20 @@ task.spawn(function()
                     return
                 end
                 
+                if getgenv().WebhookEnabled then
+                    local timeSinceDetection = tick() - endGameUIDetectedTime
+                    if timeSinceDetection < 3 then
+                        return
+                    end
+                    if isProcessing then
+                        return
+                    end
+                end
+                
                 local buttons = endGameUI.BG.Buttons
                 local nextButton = buttons:FindFirstChild("Next")
                 local retryButton = buttons:FindFirstChild("Retry")
                 local leaveButton = buttons:FindFirstChild("Leave")
-                
-                if getgenv().WebhookEnabled and isProcessing then
-                    return
-                end
                 
                 local buttonToPress = nil
                 local actionName = ""
@@ -1461,8 +1470,12 @@ task.spawn(function()
     end
     local function bossReadyForAbilities()
         if bossExists() then
-            if not generalBossSpawnTime then generalBossSpawnTime = tick() end
-            return (tick() - generalBossSpawnTime) >= 1
+            if not generalBossSpawnTime then 
+                generalBossSpawnTime = tick()
+                print("[Auto Abilities] Boss spawned, waiting 2 seconds...")
+            end
+            local timeSinceSpawn = tick() - generalBossSpawnTime
+            return timeSinceSpawn >= 2
         else
             generalBossSpawnTime = nil
             return false
