@@ -25,21 +25,33 @@ local SCRIPT_URL = "https://raw.githubusercontent.com/Byorl/ALS-Scripts/refs/hea
 
 local queueteleport = queue_on_teleport or queueonteleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport)
 
+if queueteleport then
+    if queue_on_teleport then print("[Auto Execute] Found: queue_on_teleport")
+    elseif queueonteleport then print("[Auto Execute] Found: queueonteleport")
+    elseif syn and syn.queue_on_teleport then print("[Auto Execute] Found: syn.queue_on_teleport")
+    elseif fluxus and fluxus.queue_on_teleport then print("[Auto Execute] Found: fluxus.queue_on_teleport") end
+else
+    print("[Auto Execute] WARNING: No queueteleport function found!")
+end
+
 if isfile("ALSHalloweenEvent/autoexec.txt") then
     print("[Auto Execute] Enabled - Setting up teleport hook...")
     
     if queueteleport then
         print("[Auto Execute] Using queueteleport method")
-        local TeleportCheck = false
         LocalPlayer.OnTeleport:Connect(function(State)
-            if not TeleportCheck then
-                TeleportCheck = true
+            print("[Auto Execute] OnTeleport fired! State:", State)
+            local success, err = pcall(function()
                 queueteleport("loadstring(game:HttpGet('" .. SCRIPT_URL .. "'))()")
-                print("[Auto Execute] Queued script for next teleport")
+            end)
+            if success then
+                print("[Auto Execute] Successfully queued script!")
+            else
+                warn("[Auto Execute] Failed to queue:", err)
             end
         end)
     else
-        print("[Auto Execute] queueteleport not found, using fallback methods")
+        print("[Auto Execute] Using fallback methods (queueteleport not found)")
         TeleportService.TeleportInitFailed:Connect(function()
             task.wait(2)
             loadstring(game:HttpGet(SCRIPT_URL))()
@@ -53,7 +65,7 @@ if isfile("ALSHalloweenEvent/autoexec.txt") then
         end)
     end
 else
-    print("[Auto Execute] Disabled - Enable in Misc tab to auto-load on teleport")
+    print("[Auto Execute] Disabled - Enable in Misc tab")
 end
 
 local CONFIG_FOLDER = "ALSHalloweenEvent"
