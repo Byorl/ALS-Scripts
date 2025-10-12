@@ -380,7 +380,6 @@ local function cleanupBeforeTeleport()
     pcall(function()
         if Library and Library.Unload then
             Library:Unload()
-            print("[ALS] ✓ UI unloaded")
         end
     end)
     task.wait(0.1)
@@ -824,7 +823,6 @@ local function adaptTab(tab)
                     local configValue = applyOldConfigValue(flag, "toggle")
                     if configValue ~= nil then
                         cfg.Default = configValue
-                        print("[Config] Loaded toggle " .. flag .. " = " .. tostring(configValue))
                     end
                     
                     if cfg.Default == nil then
@@ -863,7 +861,6 @@ local function adaptTab(tab)
                         task.wait(0.15)
                         if toggle and toggle.Set and cfg.Default ~= nil then
                             toggle:Set(cfg.Default)
-                            print("[UI] Force-set toggle " .. flag .. " to " .. tostring(cfg.Default))
                         end
                     end)
                     
@@ -876,7 +873,6 @@ local function adaptTab(tab)
                     if configValue ~= nil then
                         cfg.Default = configValue
                         cfg.Value = configValue
-                        print("[Config] Loaded dropdown " .. flag .. " = " .. tostring(configValue))
                     end
                     
                     local initialValue = cfg.Value or cfg.Default
@@ -897,6 +893,7 @@ local function adaptTab(tab)
                         Values = cfg.Values or {},
                         Value = initialValue, 
                         Multi = cfg.Multi == true,
+                        AllowNone = cfg.AllowNone == true,
                         Searchable = cfg.Searchable == true,
                         Callback = function(value)
                             if Library.Options[flag] then
@@ -945,7 +942,6 @@ local function adaptTab(tab)
                     local configValue = applyOldConfigValue(flag, "input")
                     if configValue ~= nil then
                         cfg.Default = configValue
-                        print("[Config] Loaded input " .. flag .. " = " .. tostring(configValue))
                     end
                     return tab:Input({
                         Flag = flag,
@@ -1005,7 +1001,6 @@ local function addToggle(group, key, text, default, onChanged)
     local configValue = applyOldConfigValue(key, "toggle")
     if configValue ~= nil then
         default = configValue
-        print("[Config] Loaded " .. key .. " = " .. tostring(default))
     end
     
     if default == nil then
@@ -1044,11 +1039,7 @@ if isInLobby then
         act = savedAutoJoin.act or 1,
         difficulty = savedAutoJoin.difficulty or "Normal"
     }
-    print("[Config] Loaded AutoJoinConfig:")
-    print("  Mode: " .. tostring(getgenv().AutoJoinConfig.mode))
-    print("  Map: " .. tostring(getgenv().AutoJoinConfig.map))
-    print("  Act: " .. tostring(getgenv().AutoJoinConfig.act))
-    print("  Difficulty: " .. tostring(getgenv().AutoJoinConfig.difficulty))
+
 
     local MapData = nil
     pcall(function()
@@ -1218,16 +1209,7 @@ local function buildAutoAbilityUI()
             local abilities = getAllAbilities(unitName)
             if next(abilities) then
                 GB.Ability_Right:AddDivider()
-                GB.Ability_Right:Section({ 
-                    Title = "📦 " .. unitName,
-                    Box = true,
-                    FontWeight = "Bold",
-                    TextSize = 16,
-                })
-                GB.Ability_Right:Paragraph({
-                    Title = slotName .. " • Level " .. tostring(slotData.Level or 0),
-                    Desc = "Configure abilities for this unit below",
-                })
+                GB.Ability_Right:AddLabel("📦 " .. unitName .. " (" .. slotName .. " • Lvl " .. tostring(slotData.Level or 0) .. ")")
                 
                 if not getgenv().UnitAbilities[unitName] then getgenv().UnitAbilities[unitName] = {} end
                 local sortedAbilities = {}
@@ -1254,25 +1236,16 @@ local function buildAutoAbilityUI()
                         cfg.useOnWave = saved.useOnWave or false
                     end
                     
-                    local abilityIcon = abilityData.isAttribute and "🔒 " or "⚡ "
-                    local abilityInfo = abilityIcon .. abilityName
-                    local abilityDesc = "Cooldown: " .. tostring(abilityData.cooldown) .. "s • Unlocks at Level " .. abilityData.requiredLevel
-                    if abilityData.isAttribute then
-                        abilityDesc = abilityDesc .. " • Requires Attribute"
-                    end
+                    local abilityIcon = abilityData.isAttribute and "🔒" or "⚡"
+                    local abilityInfo = abilityIcon .. " " .. abilityName .. " (CD: " .. tostring(abilityData.cooldown) .. "s)"
                     
-                    local toggle = GB.Ability_Right:AddToggle(unitName .. "_" .. abilityName .. "_Toggle", {
-                        Text = abilityInfo,
-                        Desc = abilityDesc,
-                        Default = defaultToggle,
-                        Callback = function(v)
-                            cfg.enabled = v
-                            getgenv().Config.abilities[unitName] = getgenv().Config.abilities[unitName] or {}
-                            getgenv().Config.abilities[unitName][abilityName] = getgenv().Config.abilities[unitName][abilityName] or {}
-                            getgenv().Config.abilities[unitName][abilityName].enabled = v
-                            saveConfig(getgenv().Config)
-                        end,
-                    })
+                    addToggle(GB.Ability_Right, unitName .. "_" .. abilityName .. "_Toggle", abilityInfo, defaultToggle, function(v)
+                        cfg.enabled = v
+                        getgenv().Config.abilities[unitName] = getgenv().Config.abilities[unitName] or {}
+                        getgenv().Config.abilities[unitName][abilityName] = getgenv().Config.abilities[unitName][abilityName] or {}
+                        getgenv().Config.abilities[unitName][abilityName].enabled = v
+                        saveConfig(getgenv().Config)
+                    end)
 
                     local defaultList = {}
                     if cfg.onlyOnBoss then defaultList["Only On Boss"] = true end
@@ -1284,7 +1257,8 @@ local function buildAutoAbilityUI()
                     local dropdown = GB.Ability_Right:AddDropdown(modifierKey, {
                         Values = {"Only On Boss","Boss In Range","Delay After Boss Spawn","On Wave"},
                         Multi = true,
-                        Default = next(defaultList) and defaultList or nil, 
+                        AllowNone = true,
+                        Default = defaultList,
                         Text = "  > Conditions",
                         Callback = function(Value)
                             local selected = {}
@@ -1589,7 +1563,6 @@ if isInLobby then
                     end)
                 end
                 breachesLoaded = true
-                print("[Breach] Loaded " .. #breachList .. " breaches from MapParameters")
             end
         end
     end)
@@ -1891,7 +1864,6 @@ end)
 GB.Settings_Right:AddDivider()
 
 local savedKeybind = applyOldConfigValue("MenuKeybind", "input") or "LeftControl"
-print("[Config] Loading menu keybind: " .. savedKeybind)
 
 GB.Settings_Right:AddInput("MenuKeybind", {
     Text = "Menu Keybind",
@@ -1912,7 +1884,6 @@ GB.Settings_Right:AddInput("MenuKeybind", {
 })
 
 GB.Settings_Right:AddButton("Server Hop (Safe)", function()
-    print("[ALS] Manual server hop requested by user")
     notify("Server Hop", "Cleaning up and hopping to new server...", 3)
     task.spawn(function()
         task.wait(1)
@@ -1927,19 +1898,12 @@ GB.Settings_Right:AddButton("Server Hop (Safe)", function()
 end)
 
 GB.Settings_Right:AddButton("Unload", function()
-    print("[ALS] Manual unload requested by user")
-    local ok = pcall(function()
+    pcall(function()
         if Library and Library.Unload then
             Library:Unload()
-            print("[ALS] Library unloaded successfully")
         end
     end)
-    if not ok then
-        warn("[ALS] Failed to unload library")
-    end
 end)
-
-print("[ALS] UI configured")
 
 task.wait(0.5)
 
@@ -1953,8 +1917,7 @@ while notifyAttempts < 3 do
     task.wait(1)
 end
 
-print("[UI] Script fully loaded and ready!")
-print("[UI] Mobile optimizations active")
+
 
 if getgenv().Config.toggles.AutoHideUIToggle then
     task.spawn(function()
@@ -2007,7 +1970,6 @@ task.spawn(function()
     local promptOverlay = game.CoreGui.RobloxPromptGui.promptOverlay
     promptOverlay.ChildAdded:Connect(function(child)
         if child.Name == "ErrorPrompt" then
-            print("[Auto Rejoin] Disconnect detected! Attempting to rejoin...")
             task.spawn(function()
                 cleanupBeforeTeleport()
                 while true do
@@ -2021,7 +1983,6 @@ task.spawn(function()
             end)
         end
     end)
-    print("[Auto Rejoin] Auto rejoin system loaded!")
 end)
 
 task.spawn(function()
@@ -2042,7 +2003,6 @@ task.spawn(function()
             vu:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
         end
     end)
-    print("[Anti-AFK] Anti-AFK system loaded!")
 end)
 
 task.spawn(function()
