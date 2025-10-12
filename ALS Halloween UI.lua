@@ -1039,7 +1039,7 @@ addToggle(GB.FinalExp_Right, "FinalExpAutoSkipShopToggle", "Auto Skip Shop", get
 end)
 
 GB.FinalExp_Right:AddLabel("Auto Skip Shop: Automatically selects dungeon options", true)
-GB.FinalExp_Right:AddLabel("Use Auto Leave/Replay/Next in Main tab for end game", true)
+GB.FinalExp_Right:AddLabel("Use Auto Leave/Replay/Next in Main tab to automatically leave on last round", true)
 
 addToggle(GB.Webhook_Left, "WebhookToggle", "Enable Webhook Notifications", getgenv().WebhookEnabled, function(v)
     getgenv().WebhookEnabled = v
