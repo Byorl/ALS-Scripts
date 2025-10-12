@@ -839,6 +839,8 @@ local function adaptTab(tab)
                             if Library.Toggles[flag] then
                                 Library.Toggles[flag].Value = state
                             end
+                            getgenv().Config.toggles[flag] = state
+                            saveConfig(getgenv().Config)
                             if cfg.Callback then
                                 cfg.Callback(state)
                             end
@@ -899,6 +901,8 @@ local function adaptTab(tab)
                             if Library.Options[flag] then
                                 Library.Options[flag].Value = value
                             end
+                            getgenv().Config.dropdowns[flag] = value
+                            saveConfig(getgenv().Config)
                             if cfg.Callback then
                                 cfg.Callback(value)
                             end
@@ -950,7 +954,13 @@ local function adaptTab(tab)
                         Value = cfg.Default,
                         Type = (cfg.Type == "Textarea" and "Textarea" or "Input"),
                         Placeholder = cfg.Placeholder,
-                        Callback = cfg.Callback,
+                        Callback = function(value)
+                            getgenv().Config.inputs[flag] = value
+                            saveConfig(getgenv().Config)
+                            if cfg.Callback then
+                                cfg.Callback(value)
+                            end
+                        end,
                     })
                 end
             elseif k == "AddButton" then
@@ -1252,13 +1262,15 @@ local function buildAutoAbilityUI()
                     if cfg.requireBossInRange then defaultList["Boss In Range"] = true end
                     if cfg.delayAfterBossSpawn then defaultList["Delay After Boss Spawn"] = true end
                     if cfg.useOnWave then defaultList["On Wave"] = true end
+                    
+                    local dropdownDefault = next(defaultList) and defaultList or nil
 
                     local modifierKey = unitName .. "_" .. abilityName .. "_Modifiers"
                     local dropdown = GB.Ability_Right:AddDropdown(modifierKey, {
                         Values = {"Only On Boss","Boss In Range","Delay After Boss Spawn","On Wave"},
                         Multi = true,
                         AllowNone = true,
-                        Default = defaultList,
+                        Default = dropdownDefault,
                         Text = "  > Conditions",
                         Callback = function(Value)
                             local selected = {}
@@ -1279,6 +1291,16 @@ local function buildAutoAbilityUI()
                             saveConfig(getgenv().Config)
                         end,
                     })
+                    
+                    if dropdownDefault and next(dropdownDefault) then
+                        task.spawn(function()
+                            task.wait(0.4)
+                            if Options[modifierKey] and Options[modifierKey].SetValue then
+                                Options[modifierKey]:SetValue(dropdownDefault)
+                            end
+                        end)
+                    end
+                    
                     GB.Ability_Right:AddInput(unitName .. "_" .. abilityName .. "_Wave", {
                         Text = "  > Wave Number",
                         Default = (saved and saved.specificWave and tostring(saved.specificWave)) or "",
