@@ -703,7 +703,7 @@ local UpdatesSection = Window:Section({
 
 local MainSection = Window:Section({
     Title = "Main",
-    Icon = "home",
+    Icon = "archive",
 })
 
 local CombatSection = Window:Section({
@@ -2194,7 +2194,6 @@ task.spawn(function()
                 local retryButton = buttons:FindFirstChild("Retry")
                 local leaveButton = buttons:FindFirstChild("Leave")
                 local buttonToPress, actionName = nil, ""
-                task.wait(2.5)
                 if getgenv().AutoSmartEnabled then
                     if nextButton and nextButton.Visible then
                         buttonToPress = nextButton
@@ -2217,14 +2216,11 @@ task.spawn(function()
                     actionName = "Leave"
                 end
                 if buttonToPress then
-                    task.wait(0.5)
                     if getgenv().WebhookEnabled then
-                        local timeSinceDetection = tick() - endGameUIDetectedTime
-                        if timeSinceDetection < 6 then
-                            return
-                        end
-                        if isProcessing then
-                            return
+                        local maxWait = 0
+                        while isProcessing and maxWait < 10 do
+                            task.wait(0.5)
+                            maxWait = maxWait + 0.5
                         end
                     end
                     hasProcessedCurrentUI = true
