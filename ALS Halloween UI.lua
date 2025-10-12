@@ -6,6 +6,7 @@ local LocalPlayer = Players.LocalPlayer
 print("[ALS] Waiting for TeleportUI to disappear...")
 repeat task.wait(0.1) until not LocalPlayer.PlayerGui:FindFirstChild("TeleportUI")
 print("[ALS] TeleportUI gone, loading script...")
+task.wait(3)
 
 local repo = "https://raw.githubusercontent.com/byorl/Obsidian/main/"
 local Library = loadstring(game:HttpGet(repo .. "Library.lua"))()
@@ -15,8 +16,6 @@ local HttpService = game:GetService("HttpService")
 local RS = game:GetService("ReplicatedStorage")
 local VIM = game:GetService("VirtualInputManager")
 local TeleportService = game:GetService("TeleportService")
-
-repeat task.wait(0.5) until not LocalPlayer.PlayerGui:FindFirstChild("TeleportUI")
 
 
 local LOBBY_PLACEIDS = {12886143095, 18583778121}
@@ -160,6 +159,23 @@ end
 getgenv().BreachAutoJoin = getgenv().BreachAutoJoin or {}
 getgenv().BreachEnabled = getgenv().Config.toggles.BreachToggle or false
 
+getgenv().Config.macroMaps = getgenv().Config.macroMaps or {}
+getgenv().MacroMaps = getgenv().Config.macroMaps
+getgenv().Config.inputs.SelectedMacro = getgenv().Config.inputs.SelectedMacro or ""
+getgenv().SelectedMacro = getgenv().Config.inputs.SelectedMacro
+getgenv().Config.toggles.PlayMacro = getgenv().Config.toggles.PlayMacro or false
+getgenv().PlayMacroEnabled = getgenv().Config.toggles.PlayMacro
+getgenv().Config.inputs.StepDelay = getgenv().Config.inputs.StepDelay or "0"
+getgenv().StepDelay = tonumber(getgenv().Config.inputs.StepDelay) or 0
+
+local MACRO_FOLDER = "ALSMacros"
+if not isfolder(MACRO_FOLDER) then makefolder(MACRO_FOLDER) end
+local Macros, CurrentMacro, recording, playing = {}, nil, false, false
+local macroData, StatusText, ActionText, UnitText, WaitingText = {}, "Idle", "", "", ""
+local CurrentStep, TotalSteps = 0, 0
+local TowerInfoCache, TowerUpgradeLevels = {}, {}
+local RemoteCache = {}
+
 local function getClientData()
     local ok, data = pcall(function()
         local modulePath = RS:WaitForChild("Modules"):WaitForChild("ClientData")
@@ -263,7 +279,8 @@ print("[UI] Creating tabs...")
 
 local Tabs = {
     WhatsNew = Window:AddTab("What's New?", "newspaper"),
-    Main = Window:AddTab("Main", "activity"), 
+    Main = Window:AddTab("Main", "activity"),
+    Macro = Window:AddTab("Macro", "play"),
     Ability = Window:AddTab("Ability", "star"),
     CardSelection = Window:AddTab("Card Selection", "layout-grid"),
     BossRush = Window:AddTab("Boss Rush", "shield"),
@@ -282,6 +299,10 @@ GB.WhatsNew_Left = Tabs.WhatsNew:AddLeftGroupbox("📰 Latest Updates")
 GB.WhatsNew_Right = Tabs.WhatsNew:AddRightGroupbox("✨ All Features")
 GB.Main_Left = Tabs.Main:AddLeftGroupbox("🚀 Auto Join System")
 GB.Main_Right = Tabs.Main:AddRightGroupbox("⚡ Game Automation")
+GB.Macro_Left = Tabs.Macro:AddLeftGroupbox("📝 Macro Config")
+GB.Macro_Right = Tabs.Macro:AddRightGroupbox("🗺️ Macro Maps")
+GB.Macro_Status = Tabs.Macro:AddLeftGroupbox("📊 Status")
+GB.Macro_Controls = Tabs.Macro:AddLeftGroupbox("🎮 Controls")
 GB.Ability_Left = Tabs.Ability:AddLeftGroupbox("⚔️ Auto Ability System")
 GB.Ability_Right = Tabs.Ability:AddRightGroupbox("⚔️ Unit Abilities")
 GB.Card_Left = Tabs.CardSelection:AddLeftGroupbox("🃏 Card Priority System")
@@ -296,6 +317,502 @@ GB.Misc_Left = Tabs.Misc:AddLeftGroupbox("⚡ Performance")
 GB.Misc_Right = Tabs.Misc:AddRightGroupbox("🔒 Safety & UI")
 GB.Settings_Left = Tabs.Settings:AddLeftGroupbox("💾 Config Management")
 GB.Settings_Right = Tabs.Settings:AddRightGroupbox("UI Settings")
+
+local function cacheTowerInfo()
+    if next(TowerInfoCache) then return end
+    local towerInfoPath = RS:WaitForChild("Modules"):WaitForChild("TowerInfo")
+    for _, mod in pairs(towerInfoPath:GetChildren()) do
+        if mod:IsA("ModuleScript") then
+            local ok, data = pcall(function() return require(mod) end)
+            if ok then TowerInfoCache[mod.Name] = data end
+        end
+    end
+end
+local function getPlaceCost(towerName)
+    cacheTowerInfo()
+    if not TowerInfoCache[towerName] then return 0 end
+    if TowerInfoCache[towerName][0] then
+        return TowerInfoCache[towerName][0].Cost or 0
+    end
+    return 0
+end
+local function getUpgradeCost(towerName, upgradeLevel)
+    cacheTowerInfo()
+    if not TowerInfoCache[towerName] then return 0 end
+    if TowerInfoCache[towerName][upgradeLevel] then
+        return TowerInfoCache[towerName][upgradeLevel].Cost or 0
+    end
+    return 0
+end
+local function loadMacros()
+    Macros = {}
+    if not isfolder(MACRO_FOLDER) then return end
+    for _, file in pairs(listfiles(MACRO_FOLDER)) do
+        if file:sub(-5) == ".json" then
+            local ok, data = pcall(function() return HttpService:JSONDecode(readfile(file)) end)
+            if ok then Macros[file:match("([^/\\]+)%%.json$") or file:match("([^/\\]+)%.json$")] = data end
+        end
+    end
+end
+local function saveMacro(name, data)
+    writefile(MACRO_FOLDER .. "/" .. name .. ".json", HttpService:JSONEncode(data))
+    Macros[name] = data
+end
+local function getMacroNames()
+    local names = {}
+    for name in pairs(Macros) do table.insert(names, name) end
+    table.sort(names)
+    return names
+end
+local function macroKeyFor(gamemode, mapName)
+    return tostring(gamemode) .. "_" .. tostring(mapName)
+end
+local function getCurrentGamemodeAndMap()
+    local gm = nil
+    local mn = nil
+    pcall(function()
+        local g = RS:FindFirstChild("Gamemode")
+        if g then gm = g.Value end
+        local map = workspace:FindFirstChild("Map")
+        local mapName = map and map:FindFirstChild("MapName")
+        if mapName then mn = mapName.Value end
+    end)
+    return gm, mn
+end
+local function applyMacroSelectionForCurrentMap()
+    local gm, mn = getCurrentGamemodeAndMap()
+    if gm and mn then
+        local key = macroKeyFor(gm, mn)
+        local mapped = getgenv().MacroMaps[key]
+        if mapped and Macros[mapped] then
+            CurrentMacro = mapped
+            macroData = Macros[CurrentMacro] or {}
+            getgenv().SelectedMacro = CurrentMacro
+            getgenv().Config.inputs.SelectedMacro = CurrentMacro
+            saveConfig(getgenv().Config)
+            if Library and Library.Options and Library.Options.MacroSelect then
+                Library.Options.MacroSelect:SetValue(CurrentMacro)
+            end
+        end
+    end
+end
+
+loadMacros()
+
+GB.Macro_Left:AddInput("MacroName", {
+    Text = "Create Macro",
+    Finished = true,
+    Callback = function(v)
+        if v and v ~= "" and not Macros[v] then
+            Macros[v], CurrentMacro, macroData = {}, v, {}
+            saveMacro(v, {})
+            if Library.Options.MacroSelect then Library.Options.MacroSelect:SetValues(getMacroNames()) Library.Options.MacroSelect:SetValue(v) end
+            getgenv().SelectedMacro = v
+            getgenv().Config.inputs.SelectedMacro = v
+            saveConfig(getgenv().Config)
+            notify("Macro", "Created: " .. v, 3)
+        end
+    end
+})
+
+GB.Macro_Left:AddDropdown("MacroSelect", {
+    Values = getMacroNames(),
+    Text = "Selected Macro",
+    Callback = function(v)
+        CurrentMacro = v
+        getgenv().SelectedMacro = v
+        getgenv().Config.inputs.SelectedMacro = v or ""
+        if v and Macros[v] then macroData = Macros[v] end
+        saveConfig(getgenv().Config)
+    end
+})
+
+local StatusLabel = GB.Macro_Status:AddLabel("Status: Idle")
+local StepLabel = GB.Macro_Status:AddLabel("Step: 0/0")
+local ActionLabel = GB.Macro_Status:AddLabel("Action: ")
+local UnitLabel = GB.Macro_Status:AddLabel("Unit: ")
+local WaitingLabel = GB.Macro_Status:AddLabel("Waiting for: ")
+
+local function updateMacroStatus()
+    pcall(function()
+        StatusLabel:SetText("Status: " .. StatusText)
+        StepLabel:SetText("Step: " .. CurrentStep .. "/" .. TotalSteps)
+        ActionLabel:SetText("Action: " .. ActionText)
+        UnitLabel:SetText("Unit: " .. UnitText)
+        WaitingLabel:SetText("Waiting for: " .. WaitingText)
+    end)
+end
+
+GB.Macro_Controls:AddInput("StepDelayInput", {
+    Text = "Step Delay",
+    Default = tostring(getgenv().StepDelay or 0),
+    Numeric = true,
+    Finished = true,
+    Callback = function(v)
+        getgenv().StepDelay = tonumber(v) or 0
+        getgenv().Config.inputs.StepDelay = tostring(getgenv().StepDelay)
+        saveConfig(getgenv().Config)
+    end
+})
+
+GB.Macro_Right:AddLabel("Assign macros to specific maps", true)
+local selectedGamemode, selectedMap = "Story", ""
+local function getMapsByGamemodeForMacro(gamemode)
+    local maps = {}
+    local ok = pcall(function()
+        local mapDataModule = RS:FindFirstChild("Modules") and RS.Modules:FindFirstChild("MapData")
+        if mapDataModule and mapDataModule:IsA("ModuleScript") then
+            local MapData = require(mapDataModule)
+            for mapName, mapInfo in pairs(MapData) do
+                if mapInfo.Type and type(mapInfo.Type) == "table" then
+                    for _, mapType in ipairs(mapInfo.Type) do
+                        if mapType == gamemode then table.insert(maps, mapName) break end
+                    end
+                end
+            end
+            table.sort(maps)
+        end
+    end)
+    if not ok then return {} end
+    return maps
+end
+
+GB.Macro_Right:AddDropdown("MacroGamemodeSelect", {
+    Values = {"Story","Infinite","Challenge","LegendaryStages","Raids","Dungeon","Survival","ElementalCaverns"},
+    Default = "Story",
+    Text = "Gamemode",
+    Callback = function(value)
+        selectedGamemode = value
+        local maps = getMapsByGamemodeForMacro(value)
+        if Library.Options.MacroMapDropdown then
+            Library.Options.MacroMapDropdown:SetValues(maps)
+            if #maps > 0 then
+                Library.Options.MacroMapDropdown:SetValue(maps[1])
+                selectedMap = maps[1]
+                local key = macroKeyFor(selectedGamemode, selectedMap)
+                if Library.Options.MacroForSelectedMap and getgenv().MacroMaps[key] then
+                    Library.Options.MacroForSelectedMap:SetValue(getgenv().MacroMaps[key])
+                end
+            end
+        end
+    end,
+    Searchable = true,
+})
+
+GB.Macro_Right:AddDropdown("MacroMapDropdown", {
+    Values = getMapsByGamemodeForMacro("Story"),
+    Text = "Map",
+    Callback = function(value)
+        selectedMap = value
+        local key = macroKeyFor(selectedGamemode, selectedMap)
+        if Library.Options.MacroForSelectedMap and getgenv().MacroMaps[key] then
+            Library.Options.MacroForSelectedMap:SetValue(getgenv().MacroMaps[key])
+        end
+    end,
+    Searchable = true,
+})
+
+GB.Macro_Right:AddDropdown("MacroForSelectedMap", {
+    Values = getMacroNames(),
+    Text = "Macro",
+    Callback = function(value)
+        local key = macroKeyFor(selectedGamemode, selectedMap)
+        getgenv().MacroMaps[key] = value
+        getgenv().Config.macroMaps[key] = value
+        saveConfig(getgenv().Config)
+        local gm, mn = getCurrentGamemodeAndMap()
+        if gm == selectedGamemode and mn == selectedMap and value and Macros[value] then
+            CurrentMacro = value
+            macroData = Macros[value]
+            if Library.Options.MacroSelect then Library.Options.MacroSelect:SetValue(value) end
+        end
+        notify("Macro Maps", string.format("%s_%s -> %s", selectedGamemode, selectedMap, tostring(value)), 3)
+    end,
+    Searchable = true,
+})
+
+local function buildRemoteCache()
+    RemoteCache = {}
+    for _, v in pairs(RS:GetDescendants()) do
+        if v:IsA("RemoteEvent") or v:IsA("RemoteFunction") then
+            RemoteCache[(v.Name or ""):lower()] = v
+        end
+    end
+end
+task.spawn(function()
+    task.wait(2)
+    cacheTowerInfo()
+    buildRemoteCache()
+end)
+
+local function executeAction(action)
+    local remote = RemoteCache[action.RemoteName:lower()]
+    if not remote then return end
+    if action.RemoteName:lower():find("upgrade") then
+        for _, t in pairs((workspace:FindFirstChild("Towers") or Instance.new("Folder")):GetChildren()) do
+            if t:FindFirstChild("Owner") and t.Owner.Value == LocalPlayer and t.Name == action.TowerName then
+                if remote:IsA("RemoteFunction") then remote:InvokeServer(t) else remote:FireServer(t) end
+                return
+            end
+        end
+    else
+        local args = {action.Args[1]}
+        if action.Args[2] and type(action.Args[2]) == "table" then
+            args[2] = CFrame.new(unpack(action.Args[2]))
+        else
+            args[2] = action.Args[2]
+        end
+        if remote:IsA("RemoteFunction") then remote:InvokeServer(unpack(args)) else remote:FireServer(unpack(args)) end
+    end
+end
+
+local function hasStartButton()
+    local hasStart = false
+    pcall(function()
+        local b = LocalPlayer.PlayerGui:FindFirstChild("Bottom")
+        if b and b.Frame and b.Frame:GetChildren()[2] then
+            local sub = b.Frame:GetChildren()[2]:GetChildren()[6]
+            if sub and sub.TextButton and sub.TextButton.TextLabel then
+                hasStart = sub.TextButton.TextLabel.Text == "Start"
+            end
+        end
+    end)
+    return hasStart
+end
+
+if not getgenv()._ALS_MacroHooked then
+    local mt = getrawmetatable(game)
+    local old = mt.__namecall
+    setreadonly(mt, false)
+    local lastRecord = { time = 0, name = "", argHash = "" }
+    local recordingLock = false
+    mt.__namecall = function(self, ...)
+        local method, args = getnamecallmethod(), {...}
+        local towerRef = nil
+        if recording and not recordingLock and (method == "FireServer" or method == "InvokeServer") then
+            local n = tostring(self.Name or "")
+            if n:lower():find("upgrade") and args[1] and typeof(args[1]) == "Instance" then
+                towerRef = args[1]
+            end
+        end
+        local result = old(self, ...)
+        if recording and not recordingLock and (method == "FireServer" or method == "InvokeServer") then
+            local n = tostring(self.Name or "")
+            if n:lower():find("place") or n:lower():find("tower") or n:lower():find("upgrade") then
+                task.spawn(function()
+                    if recordingLock then return end
+                    recordingLock = true
+                    local success = pcall(function()
+                        local now = tick()
+                        local hash = ""
+                        for _, v in ipairs(args) do hash = hash .. tostring(v) end
+                        hash = string.sub(hash, 1, 50)
+                        if n == lastRecord.name and hash == lastRecord.argHash and (now - lastRecord.time) < 0.3 then return end
+                        lastRecord = { time = now, name = n, argHash = hash }
+                        local towerName, cost, actionType = "", 0, "Action"
+                        local savedArgs = {}
+                        if n:lower():find("place") and args[1] then
+                            towerName, actionType = tostring(args[1]), "Place"
+                            cost = getPlaceCost(towerName)
+                            if not _G.TowerPlaceCounts then _G.TowerPlaceCounts = {} end
+                            local countBefore = _G.TowerPlaceCounts[towerName] or 0
+                            task.wait(0.6)
+                            local countAfter = 0
+                            pcall(function()
+                                local tw = workspace:FindChild("Towers") or workspace:FindFirstChild("Towers")
+                                tw = tw or workspace
+                                for _, t in pairs(workspace.Towers:GetChildren()) do
+                                    if t.Name == towerName and t:FindFirstChild("Owner") and t.Owner.Value == LocalPlayer then
+                                        countAfter = countAfter + 1
+                                    end
+                                end
+                            end)
+                            if countAfter > countBefore then
+                                savedArgs[1] = args[1]
+                                if args[2] and typeof(args[2]) == "CFrame" then savedArgs[2] = {args[2]:GetComponents()} end
+                                TowerUpgradeLevels[towerName] = 0
+                                _G.TowerPlaceCounts[towerName] = countAfter
+                                table.insert(macroData, {
+                                    RemoteName = n,
+                                    Args = savedArgs,
+                                    Time = now,
+                                    IsInvoke = (method == "InvokeServer"),
+                                    Cost = cost,
+                                    TowerName = towerName,
+                                    ActionType = actionType
+                                })
+                                StatusText = "Recording"; CurrentStep = #macroData; TotalSteps = #macroData; ActionText = actionType; UnitText = towerName; WaitingText = ""; updateMacroStatus()
+                            else
+                                print("[Macro] Skipped Place (no new tower):", towerName)
+                            end
+                        elseif n:lower():find("upgrade") and towerRef then
+                            towerName = towerRef.Name
+                            actionType = "Upgrade"
+                            local upgradeBefore = TowerUpgradeLevels[towerName] or 0
+                            task.wait(0.25)
+                            local upgradeAfter = 0
+                            pcall(function()
+                                if towerRef:FindFirstChild("Upgrade") then upgradeAfter = towerRef.Upgrade.Value end
+                            end)
+                            if upgradeAfter > upgradeBefore then
+                                cost = getUpgradeCost(towerName, upgradeAfter)
+                                savedArgs[1] = nil
+                                TowerUpgradeLevels[towerName] = upgradeAfter
+                                table.insert(macroData, {
+                                    RemoteName = n,
+                                    Args = savedArgs,
+                                    Time = now,
+                                    IsInvoke = (method == "InvokeServer"),
+                                    Cost = cost,
+                                    TowerName = towerName,
+                                    ActionType = actionType
+                                })
+                                StatusText = "Recording"; CurrentStep = #macroData; TotalSteps = #macroData; ActionText = actionType; UnitText = towerName; WaitingText = ""; updateMacroStatus()
+                            else
+                                print("[Macro] Skipped Upgrade (no level increase):", towerName)
+                            end
+                        end
+                    end)
+                    if not success then warn("[Macro] Recording error") end
+                    recordingLock = false
+                end)
+            end
+        end
+        return result
+    end
+    setreadonly(mt, true)
+    getgenv()._ALS_MacroHooked = true
+end
+
+GB.Macro_Controls:AddToggle("RecordMacro", {
+    Text = "Record Macro",
+    Callback = function(v)
+        recording = v
+        if v then
+            if not CurrentMacro then Library.Toggles.RecordMacro:SetValue(false) return end
+            macroData, StatusText, TowerUpgradeLevels = {}, "Recording", {}
+            _G.TowerPlaceCounts = {}
+            updateMacroStatus()
+        else
+            StatusText = "Idle"
+            updateMacroStatus()
+            if CurrentMacro and #macroData > 0 then
+                saveMacro(CurrentMacro, macroData)
+                notify("Macro", tostring(#macroData) .. " steps saved", 3)
+            end
+        end
+    end
+})
+
+local playbackThread = nil
+local function ensurePlaybackLoop()
+    if playbackThread then return end
+    playbackThread = task.spawn(function()
+        while true do
+            task.wait(0.1)
+            if not getgenv().PlayMacroEnabled then break end
+            if not CurrentMacro then
+                applyMacroSelectionForCurrentMap()
+            end
+            if CurrentMacro and (macroData == nil or #macroData == 0) and Macros[CurrentMacro] then
+                macroData = Macros[CurrentMacro]
+            end
+            if CurrentMacro and macroData and #macroData > 0 then
+                local step = 1
+                local lastWave = 0
+                StatusText, WaitingText = "Waiting Start", ""
+                updateMacroStatus()
+                repeat task.wait(0.1) until not hasStartButton() or not getgenv().PlayMacroEnabled
+                if not getgenv().PlayMacroEnabled then break end
+                pcall(function() if RS:FindFirstChild("Wave") then lastWave = RS.Wave.Value end end)
+                task.wait(0.5)
+                while getgenv().PlayMacroEnabled do
+                    if step > #macroData then
+                        StatusText, WaitingText = "Waiting Next Round", ""
+                        updateMacroStatus()
+                        local currentWave = 0
+                        repeat
+                            task.wait(0.1)
+                            pcall(function() if RS:FindFirstChild("Wave") then currentWave = RS.Wave.Value end end)
+                            if currentWave < lastWave and not hasStartButton() then
+                                lastWave = currentWave
+                                step = 1
+                                task.wait(0.5)
+                                break
+                            end
+                            lastWave = currentWave
+                        until not getgenv().PlayMacroEnabled
+                        if not getgenv().PlayMacroEnabled then break end
+                        continue
+                    end
+                    local action = macroData[step]
+                    CurrentStep, TotalSteps = step, #macroData
+                    local cash = 0
+                    pcall(function() if LocalPlayer:FindFirstChild("Cash") then cash = LocalPlayer.Cash.Value end end)
+                    if action.Cost and action.Cost > 0 and cash < action.Cost then
+                        StatusText = "Waiting Cash"
+                        WaitingText = "$" .. tostring(action.Cost)
+                        ActionText = action.ActionType or "Action"
+                        UnitText = action.TowerName or "?"
+                        updateMacroStatus()
+                        task.wait(0.1)
+                        continue
+                    end
+                    StatusText = "Playing"; WaitingText = ""; ActionText = action.ActionType or "Action"; UnitText = action.TowerName or "?"; updateMacroStatus()
+                    pcall(function() executeAction(action) end)
+                    step = step + 1
+                    if getgenv().StepDelay and getgenv().StepDelay > 0 then task.wait(getgenv().StepDelay) else task.wait(0.05) end
+                end
+                CurrentStep, StatusText, ActionText, UnitText, WaitingText = 0, "Idle", "", "", ""; updateMacroStatus()
+            end
+        end
+        playbackThread = nil
+    end)
+end
+
+GB.Macro_Controls:AddToggle("PlayMacro", {
+    Text = "Play Macro",
+    Default = getgenv().PlayMacroEnabled,
+    Callback = function(v)
+        getgenv().PlayMacroEnabled = v
+        getgenv().Config.toggles.PlayMacro = v
+        saveConfig(getgenv().Config)
+        if v then ensurePlaybackLoop() end
+    end
+})
+
+task.spawn(function()
+    task.wait(2)
+    applyMacroSelectionForCurrentMap()
+    if getgenv().SelectedMacro and getgenv().SelectedMacro ~= "" then
+        CurrentMacro = getgenv().SelectedMacro
+        macroData = Macros[CurrentMacro] or {}
+        if Library.Options.MacroSelect then Library.Options.MacroSelect:SetValue(CurrentMacro) end
+    end
+    if getgenv().PlayMacroEnabled then
+        if Library.Toggles.PlayMacro then Library.Toggles.PlayMacro:SetValue(true) end
+        ensurePlaybackLoop()
+    end
+end)
+
+task.spawn(function()
+    local lastKey = ""
+    while true do
+        task.wait(1)
+        local gm, mn = getCurrentGamemodeAndMap()
+        local key = gm and mn and macroKeyFor(gm, mn) or ""
+        if key ~= "" and key ~= lastKey then
+            lastKey = key
+            local mapped = getgenv().MacroMaps[key]
+            if mapped and Macros[mapped] then
+                CurrentMacro = mapped
+                macroData = Macros[mapped]
+                if Library.Options.MacroSelect then Library.Options.MacroSelect:SetValue(mapped) end
+            end
+        end
+        if isUnloaded then break end
+    end
+end)
 
 GB.WhatsNew_Left:AddLabel("🎨 UI Library Changed", true)
 GB.WhatsNew_Left:AddLabel("• Switched from Fluent UI to Obsidian UI", true)
@@ -1082,7 +1599,7 @@ if getgenv().Config.toggles.AutoHideUIToggle then
     task.spawn(function()
         task.wait(0.2)
         if not Library.Unloaded then
-            toggleUIKey()
+            Library:Toggle()
             print("[Auto Hide] UI minimized after 0.2 seconds")
         end
     end)
@@ -1958,6 +2475,22 @@ task.spawn(function()
     while true do
         task.wait(0.1)
         if getgenv().CapsuleEnabled then
+            pcall(function()
+                local prompt = LocalPlayer.PlayerGui:FindFirstChild("Prompt")
+                if prompt and prompt:FindFirstChild("Frame") and prompt.Frame:FindFirstChild("TextButton") then
+                    local button = prompt.Frame.TextButton
+                    local events = {"Activated","MouseButton1Click","MouseButton1Down","MouseButton1Up"}
+                    for _, ev in ipairs(events) do
+                        pcall(function()
+                            for _, conn in ipairs(getconnections(button[ev])) do
+                                conn:Fire()
+                            end
+                        end)
+                    end
+                    task.wait()
+                end
+            end)
+            
             local clientData = getClientData()
             if clientData then
                 local candyBasket = clientData.CandyBasket or 0
@@ -2090,3 +2623,4 @@ if isInLobby then
         end
     end)
 end
+
