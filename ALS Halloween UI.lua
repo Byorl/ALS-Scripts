@@ -2263,7 +2263,6 @@ task.spawn(function()
                                         local playerReady = remotes and remotes:FindFirstChild("PlayerReady")
                                         if playerReady then
                                             playerReady:FireServer()
-                                            print("[Auto Ready] Player ready fired")
                                             task.wait(2)
                                         end
                                     end
@@ -2303,7 +2302,6 @@ task.spawn(function()
         generalBossSpawnTime = nil
         abilityCooldowns = {}
         towerInfoCache = {}
-        print("[Auto Abilities] Round trackers reset")
     end
     local function getTowerInfoCached(towerName)
         if towerInfoCache[towerName] then return towerInfoCache[towerName] end
@@ -2395,7 +2393,7 @@ task.spawn(function()
     end
     local function bossReadyForAbilities()
         if bossExists() then
-            if not generalBossSpawnTime then generalBossSpawnTime = tick() print("[Auto Abilities] Boss spawned, waiting 2 seconds...") end
+            if not generalBossSpawnTime then generalBossSpawnTime = tick() end
             return (tick() - generalBossSpawnTime) >= 2
         else
             generalBossSpawnTime = nil
@@ -2568,24 +2566,28 @@ task.spawn(function()
             local list = getAvailableCards() if not list then return false end
             local _, best = findBestCard(list)
             if not best or not best.button then return false end
-            local button = best.button
             local GuiService = game:GetService("GuiService")
             local function press(key)
                 VIM:SendKeyEvent(true, key, false, game)
                 task.wait(0.15)
                 VIM:SendKeyEvent(false, key, false, game)
             end
-            GuiService.SelectedObject = button
+            GuiService.SelectedObject = best.button
             task.wait(0.4)
             press(Enum.KeyCode.Return)
             task.wait(0.5)
             local ok2, confirmButton = pcall(function()
-                local prompt = LocalPlayer.PlayerGui:FindFirstChild("Prompt") if not prompt then return nil end
-                local frame = prompt:FindFirstChild("Frame") if not frame then return nil end
-                local inner = frame:FindFirstChild("Frame") if not inner then return nil end
-                local children = inner:GetChildren() if #children < 5 then return nil end
-                local button = children[5]:FindFirstChild("TextButton") if not button then return nil end
-                local label = button:FindFirstChild("TextLabel") if label and label.Text == "Confirm" then return button end
+                local prompt = LocalPlayer.PlayerGui:FindFirstChild("Prompt")
+                if not prompt then return nil end
+                local frame = prompt:FindFirstChild("Frame")
+                if not frame or not frame:FindFirstChild("Frame") then return nil end
+                local inner = frame.Frame
+                local children = inner:GetChildren()
+                if #children < 5 then return nil end
+                local btn = children[5]:FindFirstChild("TextButton")
+                if btn and btn:FindFirstChild("TextLabel") and btn.TextLabel.Text == "Confirm" then
+                    return btn
+                end
                 return nil
             end)
             if ok2 and confirmButton then
@@ -2841,7 +2843,6 @@ task.spawn(function()
                 end)
                 if ok then
                     sendSuccess = true
-                    print("[Webhook] Successfully sent!")
                 else
                     warn("[Webhook] Send failed (Attempt " .. sendAttempts .. "/2)")
                     task.wait(2)
@@ -2925,7 +2926,6 @@ task.spawn(function()
     local UseStampEvent = BingoEvents:FindFirstChild("UseStamp")
     local ClaimRewardEvent = BingoEvents:FindFirstChild("ClaimReward")
     local CompleteBoardEvent = BingoEvents:FindFirstChild("CompleteBoard")
-    print("[Auto Bingo] Bingo automation loaded!")
     while true do
         task.wait(0.1)
         if getgenv().BingoEnabled then
@@ -2943,7 +2943,6 @@ task.spawn(function()
     task.wait()
     local PurchaseEvent = RS:WaitForChild("Events"):WaitForChild("Hallowen2025"):WaitForChild("Purchase")
     local OpenCapsuleEvent = RS:WaitForChild("Remotes"):WaitForChild("OpenCapsule")
-    print("[Auto Capsules] Capsule automation loaded!")
     while true do
         task.wait(0.1)
         if getgenv().CapsuleEnabled then
@@ -2965,19 +2964,12 @@ end)
 
 if isInLobby then
     task.spawn(function()
-        print("=== [Breach Auto-Join] STARTING ===")
-        print("[Breach Auto-Join] Initial isInLobby:", isInLobby)
-        print("[Breach Auto-Join] Current PlaceId:", game.PlaceId)
-        print("[Breach Auto-Join] Valid Lobby PlaceIds:", table.concat(LOBBY_PLACEIDS, ", "))
-        print("[Breach Auto-Join] BreachEnabled:", getgenv().BreachEnabled)
-        print("[Breach Auto-Join] BreachAutoJoin table:", game:GetService("HttpService"):JSONEncode(getgenv().BreachAutoJoin))
-        print("[Breach Auto-Join] Breach automation loaded! (Will check lobby status each loop)")
         local function getAvailableBreaches()
             local ok, breaches = pcall(function()
                 local lobby = workspace:FindFirstChild("Lobby")
-                if not lobby then print("[Breach Auto-Join] ERROR: No Lobby found in workspace") return {} end
+                if not lobby then return {} end
                 local breachesFolder = lobby:FindFirstChild("Breaches")
-                if not breachesFolder then print("[Breach Auto-Join] ERROR: No Breaches folder found in Lobby") return {} end
+                if not breachesFolder then return {} end
                 local available = {}
                 local children = breachesFolder:GetChildren()
                 for i = 1, #children do
@@ -3019,37 +3011,28 @@ end
 
 if isInLobby then
     task.spawn(function()
-        print("[Auto Join] Auto Join system loaded!")
         while true do
             task.wait(2)
             if getgenv().AutoJoinConfig and getgenv().AutoJoinConfig.enabled then
                 pcall(function()
-                    local mode = getgenv().AutoJoinConfig.mode
-                    local map = getgenv().AutoJoinConfig.map
-                    local act = getgenv().AutoJoinConfig.act
-                    local difficulty = getgenv().AutoJoinConfig.difficulty
-                    if not map or map == "" then return end
-                    
-                    print("[Auto Join] Preparing to join " .. map .. "...")
+                    local cfg = getgenv().AutoJoinConfig
+                    if not cfg.map or cfg.map == "" then return end
                     cleanupBeforeTeleport()
-                    
                     local teleporterRemote = RS.Remotes.Teleporter.InteractEvent
-                    if mode == "Story" then
-                        teleporterRemote:FireServer("Select", map, act, difficulty, "Story")
-                    elseif mode == "Infinite" then
-                        teleporterRemote:FireServer("Select", map, act, difficulty, "Infinite")
-                    elseif mode == "Raids" then
-                        teleporterRemote:FireServer("Select", map, act)
-                    elseif mode == "Dungeon" then
-                        teleporterRemote:FireServer("Select", map)
-                    elseif mode == "Survival" then
-                        teleporterRemote:FireServer("Select", map)
-                    elseif mode == "ElementalCaverns" then
-                        teleporterRemote:FireServer("Select", map, difficulty)
-                    elseif mode == "Challenge" then
-                        teleporterRemote:FireServer("Select", "Challenge", act)
-                    elseif mode == "LegendaryStages" then
-                        teleporterRemote:FireServer("Select", map, act, difficulty, "LegendaryStages")
+                    if cfg.mode == "Story" then
+                        teleporterRemote:FireServer("Select", cfg.map, cfg.act, cfg.difficulty, "Story")
+                    elseif cfg.mode == "Infinite" then
+                        teleporterRemote:FireServer("Select", cfg.map, cfg.act, cfg.difficulty, "Infinite")
+                    elseif cfg.mode == "Raids" then
+                        teleporterRemote:FireServer("Select", cfg.map, cfg.act)
+                    elseif cfg.mode == "Dungeon" or cfg.mode == "Survival" then
+                        teleporterRemote:FireServer("Select", cfg.map)
+                    elseif cfg.mode == "ElementalCaverns" then
+                        teleporterRemote:FireServer("Select", cfg.map, cfg.difficulty)
+                    elseif cfg.mode == "Challenge" then
+                        teleporterRemote:FireServer("Select", "Challenge", cfg.act)
+                    elseif cfg.mode == "LegendaryStages" then
+                        teleporterRemote:FireServer("Select", cfg.map, cfg.act, cfg.difficulty, "LegendaryStages")
                     end
                     task.wait(1)
                 end)
@@ -3057,25 +3040,17 @@ if isInLobby then
             if getgenv().AutoJoinConfig and getgenv().AutoJoinConfig.autoStart then
                 pcall(function()
                     local bottomGui = LocalPlayer.PlayerGui:FindFirstChild("Bottom")
-                    if bottomGui then
-                        local frame = bottomGui:FindFirstChild("Frame")
-                        if frame then
-                            local children = frame:GetChildren()
-                            if children[2] then
-                                local subChildren = children[2]:GetChildren()
-                                if subChildren[6] then
-                                    local textButton = subChildren[6]:FindFirstChild("TextButton")
-                                    if textButton then
-                                        local textLabel = textButton:FindFirstChild("TextLabel")
-                                        if textLabel and textLabel.Text == "Start" then
-                                            local remotes = RS:FindFirstChild("Remotes")
-                                            local playerReady = remotes and remotes:FindFirstChild("PlayerReady")
-                                            if playerReady then playerReady:FireServer() end
-                                        end
-                                    end
-                                end
-                            end
-                        end
+                    if not bottomGui then return end
+                    local path = bottomGui:FindFirstChild("Frame")
+                    if not path or not path:GetChildren()[2] then return end
+                    local subChildren = path:GetChildren()[2]:GetChildren()
+                    if not subChildren[6] then return end
+                    local textButton = subChildren[6]:FindFirstChild("TextButton")
+                    if not textButton then return end
+                    local textLabel = textButton:FindFirstChild("TextLabel")
+                    if textLabel and textLabel.Text == "Start" then
+                        local playerReady = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("PlayerReady")
+                        if playerReady then playerReady:FireServer() end
                     end
                 end)
             end
