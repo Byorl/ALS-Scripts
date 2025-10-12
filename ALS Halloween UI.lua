@@ -1,75 +1,10 @@
 repeat task.wait() until game:IsLoaded()
 
-local LOCK_FILE = "ALSHalloweenEvent/loading.lock"
-local LOCK_TIMEOUT = 5
-
-print("[ALS] Checking for loading lock...")
-
-local waitTime = 0
-while isfile(LOCK_FILE) and waitTime < LOCK_TIMEOUT do
-    print("[ALS] Another instance is loading, waiting... (" .. math.floor(waitTime) .. "s)")
-    task.wait(0.2)
-    waitTime = waitTime + 0.2
-end
-
-if isfile(LOCK_FILE) then
-    print("[ALS] Lock timeout reached, forcing cleanup...")
-    delfile(LOCK_FILE)
-end
-
-writefile(LOCK_FILE, tostring(tick()))
-print("[ALS] Lock acquired, starting cleanup...")
-
-task.wait(0.2)
-
-local CoreGui = game:GetService("CoreGui")
-
--- STEP 1: DELETE OLD - Unload old library
-if getgenv().ALS_Library and not getgenv().ALS_Library.Unloaded then
-    pcall(function()
-        getgenv().ALS_Library:Unload()
-        print("[ALS] Unloaded old UI library")
-    end)
-end
-
--- STEP 2: DELETE OLD - Remove all old Obsidian UIs
-local removedUIs = 0
-for _, child in pairs(CoreGui:GetChildren()) do
-    if child:IsA("ScreenGui") and child:FindFirstChild("Obsidian") then
-        child:Destroy()
-        removedUIs = removedUIs + 1
-    end
-end
-if removedUIs > 0 then
-    print("[ALS] Removed " .. removedUIs .. " old Obsidian UI(s)")
-end
-
--- STEP 3: DELETE OLD - Remove all old toggle buttons
-local removedButtons = 0
-for _, child in pairs(CoreGui:GetChildren()) do
-    if child.Name == "ALS_Obsidian_Toggle" then
-        child:Destroy()
-        removedButtons = removedButtons + 1
-    end
-end
-if removedButtons > 0 then
-    print("[ALS] Removed " .. removedButtons .. " old toggle button(s)")
-end
-
-task.wait(0.3)
-print("[ALS] Old instances deleted, loading new UI...")
-
--- STEP 4: LOAD NEW - Load the new UI libraries
 local repo = "https://raw.githubusercontent.com/deividcomsono/Obsidian/main/"
 local Library = loadstring(game:HttpGet(repo .. "Library.lua"))()
 local ThemeManager = loadstring(game:HttpGet(repo .. "addons/ThemeManager.lua"))()
 local SaveManagerUI = loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))()
 
-print("[ALS] New UI libraries loaded!")
-
--- Store new library reference
-getgenv().ALS_Library = Library
-getgenv().ALS_SCRIPT_LOADED = true
 
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
@@ -393,20 +328,14 @@ Library:OnUnload(function()
         print("[ALS] Removed toggle button")
     end
     
-    for _, child in pairs(CoreGui:GetChildren()) do
-        if child:IsA("ScreenGui") and child:FindFirstChild("Obsidian") then
-            child:Destroy()
-            print("[ALS] Removed Obsidian UI:", child.Name)
+    for _, screenGui in pairs(CoreGui:GetChildren()) do
+        if screenGui:IsA("ScreenGui") then
+            local obsidianChild = screenGui:FindFirstChild("Obsidian")
+            if obsidianChild then
+                obsidianChild:Destroy()
+                print("[ALS] Removed Obsidian UI from:", screenGui.Name)
+            end
         end
-    end
-    
-    getgenv().ALS_SCRIPT_LOADED = false
-    getgenv().ALS_Library = nil
-    
-    local LOCK_FILE = "ALSHalloweenEvent/loading.lock"
-    if isfile(LOCK_FILE) then
-        delfile(LOCK_FILE)
-        print("[ALS] Released loading lock")
     end
     
     print("[ALS] Cleanup complete!")
@@ -1258,15 +1187,6 @@ notify("ALS Halloween Event", "Script loaded successfully!", 5)
 
 print("[UI] Script fully loaded and ready!")
 
-task.spawn(function()
-    task.wait(1)
-    local LOCK_FILE = "ALSHalloweenEvent/loading.lock"
-    if isfile(LOCK_FILE) then
-        delfile(LOCK_FILE)
-        print("[ALS] Loading lock released")
-    end
-end)
-
 if getgenv().Config.toggles.AutoHideUIToggle then
     task.spawn(function()
         task.wait(0.2)
@@ -2105,21 +2025,47 @@ task.spawn(function()
 end)
 
 task.spawn(function()
-    if not isInLobby then return end
+    if not isInLobby then 
+        print("[Auto Bingo] Not in lobby, skipping")
+        return 
+    end
     task.wait(1)
+    
+    print("[Auto Bingo] Checking for Bingo events...")
     local BingoEvents = RS:FindFirstChild("Events") and RS.Events:FindFirstChild("Bingo")
-    if not BingoEvents then return end
+    if not BingoEvents then 
+        print("[Auto Bingo] Bingo events not found!")
+        return 
+    end
+    
     local UseStampEvent = BingoEvents:FindFirstChild("UseStamp")
     local ClaimRewardEvent = BingoEvents:FindFirstChild("ClaimReward")
     local CompleteBoardEvent = BingoEvents:FindFirstChild("CompleteBoard")
+    
+    print("[Auto Bingo] Found events - UseStamp:", UseStampEvent ~= nil, "ClaimReward:", ClaimRewardEvent ~= nil, "CompleteBoard:", CompleteBoardEvent ~= nil)
     print("[Auto Bingo] Bingo automation loaded!")
+    
     while true do
-        task.wait(0.1)
+        task.wait(1) -- Changed from 0.1 to 1 second to avoid spam
         if getgenv().BingoEnabled then
+            print("[Auto Bingo] Running bingo automation...")
             pcall(function()
-                if UseStampEvent then for i=1,25 do UseStampEvent:FireServer() end end
-                if ClaimRewardEvent then for i=1,25 do ClaimRewardEvent:InvokeServer(i) end end
-                if CompleteBoardEvent then CompleteBoardEvent:InvokeServer() end
+                if UseStampEvent then 
+                    for i=1,25 do 
+                        UseStampEvent:FireServer()
+                    end
+                    print("[Auto Bingo] Used 25 stamps")
+                end
+                if ClaimRewardEvent then 
+                    for i=1,25 do 
+                        ClaimRewardEvent:InvokeServer(i)
+                    end
+                    print("[Auto Bingo] Claimed rewards")
+                end
+                if CompleteBoardEvent then 
+                    CompleteBoardEvent:InvokeServer()
+                    print("[Auto Bingo] Completed board")
+                end
             end)
         end
         if isUnloaded then break end
@@ -2127,25 +2073,76 @@ task.spawn(function()
 end)
 
 task.spawn(function()
-    if not isInLobby then return end
-    task.wait()
-    local PurchaseEvent = RS:WaitForChild("Events"):WaitForChild("Hallowen2025"):WaitForChild("Purchase")
-    local OpenCapsuleEvent = RS:WaitForChild("Remotes"):WaitForChild("OpenCapsule")
+    if not isInLobby then 
+        print("[Auto Capsules] Not in lobby, skipping")
+        return 
+    end
+    task.wait(1)
+    
+    print("[Auto Capsules] Waiting for events...")
+    local ok, PurchaseEvent = pcall(function()
+        return RS:WaitForChild("Events", 5):WaitForChild("Hallowen2025", 5):WaitForChild("Purchase", 5)
+    end)
+    if not ok or not PurchaseEvent then
+        print("[Auto Capsules] Purchase event not found!")
+        return
+    end
+    
+    local ok2, OpenCapsuleEvent = pcall(function()
+        return RS:WaitForChild("Remotes", 5):WaitForChild("OpenCapsule", 5)
+    end)
+    if not ok2 or not OpenCapsuleEvent then
+        print("[Auto Capsules] OpenCapsule event not found!")
+        return
+    end
+    
     print("[Auto Capsules] Capsule automation loaded!")
+    
     while true do
-        task.wait(0.1)
+        task.wait(1) -- Changed from 0.1 to 1 second
         if getgenv().CapsuleEnabled then
+            print("[Auto Capsules] Running capsule automation...")
             local clientData = getClientData()
             if clientData then
                 local candyBasket = clientData.CandyBasket or 0
+                print("[Auto Capsules] Candy Basket:", candyBasket)
+                
                 local capsuleAmount = 0
-                if clientData.ItemData and clientData.ItemData.HalloweenCapsule2025 then capsuleAmount = clientData.ItemData.HalloweenCapsule2025.Amount or 0 end
-                if candyBasket >= 100000 then pcall(function() PurchaseEvent:InvokeServer(1, 100) end)
-                elseif candyBasket >= 10000 then pcall(function() PurchaseEvent:InvokeServer(1, 10) end)
-                elseif candyBasket >= 1000 then pcall(function() PurchaseEvent:InvokeServer(1, 1) end) end
+                if clientData.ItemData and clientData.ItemData.HalloweenCapsule2025 then 
+                    capsuleAmount = clientData.ItemData.HalloweenCapsule2025.Amount or 0 
+                end
+                
+                -- Purchase capsules
+                if candyBasket >= 100000 then 
+                    pcall(function() 
+                        PurchaseEvent:InvokeServer(1, 100) 
+                        print("[Auto Capsules] Purchased 100 capsules")
+                    end)
+                elseif candyBasket >= 10000 then 
+                    pcall(function() 
+                        PurchaseEvent:InvokeServer(1, 10) 
+                        print("[Auto Capsules] Purchased 10 capsules")
+                    end)
+                elseif candyBasket >= 1000 then 
+                    pcall(function() 
+                        PurchaseEvent:InvokeServer(1, 1) 
+                        print("[Auto Capsules] Purchased 1 capsule")
+                    end)
+                end
+                
+                -- Refresh data and open capsules
+                task.wait(0.5)
                 clientData = getClientData()
-                if clientData and clientData.ItemData and clientData.ItemData.HalloweenCapsule2025 then capsuleAmount = clientData.ItemData.HalloweenCapsule2025.Amount or 0 end
-                if capsuleAmount > 0 then pcall(function() OpenCapsuleEvent:FireServer("HalloweenCapsule2025", capsuleAmount) end) end
+                if clientData and clientData.ItemData and clientData.ItemData.HalloweenCapsule2025 then 
+                    capsuleAmount = clientData.ItemData.HalloweenCapsule2025.Amount or 0 
+                end
+                
+                if capsuleAmount > 0 then 
+                    pcall(function() 
+                        OpenCapsuleEvent:FireServer("HalloweenCapsule2025", capsuleAmount) 
+                        print("[Auto Capsules] Opened", capsuleAmount, "capsules")
+                    end)
+                end
             end
         end
         if isUnloaded then break end
