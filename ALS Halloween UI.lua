@@ -881,11 +881,26 @@ local function adaptTab(tab)
                     
                     if cfg.Multi == true and initialValue then
                         if type(initialValue) == "table" then
-                            local dictValue = {}
-                            for _, v in pairs(initialValue) do
-                                dictValue[v] = true
+                            -- Check if it's already in dictionary format {key=true}
+                            local isDictionary = false
+                            for k,v in pairs(initialValue) do
+                                if type(k) == "string" and v == true then
+                                    isDictionary = true
+                                    break
+                                end
                             end
-                            initialValue = dictValue
+                            
+                            -- If not dictionary, convert array to dictionary
+                            if not isDictionary then
+                                local dictValue = {}
+                                for _, v in pairs(initialValue) do
+                                    if type(v) == "string" then
+                                        dictValue[v] = true
+                                    end
+                                end
+                                initialValue = dictValue
+                            end
+                            -- If already dictionary, use as-is
                         end
                     end
                     
@@ -1259,29 +1274,19 @@ local function buildAutoAbilityUI()
 
                     local modifierKey = unitName .. "_" .. abilityName .. "_Modifiers"
                     
+                    -- Build default list ONLY from Config.abilities (single source of truth)
                     local defaultList = {}
                     if cfg.onlyOnBoss then defaultList["Only On Boss"] = true end
                     if cfg.requireBossInRange then defaultList["Boss In Range"] = true end
                     if cfg.delayAfterBossSpawn then defaultList["Delay After Boss Spawn"] = true end
                     if cfg.useOnWave then defaultList["On Wave"] = true end
                     
-                    local savedDropdown = getgenv().Config.dropdowns[modifierKey]
-                    if savedDropdown and type(savedDropdown) == "table" then
-                        for k,v in pairs(savedDropdown) do
-                            if type(k) == "number" and type(v) == "string" then
-                                defaultList[v] = true
-                            elseif v == true then
-                                defaultList[k] = true
-                            end
-                        end
-                    end
-                    
                     local dropdownDefault = next(defaultList) and defaultList or nil
                     local dropdown = GB.Ability_Right:AddDropdown(modifierKey, {
                         Values = {"Only On Boss","Boss In Range","Delay After Boss Spawn","On Wave"},
                         Multi = true,
                         AllowNone = true,
-                        Default = dropdownDefault,
+                        Value = dropdownDefault,  -- Use Value instead of Default for multi-select
                         Text = "  > Conditions",
                         Callback = function(Value)
                             local selected = {}
@@ -1294,10 +1299,10 @@ local function buildAutoAbilityUI()
                                     end
                                 end
                             end
-                            cfg.onlyOnBoss = selected["Only On Boss"] or false
-                            cfg.requireBossInRange = selected["Boss In Range"] or false
-                            cfg.delayAfterBossSpawn = selected["Delay After Boss Spawn"] or false
-                            cfg.useOnWave = selected["On Wave"] or false
+                            cfg.onlyOnBoss = selected["Only On Boss"] == true
+                            cfg.requireBossInRange = selected["Boss In Range"] == true
+                            cfg.delayAfterBossSpawn = selected["Delay After Boss Spawn"] == true
+                            cfg.useOnWave = selected["On Wave"] == true
                             getgenv().Config.abilities[unitName] = getgenv().Config.abilities[unitName] or {}
                             local store = getgenv().Config.abilities[unitName]
                             store[abilityName] = store[abilityName] or {}
@@ -1828,6 +1833,12 @@ addToggle(GB.Misc_Right, "AntiAFKToggle", "Anti-AFK", getgenv().AntiAFKEnabled, 
     notify("Anti-AFK", v and "Enabled" or "Disabled", 3)
 end)
 
+addToggle(GB.Misc_Right, "AutoHideUIToggle", "Auto Hide UI on Load", getgenv().Config.toggles.AutoHideUIToggle or false, function(v)
+    getgenv().Config.toggles.AutoHideUIToggle = v
+    saveConfig(getgenv().Config)
+    notify("Auto Hide UI", v and "Enabled - UI will minimize on next load" or "Disabled", 3)
+end)
+
 GB.Settings_Left:Paragraph({
     Title = "Config Management",
     Desc = "Your settings are automatically saved to: " .. CONFIG_FOLDER .. "/" .. CONFIG_FILE
@@ -2356,13 +2367,7 @@ task.spawn(function()
 end)
 
 task.spawn(function()
-    local function getGameSpeed()
-        local ok, speed = pcall(function()
-            return RS:WaitForChild("TimeScale", 5).Value
-        end)
-        return ok and speed or 3
-    end
-    local GAME_SPEED = getGameSpeed()
+    local GAME_SPEED = game:GetService("ReplicatedStorage").TimeScale.Value
     local Towers = workspace:WaitForChild("Towers", 10)
     local bossSpawnTime = nil
     local bossInRangeTracker = {}
