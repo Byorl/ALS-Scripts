@@ -1745,7 +1745,29 @@ task.spawn(function()
                 return {} 
             end
             
-            print("[Webhook] Found Holder, scanning all children...")
+            print("[Webhook] Found Holder, waiting for reward buttons to load...")
+            
+            local waitTime = 0
+            local hasTextButtons = false
+            repeat
+                task.wait(0.1)
+                waitTime = waitTime + 0.1
+                local children = holder:GetChildren()
+                for i = 1, #children do
+                    if children[i]:IsA("TextButton") then
+                        hasTextButtons = true
+                        break
+                    end
+                end
+            until hasTextButtons or waitTime > 3
+            
+            if not hasTextButtons then
+                print("[Webhook] WARNING: No TextButtons found after 3 seconds!")
+            else
+                print("[Webhook] TextButtons loaded after", waitTime, "seconds")
+            end
+            
+            print("[Webhook] Scanning all children...")
             
             local children = holder:GetChildren()
             print("[Webhook] Total children in Holder:", #children)
