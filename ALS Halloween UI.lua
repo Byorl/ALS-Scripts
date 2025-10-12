@@ -44,6 +44,40 @@ end
 
 print("[ALS] UI Library loaded successfully!")
 
+getgenv().ALS_Library = Library
+getgenv().ALS_ThemeManager = ThemeManager
+
+local libraryProtection = {
+    unloadAttempts = 0,
+    lastUnloadAttempt = 0
+}
+
+task.spawn(function()
+    while true do
+        task.wait(0.5)
+        
+        if Library and Library.Unloaded == true then
+            local currentTime = tick()
+            
+            if currentTime - libraryProtection.lastUnloadAttempt < 5 then
+                libraryProtection.unloadAttempts = libraryProtection.unloadAttempts + 1
+                
+                if libraryProtection.unloadAttempts >= 3 then
+                    warn("[ALS] Multiple rapid unload attempts detected! This may be a bug.")
+                    warn("[ALS] If you didn't manually unload, the UI may be unstable.")
+                end
+            else
+                libraryProtection.unloadAttempts = 0
+            end
+            
+            libraryProtection.lastUnloadAttempt = currentTime
+            break
+        end
+    end
+end)
+
+print("[ALS] Library protected from garbage collection")
+
 local HttpService = game:GetService("HttpService")
 local RS = game:GetService("ReplicatedStorage")
 local VIM = game:GetService("VirtualInputManager")
@@ -1133,14 +1167,35 @@ GB.Settings_Right:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", {
 })
 
 GB.Settings_Right:AddButton("Unload", function()
-    Library:Unload()
+    print("[ALS] Manual unload requested by user")
+    local ok = pcall(function()
+        if Library and Library.Unload then
+            Library:Unload()
+            print("[ALS] Library unloaded successfully")
+        end
+    end)
+    if not ok then
+        warn("[ALS] Failed to unload library")
+    end
 end)
 
-Library.ToggleKeybind = Options.MenuKeybind
+local keybindOk = pcall(function()
+    Library.ToggleKeybind = Options.MenuKeybind
+end)
+if not keybindOk then
+    warn("[ALS] Failed to set toggle keybind, using default")
+end
 
-ThemeManager:SetLibrary(Library)
-ThemeManager:SetFolder("ALS-Obsidian")
-ThemeManager:ApplyToTab(Tabs.Settings)
+local themeOk = pcall(function()
+    ThemeManager:SetLibrary(Library)
+    ThemeManager:SetFolder("ALS-Obsidian")
+    ThemeManager:ApplyToTab(Tabs.Settings)
+end)
+if not themeOk then
+    warn("[ALS] Failed to apply theme, using defaults")
+end
+
+print("[ALS] Theme and keybinds configured")
 
 print("[UI] All tabs and settings loaded!")
 print("[UI] Sending notification...")
@@ -1162,16 +1217,36 @@ print("[UI] Mobile optimizations active")
 
 if getgenv().Config.toggles.AutoHideUIToggle then
     task.spawn(function()
-        task.wait(1)
-        if not Library.Unloaded then
-            local ok = pcall(function()
-                Library:Toggle()
-            end)
-            if ok then
-                print("[Auto Hide] UI minimized after 1 second")
-            else
-                warn("[Auto Hide] Failed to minimize UI")
+        task.wait(2)
+        
+        if Library and Library.Unloaded ~= true then
+            local hideAttempts = 0
+            local hideSuccess = false
+            
+            while hideAttempts < 3 and not hideSuccess do
+                hideAttempts = hideAttempts + 1
+                
+                local ok = pcall(function()
+                    if Library and Library.Toggle and type(Library.Toggle) == "function" then
+                        Library:Toggle()
+                        hideSuccess = true
+                    end
+                end)
+                
+                if ok and hideSuccess then
+                    print("[Auto Hide] UI minimized successfully after " .. hideAttempts .. " attempt(s)")
+                    break
+                else
+                    warn("[Auto Hide] Attempt " .. hideAttempts .. " failed, retrying...")
+                    task.wait(0.5)
+                end
             end
+            
+            if not hideSuccess then
+                warn("[Auto Hide] Failed to minimize UI after 3 attempts - UI will remain visible")
+            end
+        else
+            warn("[Auto Hide] Library not ready or already unloaded, skipping auto-hide")
         end
     end)
 end
@@ -1193,14 +1268,78 @@ for inputKey, value in pairs(getgenv().Config.inputs) do
 end
 
 local isUnloaded = false
+local unloadCheckCount = 0
+local falseUnloadCount = 0
+local heartbeatCount = 0
+
+task.spawn(function()
+    while true do
+        task.wait(5)
+        if not isUnloaded then
+            heartbeatCount = heartbeatCount + 1
+            
+            local libraryAlive = pcall(function()
+                if Library and getgenv().ALS_Library then
+                    return true
+                end
+                return false
+            end)
+            
+            if libraryAlive then
+                if heartbeatCount % 12 == 0 then
+                    print("[ALS] Heartbeat: Library is healthy (Uptime: " .. (heartbeatCount * 5) .. "s)")
+                end
+            else
+                warn("[ALS] Heartbeat: Library reference lost, attempting recovery...")
+                
+                if getgenv().ALS_Library then
+                    Library = getgenv().ALS_Library
+                    print("[ALS] Library reference recovered from global")
+                end
+            end
+        else
+            print("[ALS] Heartbeat stopped (Library unloaded)")
+            break
+        end
+    end
+end)
+
 task.spawn(function()
     while true do
         task.wait(1)
-        if Library and Library.Unloaded then 
-            isUnloaded = true 
-            break 
+        
+        if Library then
+            if Library.Unloaded == true then
+                unloadCheckCount = unloadCheckCount + 1
+                
+                if unloadCheckCount >= 3 then
+                    print("[ALS] Library confirmed unloaded after 3 checks")
+                    isUnloaded = true 
+                    break
+                else
+                    print("[ALS] Unload detected, verifying... (" .. unloadCheckCount .. "/3)")
+                end
+            else
+                if unloadCheckCount > 0 then
+                    falseUnloadCount = falseUnloadCount + 1
+                    print("[ALS] False unload detected and prevented! (Count: " .. falseUnloadCount .. ")")
+                end
+                unloadCheckCount = 0
+            end
+        else
+            if getgenv().ALS_Library then
+                Library = getgenv().ALS_Library
+                print("[ALS] Library recovered from global storage")
+                unloadCheckCount = 0
+            else
+                print("[ALS] Library object is nil, marking as unloaded")
+                isUnloaded = true
+                break
+            end
         end
     end
+    
+    print("[ALS] Unload monitor stopped")
 end)
 
 task.spawn(function()
@@ -1356,7 +1495,8 @@ task.spawn(function()
     end)
     while true do
         task.wait(0.5 * MOBILE_DELAY_MULTIPLIER)
-        pcall(function()
+        
+        local success, errorMsg = pcall(function()
             local endGameUI = LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
             if endGameUI and endGameUI:FindFirstChild("BG") and endGameUI.BG:FindFirstChild("Buttons") then
                 if hasProcessedCurrentUI then return end
@@ -1397,7 +1537,15 @@ task.spawn(function()
                 end
             end
         end)
-        if isUnloaded then break end
+        
+        if not success then
+            warn("[Auto Leave/Replay] Error in loop: " .. tostring(errorMsg))
+        end
+        
+        if isUnloaded then 
+            print("[Auto Leave/Replay] Loop stopped (unloaded)")
+            break 
+        end
     end
 end)
 
@@ -1405,7 +1553,7 @@ task.spawn(function()
     while true do
         task.wait(1)
         if getgenv().AutoReadyEnabled then
-            pcall(function()
+            local success, err = pcall(function()
                 local bottomGui = LocalPlayer.PlayerGui:FindFirstChild("Bottom")
                 if bottomGui then
                     local frame = bottomGui:FindFirstChild("Frame")
@@ -1432,8 +1580,15 @@ task.spawn(function()
                     end
                 end
             end)
+            
+            if not success then
+                warn("[Auto Ready] Error: " .. tostring(err))
+            end
         end
-        if isUnloaded then break end
+        if isUnloaded then 
+            print("[Auto Ready] Loop stopped (unloaded)")
+            break 
+        end
     end
 end)
 
