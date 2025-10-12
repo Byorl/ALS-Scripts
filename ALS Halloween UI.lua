@@ -1,34 +1,73 @@
 repeat task.wait() until game:IsLoaded()
 
-if getgenv().ALS_SCRIPT_LOADED then
-    print("[ALS] Script already running! Cleaning up old instance...")
-    
-    if getgenv().ALS_Library and not getgenv().ALS_Library.Unloaded then
-        pcall(function()
-            getgenv().ALS_Library:Unload()
-            print("[ALS] Unloaded old UI library")
-        end)
-    end
-    
-    local CoreGui = game:GetService("CoreGui")
-    
-    local oldToggleGui = CoreGui:FindFirstChild("ALS_Obsidian_Toggle")
-    if oldToggleGui then
-        oldToggleGui:Destroy()
-        print("[ALS] Removed old toggle button")
-    end
-    
-    for _, child in pairs(CoreGui:GetChildren()) do
-        if child:IsA("ScreenGui") and child:FindFirstChild("Obsidian") then
-            child:Destroy()
-            print("[ALS] Removed old Obsidian UI:", child.Name)
-        end
-    end
-    
-    task.wait(0.5)
-    print("[ALS] Old instance cleaned up, loading new instance...")
+-- FILE-BASED LOCK SYSTEM to prevent simultaneous loads
+local LOCK_FILE = "ALSHalloweenEvent/loading.lock"
+local LOCK_TIMEOUT = 5 -- Maximum seconds to wait for lock
+
+print("[ALS] Checking for loading lock...")
+
+-- Wait if another instance is currently loading
+local waitTime = 0
+while isfile(LOCK_FILE) and waitTime < LOCK_TIMEOUT do
+    print("[ALS] Another instance is loading, waiting... (" .. math.floor(waitTime) .. "s)")
+    task.wait(0.2)
+    waitTime = waitTime + 0.2
 end
 
+-- If lock file still exists after timeout, force remove it
+if isfile(LOCK_FILE) then
+    print("[ALS] Lock timeout reached, forcing cleanup...")
+    delfile(LOCK_FILE)
+end
+
+-- Create lock file to block other instances
+writefile(LOCK_FILE, tostring(tick()))
+print("[ALS] Lock acquired, starting load...")
+
+-- Small delay to ensure we have exclusive access
+task.wait(0.3)
+
+-- NOW cleanup old instances
+local CoreGui = game:GetService("CoreGui")
+
+print("[ALS] Cleaning up old instances...")
+
+-- Unload old library first
+if getgenv().ALS_Library and not getgenv().ALS_Library.Unloaded then
+    pcall(function()
+        getgenv().ALS_Library:Unload()
+        print("[ALS] Unloaded old UI library")
+    end)
+end
+
+-- Remove ALL old Obsidian UIs (they have random names)
+local removedUIs = 0
+for _, child in pairs(CoreGui:GetChildren()) do
+    if child:IsA("ScreenGui") and child:FindFirstChild("Obsidian") then
+        child:Destroy()
+        removedUIs = removedUIs + 1
+    end
+end
+if removedUIs > 0 then
+    print("[ALS] Removed " .. removedUIs .. " old Obsidian UI(s)")
+end
+
+-- Remove ALL old toggle buttons
+local removedButtons = 0
+for _, child in pairs(CoreGui:GetChildren()) do
+    if child.Name == "ALS_Obsidian_Toggle" then
+        child:Destroy()
+        removedButtons = removedButtons + 1
+    end
+end
+if removedButtons > 0 then
+    print("[ALS] Removed " .. removedButtons .. " old toggle button(s)")
+end
+
+task.wait(0.5)
+print("[ALS] Cleanup complete, loading new instance...")
+
+-- Mark script as loaded
 getgenv().ALS_SCRIPT_LOADED = true
 
 local repo = "https://raw.githubusercontent.com/deividcomsono/Obsidian/main/"
@@ -369,6 +408,13 @@ Library:OnUnload(function()
     
     getgenv().ALS_SCRIPT_LOADED = false
     getgenv().ALS_Library = nil
+    
+    -- Release lock file if it exists
+    local LOCK_FILE = "ALSHalloweenEvent/loading.lock"
+    if isfile(LOCK_FILE) then
+        delfile(LOCK_FILE)
+        print("[ALS] Released loading lock")
+    end
     
     print("[ALS] Cleanup complete!")
 end)
@@ -1214,6 +1260,16 @@ task.wait(0.1)
 notify("ALS Halloween Event", "Script loaded successfully!", 5)
 
 print("[UI] Script fully loaded and ready!")
+
+-- Release the loading lock
+task.spawn(function()
+    task.wait(1) -- Wait a moment to ensure UI is stable
+    local LOCK_FILE = "ALSHalloweenEvent/loading.lock"
+    if isfile(LOCK_FILE) then
+        delfile(LOCK_FILE)
+        print("[ALS] Loading lock released")
+    end
+end)
 
 if getgenv().Config.toggles.AutoHideUIToggle then
     task.spawn(function()
