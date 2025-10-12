@@ -44,6 +44,11 @@ end
 
 print("[ALS] UI Library loaded successfully!")
 
+if Library.Unloaded == nil then
+    Library.Unloaded = false
+    print("[ALS] Initialized Library.Unloaded to false")
+end
+
 getgenv().ALS_Library = Library
 getgenv().ALS_ThemeManager = ThemeManager
 
@@ -1370,6 +1375,16 @@ task.spawn(function()
 end)
 
 task.spawn(function()
+    print("[ALS] Waiting for Library to fully initialize before starting unload monitor...")
+    task.wait(5)
+    
+    if not Library or not Library.Unloaded then
+        print("[ALS] Library not properly initialized, waiting longer...")
+        task.wait(3)
+    end
+    
+    print("[ALS] Starting unload monitor...")
+    
     while true do
         task.wait(1)
         
