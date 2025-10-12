@@ -1756,8 +1756,8 @@ task.spawn(function()
             local stableCount = 0
             
             repeat
-                task.wait(0.2)
-                waitTime = waitTime + 0.2
+                task.wait(0.3)
+                waitTime = waitTime + 0.3
                 
                 local children = holder:GetChildren()
                 local currentCount = 0
@@ -1774,9 +1774,9 @@ task.spawn(function()
                 end
                 
                 lastCount = currentCount
-                print("[Webhook] TextButtons found:", currentCount, "Stable for:", stableCount * 0.2, "s")
+                print("[Webhook] TextButtons found:", currentCount, "Stable for:", stableCount * 0.3, "s")
                 
-            until (stableCount >= 3 and currentCount > 0) or waitTime > 3
+            until (stableCount >= 5 and currentCount > 0) or waitTime > 4
             
             print("[Webhook] Finished waiting after", waitTime, "s. Total TextButtons:", lastCount)
             
