@@ -711,6 +711,11 @@ local CombatSection = Window:Section({
     Icon = "swords",
 })
 
+local EventSection = Window:Section({
+    Title = "Event",
+    Icon = "gift",
+})
+
 local ModesSection = Window:Section({
     Title = "Game Modes",
     Icon = "gamepad-2",
@@ -733,7 +738,9 @@ local Tabs = {
     GameAuto = MainSection:Tab({ Title = "Game Actions", Icon = "play" }),
     
     Abilities = CombatSection:Tab({ Title = "Auto Abilities", Icon = "zap" }),
-    CardSelection = CombatSection:Tab({ Title = "Card Priority", Icon = "layers" }),
+    
+    CardSelection = EventSection:Tab({ Title = "Card Priority", Icon = "layers" }),
+    Event = EventSection:Tab({ Title = "Event Farm", Icon = "candy-cane" }),
     
     BossRush = ModesSection:Tab({ Title = "Boss Rush", Icon = "shield" }),
     Breach = ModesSection:Tab({ Title = "Breach", Icon = "alert-triangle" }),
@@ -741,7 +748,6 @@ local Tabs = {
     
     Webhook = AutomationSection:Tab({ Title = "Webhook", Icon = "send" }),
     SeamlessFix = AutomationSection:Tab({ Title = "Seamless Fix", Icon = "refresh-cw" }),
-    Event = AutomationSection:Tab({ Title = "Event Farm", Icon = "gift" }),
     
     Performance = SettingsSection:Tab({ Title = "Performance", Icon = "gauge" }),
     Safety = SettingsSection:Tab({ Title = "Safety & UI", Icon = "shield-check" }),
@@ -759,7 +765,7 @@ Tabs.Changes:Section({ Title = "📅 October 13, 2025 - Critical Fixes & Optimiz
 
 Tabs.Changes:Paragraph({
     Title = "🐛 Major Bug Fixes",
-    Desc = "• Fixed Auto Abilities conditions not loading from saved config\n• Fixed conditions dropdowns showing '--' instead of saved values\n• Fixed duplicate ability UI elements when toggling settings\n• Fixed webhook sending incomplete data (Wave 0, Unknown result)\n• Fixed ability cooldowns not respecting game speed multiplier (1x/2x/3x)",
+    Desc = "• Fixed Auto Abilities conditions not loading from saved config\n• Fixed duplicate ability UI elements when toggling settings\n• Fixed webhook sending incomplete data (Wave 0, Unknown result)\n• Fixed ability cooldowns not respecting game speed multiplier (1x/2x/3x)",
 })
 
 Tabs.Changes:Paragraph({
