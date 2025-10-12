@@ -592,7 +592,7 @@ local function buildAutoAbilityUI()
                         cfg.delayAfterBossSpawn = saved.delayAfterBossSpawn or false
                         cfg.useOnWave = saved.useOnWave or false
                     end
-                    local abilityInfo = abilityName .. " (Lvl " .. abilityData.requiredLevel .. " • CD: " .. tostring(abilityData.cooldown) .. "s" .. (abilityData.isAttribute and " • 🔒 Attribute" or "") .. ")"
+                    local abilityInfo = abilityName .. " (L" .. abilityData.requiredLevel .. " • " .. tostring(abilityData.cooldown) .. "s" .. (abilityData.isAttribute and " • 🔒" or "") .. ")"
                     addToggle(GB.Ability_Right, unitName .. "_" .. abilityName .. "_Toggle", abilityInfo, defaultToggle, function(v)
                         cfg.enabled = v
                         getgenv().Config.abilities[unitName] = getgenv().Config.abilities[unitName] or {}
