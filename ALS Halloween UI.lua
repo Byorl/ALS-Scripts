@@ -53,7 +53,7 @@ end
 local oldLogWarn = logwarn or warn
 local function filteredWarn(...)
     local msg = tostring(...)
-    if not msg:find("ImageLabel") and not msg:find("not a valid member") then
+    if not (msg:find("ImageLabel") or msg:find("not a valid member") or msg:find("is not a valid member")) then
         oldLogWarn(...)
     end
 end
@@ -1037,125 +1037,119 @@ local function addToggle(group, key, text, default, onChanged)
     return toggle
 end
 
-if isInLobby then
-    GB.Main_Left:Paragraph({
-        Title = "🎮 Auto Join System",
-        Desc = "Automatically join maps and start games. Configure your preferred mode, map, act, and difficulty below."
-    })
-    GB.Main_Left:Space()
-    
-    local savedAutoJoin = getgenv().Config.autoJoin or {}
-    getgenv().AutoJoinConfig = {
-        enabled = savedAutoJoin.enabled or false,
-        autoStart = savedAutoJoin.autoStart or false,
-        friendsOnly = savedAutoJoin.friendsOnly or false,
-        mode = savedAutoJoin.mode or "Story",
-        map = savedAutoJoin.map or "",
-        act = savedAutoJoin.act or 1,
-        difficulty = savedAutoJoin.difficulty or "Normal"
-    }
+GB.Main_Left:Paragraph({
+    Title = "🎮 Auto Join System",
+    Desc = "Automatically join maps and start games. Configure your preferred mode, map, act, and difficulty below."
+})
+GB.Main_Left:Space()
+
+local savedAutoJoin = getgenv().Config.autoJoin or {}
+getgenv().AutoJoinConfig = {
+    enabled = savedAutoJoin.enabled or false,
+    autoStart = savedAutoJoin.autoStart or false,
+    friendsOnly = savedAutoJoin.friendsOnly or false,
+    mode = savedAutoJoin.mode or "Story",
+    map = savedAutoJoin.map or "",
+    act = savedAutoJoin.act or 1,
+    difficulty = savedAutoJoin.difficulty or "Normal"
+}
 
 
-    local MapData = nil
-    pcall(function()
-        local mapDataModule = RS:FindFirstChild("Modules") and RS.Modules:FindFirstChild("MapData")
-        if mapDataModule and mapDataModule:IsA("ModuleScript") then
-            MapData = require(mapDataModule)
-        end
-    end)
-    local function getMapsByMode(mode)
-        if not MapData then return {} end
-        if mode == "ElementalCaverns" then return {"Light","Nature","Fire","Dark","Water"} end
-        local maps = {}
-        for mapName, mapInfo in pairs(MapData) do
-            if mapInfo.Type and type(mapInfo.Type) == "table" then
-                for _, mapType in ipairs(mapInfo.Type) do
-                    if mapType == mode then table.insert(maps, mapName) break end
-                end
-            end
-        end
-        table.sort(maps)
-        return maps
+local MapData = nil
+pcall(function()
+    local mapDataModule = RS:FindFirstChild("Modules") and RS.Modules:FindFirstChild("MapData")
+    if mapDataModule and mapDataModule:IsA("ModuleScript") then
+        MapData = require(mapDataModule)
     end
-
-    GB.Main_Left:AddDropdown("AutoJoinMode", {
-        Values = {"Story","Infinite","Raids","ElementalCaverns","LegendaryStages","Dungeon","Survival","Challenge"},
-        Default = getgenv().AutoJoinConfig.mode or "Story",
-        Text = "Mode",
-        Callback = function(value)
-            getgenv().AutoJoinConfig.mode = value
-            getgenv().Config.autoJoin.mode = value
-            saveConfig(getgenv().Config)
-            local newMaps = getMapsByMode(value)
-            if Options.AutoJoinMap then Options.AutoJoinMap:SetValues(newMaps) end
-            if #newMaps > 0 then
-                if Options.AutoJoinMap then Options.AutoJoinMap:SetValue(newMaps[1]) end
-                getgenv().AutoJoinConfig.map = newMaps[1]
-                getgenv().Config.autoJoin.map = newMaps[1]
-                saveConfig(getgenv().Config)
+end)
+local function getMapsByMode(mode)
+    if not MapData then return {} end
+    if mode == "ElementalCaverns" then return {"Light","Nature","Fire","Dark","Water"} end
+    local maps = {}
+    for mapName, mapInfo in pairs(MapData) do
+        if mapInfo.Type and type(mapInfo.Type) == "table" then
+            for _, mapType in ipairs(mapInfo.Type) do
+                if mapType == mode then table.insert(maps, mapName) break end
             end
-        end,
-        Searchable = true,
-    })
-    GB.Main_Left:AddDropdown("AutoJoinMap", {
-        Values = getMapsByMode(getgenv().AutoJoinConfig.mode),
-        Default = getgenv().AutoJoinConfig.map ~= "" and getgenv().AutoJoinConfig.map or nil,
-        Text = "Map",
-        Callback = function(value)
-            getgenv().AutoJoinConfig.map = value
-            getgenv().Config.autoJoin.map = value
-            saveConfig(getgenv().Config)
-        end,
-        Searchable = true,
-    })
-    GB.Main_Left:AddDropdown("AutoJoinAct", {
-        Values = {"1","2","3","4","5","6"},
-        Default = tostring(getgenv().AutoJoinConfig.act or 1),
-        Text = "Act",
-        Callback = function(value)
-            getgenv().AutoJoinConfig.act = tonumber(value) or 1
-            getgenv().Config.autoJoin.act = tonumber(value) or 1
-            saveConfig(getgenv().Config)
-        end,
-    })
-    GB.Main_Left:AddDropdown("AutoJoinDifficulty", {
-        Values = {"Normal","Nightmare","Purgatory","Insanity"},
-        Default = getgenv().AutoJoinConfig.difficulty or "Normal",
-        Text = "Difficulty",
-        Callback = function(value)
-            getgenv().AutoJoinConfig.difficulty = value
-            getgenv().Config.autoJoin.difficulty = value
-            saveConfig(getgenv().Config)
-        end,
-    })
-
-    addToggle(GB.Main_Left, "AutoJoinToggle", "Auto Join Map", getgenv().AutoJoinConfig.enabled or false, function(val)
-        getgenv().AutoJoinConfig.enabled = val
-        getgenv().Config.autoJoin.enabled = val
-        saveConfig(getgenv().Config)
-        notify("Auto Join", val and "Enabled" or "Disabled", 3)
-    end)
-    addToggle(GB.Main_Left, "AutoJoinStartToggle", "Auto Start", getgenv().AutoJoinConfig.autoStart or false, function(val)
-        getgenv().AutoJoinConfig.autoStart = val
-        getgenv().Config.autoJoin.autoStart = val
-        saveConfig(getgenv().Config)
-        notify("Auto Start", val and "Enabled" or "Disabled", 3)
-    end)
-    addToggle(GB.Main_Left, "FriendsOnlyToggle", "Friends Only", getgenv().AutoJoinConfig.friendsOnly or false, function(val)
-        getgenv().AutoJoinConfig.friendsOnly = val
-        getgenv().Config.autoJoin.friendsOnly = val
-        saveConfig(getgenv().Config)
-        pcall(function()
-            RS.Remotes.Teleporter.InteractEvent:FireServer("FriendsOnly")
-        end)
-        notify("Friends Only", val and "Enabled" or "Disabled", 3)
-    end)
-else
-    GB.Main_Left:Paragraph({
-        Title = "⚠️ Lobby Only",
-        Desc = "The Auto Join system is only available in the lobby. Please rejoin the lobby to use this feature."
-    })
+        end
+    end
+    table.sort(maps)
+    return maps
 end
+
+GB.Main_Left:AddDropdown("AutoJoinMode", {
+    Values = {"Story","Infinite","Raids","ElementalCaverns","LegendaryStages","Dungeon","Survival","Challenge"},
+    Default = getgenv().AutoJoinConfig.mode or "Story",
+    Text = "Mode",
+    Callback = function(value)
+        getgenv().AutoJoinConfig.mode = value
+        getgenv().Config.autoJoin.mode = value
+        saveConfig(getgenv().Config)
+        local newMaps = getMapsByMode(value)
+        if Options.AutoJoinMap then Options.AutoJoinMap:SetValues(newMaps) end
+        if #newMaps > 0 then
+            if Options.AutoJoinMap then Options.AutoJoinMap:SetValue(newMaps[1]) end
+            getgenv().AutoJoinConfig.map = newMaps[1]
+            getgenv().Config.autoJoin.map = newMaps[1]
+            saveConfig(getgenv().Config)
+        end
+    end,
+    Searchable = true,
+})
+GB.Main_Left:AddDropdown("AutoJoinMap", {
+    Values = getMapsByMode(getgenv().AutoJoinConfig.mode),
+    Default = getgenv().AutoJoinConfig.map ~= "" and getgenv().AutoJoinConfig.map or nil,
+    Text = "Map",
+    Callback = function(value)
+        getgenv().AutoJoinConfig.map = value
+        getgenv().Config.autoJoin.map = value
+        saveConfig(getgenv().Config)
+    end,
+    Searchable = true,
+})
+GB.Main_Left:AddDropdown("AutoJoinAct", {
+    Values = {"1","2","3","4","5","6"},
+    Default = tostring(getgenv().AutoJoinConfig.act or 1),
+    Text = "Act",
+    Callback = function(value)
+        getgenv().AutoJoinConfig.act = tonumber(value) or 1
+        getgenv().Config.autoJoin.act = tonumber(value) or 1
+        saveConfig(getgenv().Config)
+    end,
+})
+GB.Main_Left:AddDropdown("AutoJoinDifficulty", {
+    Values = {"Normal","Nightmare","Purgatory","Insanity"},
+    Default = getgenv().AutoJoinConfig.difficulty or "Normal",
+    Text = "Difficulty",
+    Callback = function(value)
+        getgenv().AutoJoinConfig.difficulty = value
+        getgenv().Config.autoJoin.difficulty = value
+        saveConfig(getgenv().Config)
+    end,
+})
+
+addToggle(GB.Main_Left, "AutoJoinToggle", "Auto Join Map", getgenv().AutoJoinConfig.enabled or false, function(val)
+    getgenv().AutoJoinConfig.enabled = val
+    getgenv().Config.autoJoin.enabled = val
+    saveConfig(getgenv().Config)
+    notify("Auto Join", val and "Enabled" or "Disabled", 3)
+end)
+addToggle(GB.Main_Left, "AutoJoinStartToggle", "Auto Start", getgenv().AutoJoinConfig.autoStart or false, function(val)
+    getgenv().AutoJoinConfig.autoStart = val
+    getgenv().Config.autoJoin.autoStart = val
+    saveConfig(getgenv().Config)
+    notify("Auto Start", val and "Enabled" or "Disabled", 3)
+end)
+addToggle(GB.Main_Left, "FriendsOnlyToggle", "Friends Only", getgenv().AutoJoinConfig.friendsOnly or false, function(val)
+    getgenv().AutoJoinConfig.friendsOnly = val
+    getgenv().Config.autoJoin.friendsOnly = val
+    saveConfig(getgenv().Config)
+    pcall(function()
+        RS.Remotes.Teleporter.InteractEvent:FireServer("FriendsOnly")
+    end)
+    notify("Friends Only", val and "Enabled" or "Disabled", 3)
+end)
+
 
 GB.Main_Left:Space({ Columns = 1 })
 
@@ -1556,55 +1550,49 @@ GB.Breach_Left:Paragraph({
 })
 GB.Breach_Left:Space({ Columns = 1 })
 
-if isInLobby then
-    addToggle(GB.Breach_Left, "BreachToggle", "Enable Breach Auto-Join", getgenv().BreachEnabled, function(v)
-        getgenv().BreachEnabled = v
-        getgenv().Config.toggles.BreachToggle = v
-        saveConfig(getgenv().Config)
-        notify("Breach Auto-Join", v and "Enabled" or "Disabled", 3)
-    end)
-    GB.Breach_Left:Space({ Columns = 1 })
-    GB.Breach_Left:Divider({ Title = "📋 Available Breaches" })
-    local breachesLoaded = false
-    pcall(function()
-        local mapParamsModule = RS:FindFirstChild("Modules") and RS.Modules:FindFirstChild("Breach") and RS.Modules.Breach:FindFirstChild("MapParameters")
-        if mapParamsModule and mapParamsModule:IsA("ModuleScript") then
-            local mapParams = require(mapParamsModule)
-            if mapParams and next(mapParams) then
-                local breachList = {}
-                for breachName, breachInfo in pairs(mapParams) do
-                    table.insert(breachList, { name = breachName, disabled = breachInfo.Disabled or false })
-                end
-                table.sort(breachList, function(a,b) return a.name < b.name end)
-                for _, breach in ipairs(breachList) do
-                    local breachKey = "Breach_" .. breach.name
-                    local savedState = getgenv().Config.toggles[breachKey] or false
-                    if not getgenv().BreachAutoJoin[breach.name] then
-                        getgenv().BreachAutoJoin[breach.name] = savedState
-                    end
-                    local statusText = breach.disabled and " [DISABLED]" or ""
-                    addToggle(GB.Breach_Left, breachKey, breach.name .. statusText, savedState, function(v)
-                        getgenv().BreachAutoJoin[breach.name] = v
-                        getgenv().Config.toggles[breachKey] = v
-                        saveConfig(getgenv().Config)
-                    end)
-                end
-                breachesLoaded = true
+addToggle(GB.Breach_Left, "BreachToggle", "Enable Breach Auto-Join", getgenv().BreachEnabled, function(v)
+    getgenv().BreachEnabled = v
+    getgenv().Config.toggles.BreachToggle = v
+    saveConfig(getgenv().Config)
+    notify("Breach Auto-Join", v and "Enabled" or "Disabled", 3)
+end)
+GB.Breach_Left:Space({ Columns = 1 })
+GB.Breach_Left:Divider({ Title = "📋 Available Breaches" })
+local breachesLoaded = false
+pcall(function()
+    local mapParamsModule = RS:FindFirstChild("Modules") and RS.Modules:FindFirstChild("Breach") and RS.Modules.Breach:FindFirstChild("MapParameters")
+    if mapParamsModule and mapParamsModule:IsA("ModuleScript") then
+        local mapParams = require(mapParamsModule)
+        if mapParams and next(mapParams) then
+            local breachList = {}
+            for breachName, breachInfo in pairs(mapParams) do
+                table.insert(breachList, { name = breachName, disabled = breachInfo.Disabled or false })
             end
+            table.sort(breachList, function(a,b) return a.name < b.name end)
+            for _, breach in ipairs(breachList) do
+                local breachKey = "Breach_" .. breach.name
+                local savedState = getgenv().Config.toggles[breachKey] or false
+                if not getgenv().BreachAutoJoin[breach.name] then
+                    getgenv().BreachAutoJoin[breach.name] = savedState
+                end
+                local statusText = breach.disabled and " [DISABLED]" or ""
+                addToggle(GB.Breach_Left, breachKey, breach.name .. statusText, savedState, function(v)
+                    getgenv().BreachAutoJoin[breach.name] = v
+                    getgenv().Config.toggles[breachKey] = v
+                    saveConfig(getgenv().Config)
+                end)
+            end
+            breachesLoaded = true
         end
-    end)
-    if not breachesLoaded then
-        GB.Breach_Left:Paragraph({
-            Title = "⚠️ Error",
-            Desc = "Could not load breach data from MapParameters. The module may not be available."
-        })
     end
-else
+end)
+if not breachesLoaded then
     GB.Breach_Left:Paragraph({
-        Title = "⚠️ Lobby Only",
-        Desc = "The Auto Breach feature can only be used in the lobby. Please rejoin the lobby to use this feature."
+        Title = "⚠️ Error",
+        Desc = "Could not load breach data from MapParameters. The module may not be available."
     })
 end
+
 
 GB.FinalExp_Left:Paragraph({
     Title = "Final Expedition Auto Join",
@@ -1612,31 +1600,25 @@ GB.FinalExp_Left:Paragraph({
 })
 GB.FinalExp_Left:Space({ Columns = 1 })
 
-if isInLobby then
-    addToggle(GB.FinalExp_Left, "FinalExpAutoJoinEasyToggle", "Auto Join Easy", getgenv().FinalExpAutoJoinEasyEnabled, function(v)
-        getgenv().FinalExpAutoJoinEasyEnabled = v
-        getgenv().Config.toggles.FinalExpAutoJoinEasyToggle = v
-        saveConfig(getgenv().Config)
-        notify("Final Expedition", v and "Auto Join Easy Enabled" or "Auto Join Easy Disabled", 3)
-    end)
+addToggle(GB.FinalExp_Left, "FinalExpAutoJoinEasyToggle", "Auto Join Easy", getgenv().FinalExpAutoJoinEasyEnabled, function(v)
+    getgenv().FinalExpAutoJoinEasyEnabled = v
+    getgenv().Config.toggles.FinalExpAutoJoinEasyToggle = v
+    saveConfig(getgenv().Config)
+    notify("Final Expedition", v and "Auto Join Easy Enabled" or "Auto Join Easy Disabled", 3)
+end)
 
-    addToggle(GB.FinalExp_Left, "FinalExpAutoJoinHardToggle", "Auto Join Hard", getgenv().FinalExpAutoJoinHardEnabled, function(v)
-        getgenv().FinalExpAutoJoinHardEnabled = v
-        getgenv().Config.toggles.FinalExpAutoJoinHardToggle = v
-        saveConfig(getgenv().Config)
-        notify("Final Expedition", v and "Auto Join Hard Enabled" or "Auto Join Hard Disabled", 3)
-    end)
+addToggle(GB.FinalExp_Left, "FinalExpAutoJoinHardToggle", "Auto Join Hard", getgenv().FinalExpAutoJoinHardEnabled, function(v)
+    getgenv().FinalExpAutoJoinHardEnabled = v
+    getgenv().Config.toggles.FinalExpAutoJoinHardToggle = v
+    saveConfig(getgenv().Config)
+    notify("Final Expedition", v and "Auto Join Hard Enabled" or "Auto Join Hard Disabled", 3)
+end)
 
-    GB.FinalExp_Left:Paragraph({
-        Title = "⚠️ Important",
-        Desc = "Only enable ONE auto join option at a time to avoid conflicts"
-    })
-else
-    GB.FinalExp_Left:Paragraph({
-        Title = "⚠️ Lobby Only",
-        Desc = "Auto Join features are only available in the lobby. Please rejoin the lobby to use this feature."
-    })
-end
+GB.FinalExp_Left:Paragraph({
+    Title = "⚠️ Important",
+    Desc = "Only enable ONE auto join option at a time to avoid conflicts"
+})
+
 
 GB.FinalExp_Right:Paragraph({
     Title = "Automation Features",
