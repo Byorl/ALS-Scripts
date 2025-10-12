@@ -3,20 +3,59 @@ repeat task.wait() until game:IsLoaded()
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
+print("[ALS] Waiting for game to fully load...")
+task.wait(2) 
+
 print("[ALS] Waiting for TeleportUI to disappear...")
-repeat task.wait(0.1) until not LocalPlayer.PlayerGui:FindFirstChild("TeleportUI")
+local maxWaitTime = 0
+repeat 
+    task.wait(0.2) 
+    maxWaitTime = maxWaitTime + 0.2
+until not LocalPlayer.PlayerGui:FindFirstChild("TeleportUI") or maxWaitTime > 30
 print("[ALS] TeleportUI gone, loading script...")
 
+task.wait(1)
+
 local repo = "https://raw.githubusercontent.com/byorl/Obsidian/main/"
-local Library = loadstring(game:HttpGet(repo .. "Library.lua"))()
-local ThemeManager = loadstring(game:HttpGet(repo .. "addons/ThemeManager.lua"))()
+
+local Library, ThemeManager
+local loadSuccess = false
+local loadAttempts = 0
+local maxAttempts = 3
+
+while not loadSuccess and loadAttempts < maxAttempts do
+    loadAttempts = loadAttempts + 1
+    local ok = pcall(function()
+        print("[ALS] Loading UI Library (Attempt " .. loadAttempts .. "/" .. maxAttempts .. ")...")
+        Library = loadstring(game:HttpGet(repo .. "Library.lua"))()
+        task.wait(0.5) 
+        ThemeManager = loadstring(game:HttpGet(repo .. "addons/ThemeManager.lua"))()
+        loadSuccess = true
+    end)
+    if not ok then
+        warn("[ALS] Failed to load UI library, retrying...")
+        task.wait(2)
+    end
+end
+
+if not loadSuccess then
+    error("[ALS] Failed to load UI library after " .. maxAttempts .. " attempts. Please check your internet connection.")
+end
+
+print("[ALS] UI Library loaded successfully!")
 
 local HttpService = game:GetService("HttpService")
 local RS = game:GetService("ReplicatedStorage")
 local VIM = game:GetService("VirtualInputManager")
 local TeleportService = game:GetService("TeleportService")
+local UserInputService = game:GetService("UserInputService")
 
-repeat task.wait(0.5) until not LocalPlayer.PlayerGui:FindFirstChild("TeleportUI")
+local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+local MOBILE_DELAY_MULTIPLIER = isMobile and 1.5 or 1.0
+
+print("[ALS] Platform detected: " .. (isMobile and "Mobile" or "PC"))
+print("[ALS] Delay multiplier: " .. MOBILE_DELAY_MULTIPLIER)
+
 
 
 local LOBBY_PLACEIDS = {12886143095, 18583778121}
@@ -238,27 +277,44 @@ Library.ForceCheckbox = false
 Library.ShowToggleFrameInKeybinds = true
 
 print("[UI] Creating window...")
-local windowSuccess, Window = pcall(function()
-    return Library:CreateWindow({
-        Title = "ALS Halloween Event",
-        Footer = "Anime Last Stand Script",
-        Icon = 72399447876912,
-        NotifySide = getgenv().Config.inputs.NotificationSide or "Right",
-        ShowCustomCursor = getgenv().Config.toggles.ShowCustomCursor ~= false,
-        Size = UDim2.fromOffset(700, 460),
-    })
-end)
 
-if not windowSuccess then
-    warn("[UI] Failed to create window:", Window)
-    Window = Library:CreateWindow({
-        Title = "ALS Halloween Event",
-        Footer = "Anime Last Stand Script",
-        Size = UDim2.fromOffset(700, 460),
-    })
+local Window
+local windowAttempts = 0
+local windowCreated = false
+
+while not windowCreated and windowAttempts < 3 do
+    windowAttempts = windowAttempts + 1
+    local windowSuccess, result = pcall(function()
+        return Library:CreateWindow({
+            Title = "ALS Halloween Event",
+            Footer = "Anime Last Stand Script",
+            Icon = 72399447876912,
+            NotifySide = getgenv().Config.inputs.NotificationSide or "Right",
+            ShowCustomCursor = getgenv().Config.toggles.ShowCustomCursor ~= false,
+            Size = UDim2.fromOffset(700, 460),
+        })
+    end)
+    
+    if windowSuccess and result then
+        Window = result
+        windowCreated = true
+        print("[UI] Window created successfully!")
+    else
+        warn("[UI] Failed to create window (Attempt " .. windowAttempts .. "/3):", result)
+        task.wait(1)
+        if windowAttempts >= 3 then
+            Window = Library:CreateWindow({
+                Title = "ALS Halloween Event",
+                Footer = "Anime Last Stand Script",
+                Size = UDim2.fromOffset(700, 460),
+            })
+            windowCreated = true
+            print("[UI] Window created with fallback settings")
+        end
+    end
 end
 
-print("[UI] Window created successfully!")
+task.wait(0.5)
 print("[UI] Creating tabs...")
 
 local Tabs = {
@@ -296,6 +352,15 @@ GB.Misc_Left = Tabs.Misc:AddLeftGroupbox("⚡ Performance")
 GB.Misc_Right = Tabs.Misc:AddRightGroupbox("🔒 Safety & UI")
 GB.Settings_Left = Tabs.Settings:AddLeftGroupbox("💾 Config Management")
 GB.Settings_Right = Tabs.Settings:AddRightGroupbox("UI Settings")
+
+GB.WhatsNew_Left:AddLabel("📱 Mobile Optimizations v2.0", true)
+GB.WhatsNew_Left:AddLabel("• Enhanced mobile executor compatibility", true)
+GB.WhatsNew_Left:AddLabel("• Fixed UI unloading issues on auto-execute", true)
+GB.WhatsNew_Left:AddLabel("• Improved card selection reliability", true)
+GB.WhatsNew_Left:AddLabel("• Better webhook stability", true)
+GB.WhatsNew_Left:AddLabel("• Longer delays for mobile executors", true)
+GB.WhatsNew_Left:AddLabel("• Auto-detection of mobile devices", true)
+GB.WhatsNew_Left:AddDivider()
 
 GB.WhatsNew_Left:AddLabel("🎨 UI Library Changed", true)
 GB.WhatsNew_Left:AddLabel("• Switched from Fluent UI to Obsidian UI", true)
@@ -632,12 +697,19 @@ local function buildAutoAbilityUI()
 end
 
 task.spawn(function()
-    task.wait(2)
-    local maxRetries, retryDelay = 10, 3
+    task.wait(2 * MOBILE_DELAY_MULTIPLIER)
+    local maxRetries, retryDelay = 10, 3 * MOBILE_DELAY_MULTIPLIER
     for i=1,maxRetries do
         local ok = pcall(function()
             local cd = getClientData()
-            if cd and cd.Slots then buildAutoAbilityUI() else if i <= 3 then notify("Auto Ability","Loading units... ("..i.."/"..maxRetries..")",2) end end
+            if cd and cd.Slots then 
+                buildAutoAbilityUI() 
+                print("[Auto Ability] UI built successfully")
+            else 
+                if i <= 3 then 
+                    notify("Auto Ability","Loading units... ("..i.."/"..maxRetries..")",2) 
+                end 
+            end
         end)
         if ok then break end
         task.wait(retryDelay)
@@ -1073,17 +1145,33 @@ ThemeManager:ApplyToTab(Tabs.Settings)
 print("[UI] All tabs and settings loaded!")
 print("[UI] Sending notification...")
 
-task.wait(0.1) 
-notify("ALS Halloween Event", "Script loaded successfully!", 5)
+task.wait(0.5)
+
+local notifyAttempts = 0
+while notifyAttempts < 3 do
+    notifyAttempts = notifyAttempts + 1
+    local ok = pcall(function()
+        notify("ALS Halloween Event", "Script loaded successfully! Mobile-optimized version.", 5)
+    end)
+    if ok then break end
+    task.wait(1)
+end
 
 print("[UI] Script fully loaded and ready!")
+print("[UI] Mobile optimizations active")
 
 if getgenv().Config.toggles.AutoHideUIToggle then
     task.spawn(function()
-        task.wait(0.2)
+        task.wait(1)
         if not Library.Unloaded then
-            Library:Toggle()
-            print("[Auto Hide] UI minimized after 0.2 seconds")
+            local ok = pcall(function()
+                Library:Toggle()
+            end)
+            if ok then
+                print("[Auto Hide] UI minimized after 1 second")
+            else
+                warn("[Auto Hide] Failed to minimize UI")
+            end
         end
     end)
 end
@@ -1267,7 +1355,7 @@ task.spawn(function()
         end
     end)
     while true do
-        task.wait(0.5)
+        task.wait(0.5 * MOBILE_DELAY_MULTIPLIER)
         pcall(function()
             local endGameUI = LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
             if endGameUI and endGameUI:FindFirstChild("BG") and endGameUI.BG:FindFirstChild("Buttons") then
@@ -1278,6 +1366,8 @@ task.spawn(function()
                 local retryButton = buttons:FindFirstChild("Retry")
                 local leaveButton = buttons:FindFirstChild("Leave")
                 local buttonToPress, actionName = nil, ""
+                
+                task.wait(0.5)
                 
                 if getgenv().AutoSmartEnabled then
                     if nextButton and nextButton.Visible then buttonToPress = nextButton actionName = "Next"
@@ -1292,6 +1382,7 @@ task.spawn(function()
                 end
                 
                 if buttonToPress then
+                    task.wait(0.3)
                     if getgenv().WebhookEnabled then
                         local timeSinceDetection = tick() - endGameUIDetectedTime
                         if timeSinceDetection < 3 or isProcessing then return end
@@ -1600,10 +1691,20 @@ task.spawn(function()
             local _, best = findBestCard(list)
             if not best or not best.button then return false end
             local button = best.button
+            
             local events = {"Activated","MouseButton1Click","MouseButton1Down","MouseButton1Up"}
-            for _, ev in ipairs(events) do pcall(function() for _, conn in ipairs(getconnections(button[ev])) do conn:Fire() end end) end
-            task.wait(0.2)
+            for _, ev in ipairs(events) do 
+                pcall(function() 
+                    for _, conn in ipairs(getconnections(button[ev])) do 
+                        conn:Fire() 
+                    end 
+                end) 
+                task.wait(0.05)
+            end
+            
+            task.wait(0.3)
             pressConfirm()
+            task.wait(0.2)
         end)
         return ok
     end
@@ -1615,11 +1716,18 @@ task.spawn(function()
             if not best or not best.button then return false end
             local button = best.button
             local GuiService = game:GetService("GuiService")
-            local function press(key) VIM:SendKeyEvent(true, key, false, game) task.wait(0.1) VIM:SendKeyEvent(false, key, false, game) end
+            
+            local function press(key) 
+                VIM:SendKeyEvent(true, key, false, game) 
+                task.wait(0.15)
+                VIM:SendKeyEvent(false, key, false, game) 
+            end
+            
             GuiService.SelectedObject = button
-            task.wait(0.2)
+            task.wait(0.4)
             press(Enum.KeyCode.Return)
-            task.wait(0.3)
+            task.wait(0.5)
+            
             local ok2, confirmButton = pcall(function()
                 local prompt = LocalPlayer.PlayerGui:FindFirstChild("Prompt") if not prompt then return nil end
                 local frame = prompt:FindFirstChild("Frame") if not frame then return nil end
@@ -1629,19 +1737,25 @@ task.spawn(function()
                 local label = button:FindFirstChild("TextLabel") if label and label.Text == "Confirm" then return button end
                 return nil
             end)
+            
             if ok2 and confirmButton then
                 GuiService.SelectedObject = confirmButton
-                task.wait(0.2)
+                task.wait(0.4)
                 press(Enum.KeyCode.Return)
-                task.wait(0.3)
+                task.wait(0.5)
             end
+            
             GuiService.SelectedObject = nil
         end)
         return ok
     end
     while true do
-        task.wait(1)
-        if getgenv().CardSelectionEnabled then selectCard() elseif getgenv().SlowerCardSelectionEnabled then selectCardSlower() end
+        task.wait(1.5)
+        if getgenv().CardSelectionEnabled then 
+            selectCard() 
+        elseif getgenv().SlowerCardSelectionEnabled then 
+            selectCardSlower() 
+        end
         if isUnloaded then break end
     end
 end)
@@ -1709,7 +1823,7 @@ task.spawn(function()
         return ok
     end
     while true do
-        task.wait(1)
+        task.wait(1.5)
         if getgenv().BossRushEnabled then select() end
         if isUnloaded then break end
     end
@@ -1797,14 +1911,32 @@ task.spawn(function()
         if ok then return name, difficulty else return "Unknown Map","Unknown" end
     end
     local lastWebhookHash = ""
+    local lastWebhookTime = 0
+    local WEBHOOK_COOLDOWN = 15
+    
     local function sendWebhook()
         pcall(function()
             if not getgenv().WebhookEnabled then return end
-            if isProcessing then return end
-            if getgenv()._webhookLock and (tick() - getgenv()._webhookLock) < 10 then return end
-            getgenv()._webhookLock = tick()
+            if isProcessing then 
+                print("[Webhook] Already processing, skipping...")
+                return 
+            end
+            
+            local currentTime = tick()
+            if currentTime - lastWebhookTime < WEBHOOK_COOLDOWN then
+                print("[Webhook] Cooldown active, skipping...")
+                return
+            end
+            
+            if getgenv()._webhookLock and (currentTime - getgenv()._webhookLock) < 10 then 
+                print("[Webhook] Lock active, skipping...")
+                return 
+            end
+            
+            getgenv()._webhookLock = currentTime
+            lastWebhookTime = currentTime
             isProcessing = true
-            hasRun = tick()
+            hasRun = currentTime
             local rewards = getRewards()
             local matchTime, matchWave, matchResult = getMatchResult()
             local mapName, mapDifficulty = getMapInfo()
@@ -1856,16 +1988,48 @@ task.spawn(function()
                 { name="Match Result", value=(matchTime or "00:00:00") .. " - Wave " .. tostring(matchWave or "0") .. "\n" .. (mapName or "Unknown Map") .. ((mapDifficulty and mapDifficulty ~= "Unknown") and (" ["..mapDifficulty.."]") or "") .. " - " .. (matchResult or "Unknown"), inline=false }
             }, footer={ text="Halloween Hook" } }
             local webhookHash = LocalPlayer.Name .. "_" .. matchTime .. "_" .. matchWave .. "_" .. rewardsText
-            if webhookHash == lastWebhookHash then isProcessing = false return end
+            if webhookHash == lastWebhookHash then 
+                print("[Webhook] Duplicate webhook detected, skipping...")
+                isProcessing = false 
+                return 
+            end
             lastWebhookHash = webhookHash
-            SendMessageEMBED(getgenv().WebhookURL, embed)
-            print("[Webhook] Successfully sent!")
-            isProcessing=false
+            
+            local sendSuccess = false
+            local sendAttempts = 0
+            while not sendSuccess and sendAttempts < 2 do
+                sendAttempts = sendAttempts + 1
+                local ok = pcall(function()
+                    SendMessageEMBED(getgenv().WebhookURL, embed)
+                end)
+                if ok then
+                    sendSuccess = true
+                    print("[Webhook] Successfully sent!")
+                else
+                    warn("[Webhook] Send failed (Attempt " .. sendAttempts .. "/2)")
+                    task.wait(2)
+                end
+            end
+            
+            task.wait(1)
+            isProcessing = false
         end)
     end
-    LocalPlayer.PlayerGui.ChildAdded:Connect(function(child) if child.Name == "EndGameUI" and getgenv().WebhookEnabled then sendWebhook() end end)
+    LocalPlayer.PlayerGui.ChildAdded:Connect(function(child) 
+        if child.Name == "EndGameUI" and getgenv().WebhookEnabled then 
+            task.wait(2)
+            sendWebhook() 
+        end 
+    end)
+    
     LocalPlayer.PlayerGui.ChildRemoved:Connect(function(child)
-        if child.Name == "EndGameUI" then task.wait(1) isProcessing = false if getgenv()._lastRewardHash then getgenv()._lastRewardHash = nil end end
+        if child.Name == "EndGameUI" then 
+            task.wait(2)
+            isProcessing = false 
+            if getgenv()._lastRewardHash then 
+                getgenv()._lastRewardHash = nil 
+            end 
+        end
     end)
 end)
 
