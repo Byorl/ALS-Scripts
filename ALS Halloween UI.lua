@@ -44,10 +44,8 @@ end
 
 print("[ALS] UI Library loaded successfully!")
 
-if Library.Unloaded == nil then
-    Library.Unloaded = false
-    print("[ALS] Initialized Library.Unloaded to false")
-end
+Library.Unloaded = false
+print("[ALS] Initialized Library.Unloaded to false")
 
 getgenv().ALS_Library = Library
 getgenv().ALS_ThemeManager = ThemeManager
@@ -1378,9 +1376,14 @@ task.spawn(function()
     print("[ALS] Waiting for Library to fully initialize before starting unload monitor...")
     task.wait(5)
     
-    if not Library or not Library.Unloaded then
-        print("[ALS] Library not properly initialized, waiting longer...")
+    if not Library then
+        print("[ALS] Library object missing, waiting longer...")
         task.wait(3)
+    end
+    
+    if Library then
+        Library.Unloaded = false
+        print("[ALS] Reset Library.Unloaded to false before monitoring")
     end
     
     print("[ALS] Starting unload monitor...")
@@ -1389,15 +1392,24 @@ task.spawn(function()
         task.wait(1)
         
         if Library then
+            local windowStillExists = Window and Window.Holder and Window.Holder.Parent
+            
             if Library.Unloaded == true then
-                unloadCheckCount = unloadCheckCount + 1
-                
-                if unloadCheckCount >= 3 then
-                    print("[ALS] Library confirmed unloaded after 3 checks")
-                    isUnloaded = true 
-                    break
+                if windowStillExists then
+                    print("[ALS] False unload prevented! Window is still visible.")
+                    Library.Unloaded = false
+                    unloadCheckCount = 0
+                    falseUnloadCount = falseUnloadCount + 1
                 else
-                    print("[ALS] Unload detected, verifying... (" .. unloadCheckCount .. "/3)")
+                    unloadCheckCount = unloadCheckCount + 1
+                    
+                    if unloadCheckCount >= 3 then
+                        print("[ALS] Library confirmed unloaded after 3 checks")
+                        isUnloaded = true 
+                        break
+                    else
+                        print("[ALS] Unload detected, verifying... (" .. unloadCheckCount .. "/3)")
+                    end
                 end
             else
                 if unloadCheckCount > 0 then
