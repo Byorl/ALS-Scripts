@@ -348,7 +348,6 @@ local function createObsidianCompat()
                 end
             end)
             if not ok then
-                -- no-op if underlying doesn't support toggle
             end
         end
     end
@@ -756,6 +755,25 @@ Tabs.Changes:Paragraph({
 
 Tabs.Changes:Space()
 
+Tabs.Changes:Section({ Title = "📅 October 13, 2025 - Critical Fixes & Optimization" })
+
+Tabs.Changes:Paragraph({
+    Title = "🐛 Major Bug Fixes",
+    Desc = "• Fixed Auto Abilities conditions not loading from saved config\n• Fixed conditions dropdowns showing '--' instead of saved values\n• Fixed duplicate ability UI elements when toggling settings\n• Fixed webhook sending incomplete data (Wave 0, Unknown result)\n• Fixed ability cooldowns not respecting game speed multiplier (1x/2x/3x)",
+})
+
+Tabs.Changes:Paragraph({
+    Title = "⚡ Performance Improvements",
+    Desc = "• Removed all redundant code comments for cleaner codebase\n• Fixed duplicate code in Auto Ready loop causing instability\n• Optimized dropdown initialization to prevent UI freezing\n• Improved webhook timing to collect all data before auto-replay\n• Reduced memory overhead throughout the script",
+})
+
+Tabs.Changes:Paragraph({
+    Title = "🔧 Technical Improvements",
+    Desc = "• Conditions dropdowns now use proper array format for WindUI\n• Dynamic TimeScale reading for accurate ability cooldowns\n• Better debouncing on dropdown force-select operations\n• Enhanced webhook validation to skip incomplete match data\n• Auto-replay now waits 6 seconds for webhook data collection",
+})
+
+Tabs.Changes:Space()
+
 Tabs.Changes:Section({ Title = "📅 October 10, 2025 - Major Update" })
 
 Tabs.Changes:Paragraph({
@@ -879,31 +897,6 @@ local function adaptTab(tab)
                     
                     local initialValue = cfg.Value or cfg.Default
                     
-                    if cfg.Multi == true and initialValue then
-                        if type(initialValue) == "table" then
-                            -- Check if it's already in dictionary format {key=true}
-                            local isDictionary = false
-                            for k,v in pairs(initialValue) do
-                                if type(k) == "string" and v == true then
-                                    isDictionary = true
-                                    break
-                                end
-                            end
-                            
-                            -- If not dictionary, convert array to dictionary
-                            if not isDictionary then
-                                local dictValue = {}
-                                for _, v in pairs(initialValue) do
-                                    if type(v) == "string" then
-                                        dictValue[v] = true
-                                    end
-                                end
-                                initialValue = dictValue
-                            end
-                            -- If already dictionary, use as-is
-                        end
-                    end
-                    
                     local dropdown = tab:Dropdown({
                         Flag = flag,
                         Title = cfg.Text or cfg.Title or flag,
@@ -941,17 +934,18 @@ local function adaptTab(tab)
                     }
                     Library.Options[flag] = proxy
                     
-                    task.spawn(function()
-                        task.wait(0.3)
-                        if dropdown and dropdown.Select and initialValue then
-                            dropdown:Select(initialValue)
-                            local displayValue = initialValue
-                            if type(initialValue) == "table" then
-                                displayValue = game:GetService("HttpService"):JSONEncode(initialValue)
+                    getgenv()._dropdownInitDone = getgenv()._dropdownInitDone or {}
+                    if not getgenv()._dropdownInitDone[flag] and initialValue ~= nil then
+                        getgenv()._dropdownInitDone[flag] = true
+                        task.spawn(function()
+                            task.wait(0.3)
+                            if dropdown and dropdown.Select then
+                                pcall(function()
+                                    dropdown:Select(initialValue)
+                                end)
                             end
-                            print("[UI] Force-set dropdown " .. flag .. " to " .. tostring(displayValue))
-                        end
-                    end)
+                        end)
+                    end
                     
                     return dropdown
                 end
@@ -1039,10 +1033,6 @@ local function addToggle(group, key, text, default, onChanged)
             if onChanged then onChanged(val) end
         end,
     })
-    
-    if Toggles[key] and onChanged then
-        -- The callback is already set in AddToggle, no need to duplicate
-    end
     
     return toggle
 end
@@ -1221,141 +1211,127 @@ addToggle(GB.Ability_Left, "AutoAbilityToggle", "✨ Enable Auto Abilities", get
 end)
 
 local function buildAutoAbilityUI()
+    if getgenv()._AbilityUIBuilding then return end
+    if getgenv()._AbilityUIBuilt then return end
+    getgenv()._AbilityUIBuilding = true
     local clientData = getClientData()
     if not clientData or not clientData.Slots then
         notify("Auto Ability", "ClientData not available yet, retrying...", 3)
+        getgenv()._AbilityUIBuilt = false
+        getgenv()._AbilityUIBuilding = false
         return
     end
-    local sortedSlots = {"Slot1","Slot2","Slot3","Slot4","Slot5","Slot6"}
-    for _, slotName in ipairs(sortedSlots) do
-        local slotData = clientData.Slots[slotName]
-        if slotData and slotData.Value then
-            local unitName = slotData.Value
-            local abilities = getAllAbilities(unitName)
-            if next(abilities) then
-                GB.Ability_Right:AddDivider()
-                GB.Ability_Right:AddLabel("📦 " .. unitName .. " (" .. slotName .. " • Lvl " .. tostring(slotData.Level or 0) .. ")")
-                
-                if not getgenv().UnitAbilities[unitName] then getgenv().UnitAbilities[unitName] = {} end
-                local sortedAbilities = {}
-                for abilityName, data in pairs(abilities) do
-                    table.insert(sortedAbilities, { name = abilityName, data = data })
-                end
-                table.sort(sortedAbilities, function(a,b) return a.data.requiredLevel < b.data.requiredLevel end)
-                
-                for _, ab in ipairs(sortedAbilities) do
-                    local abilityName = ab.name
-                    local abilityData = ab.data
-                    if not getgenv().UnitAbilities[unitName][abilityName] then
-                        getgenv().UnitAbilities[unitName][abilityName] = { enabled = true, onlyOnBoss=false, specificWave=nil, requireBossInRange=false, delayAfterBossSpawn=false, useOnWave=false }
+    local anyBuilt = false
+    local success, err = pcall(function()
+        local sortedSlots = {"Slot1","Slot2","Slot3","Slot4","Slot5","Slot6"}
+        for _, slotName in ipairs(sortedSlots) do
+            local slotData = clientData.Slots[slotName]
+            if slotData and slotData.Value then
+                local unitName = slotData.Value
+                local abilities = getAllAbilities(unitName)
+                if next(abilities) then
+                    GB.Ability_Right:AddDivider()
+                    GB.Ability_Right:AddLabel("📦 " .. unitName .. " (" .. slotName .. " • Lvl " .. tostring(slotData.Level or 0) .. ")")
+                    anyBuilt = true
+                    if not getgenv().UnitAbilities[unitName] then getgenv().UnitAbilities[unitName] = {} end
+                    local sortedAbilities = {}
+                    for abilityName, data in pairs(abilities) do
+                        table.insert(sortedAbilities, { name = abilityName, data = data })
                     end
-                    local cfg = getgenv().UnitAbilities[unitName][abilityName]
-                    local saved = getgenv().Config.abilities[unitName] and getgenv().Config.abilities[unitName][abilityName]
-                    local defaultToggle = saved and saved.enabled or false
-                    if saved then
-                        cfg.enabled = saved.enabled or false
-                        cfg.onlyOnBoss = saved.onlyOnBoss or false
-                        cfg.specificWave = saved.specificWave
-                        cfg.requireBossInRange = saved.requireBossInRange or false
-                        cfg.delayAfterBossSpawn = saved.delayAfterBossSpawn or false
-                        cfg.useOnWave = saved.useOnWave or false
-                    end
-                    
-                    local abilityIcon = abilityData.isAttribute and "🔒" or "⚡"
-                    local abilityInfo = abilityIcon .. " " .. abilityName .. " (CD: " .. tostring(abilityData.cooldown) .. "s)"
-                    
-                    addToggle(GB.Ability_Right, unitName .. "_" .. abilityName .. "_Toggle", abilityInfo, defaultToggle, function(v)
-                        cfg.enabled = v
-                        getgenv().Config.abilities[unitName] = getgenv().Config.abilities[unitName] or {}
-                        getgenv().Config.abilities[unitName][abilityName] = getgenv().Config.abilities[unitName][abilityName] or {}
-                        getgenv().Config.abilities[unitName][abilityName].enabled = v
-                        saveConfig(getgenv().Config)
-                    end)
-
-                    local modifierKey = unitName .. "_" .. abilityName .. "_Modifiers"
-                    
-                    -- Build default list ONLY from Config.abilities (single source of truth)
-                    local defaultList = {}
-                    if cfg.onlyOnBoss then defaultList["Only On Boss"] = true end
-                    if cfg.requireBossInRange then defaultList["Boss In Range"] = true end
-                    if cfg.delayAfterBossSpawn then defaultList["Delay After Boss Spawn"] = true end
-                    if cfg.useOnWave then defaultList["On Wave"] = true end
-                    
-                    local dropdownDefault = next(defaultList) and defaultList or nil
-                    local dropdown = GB.Ability_Right:AddDropdown(modifierKey, {
-                        Values = {"Only On Boss","Boss In Range","Delay After Boss Spawn","On Wave"},
-                        Multi = true,
-                        AllowNone = true,
-                        Value = dropdownDefault,  -- Use Value instead of Default for multi-select
-                        Text = "  > Conditions",
-                        Callback = function(Value)
-                            local selected = {}
-                            if type(Value) == "table" then
-                                for k,v in pairs(Value) do 
-                                    if v == true then 
-                                        selected[k] = true 
-                                    elseif type(k) == "number" and type(v) == "string" then
-                                        selected[v] = true
-                                    end
-                                end
-                            end
-                            cfg.onlyOnBoss = selected["Only On Boss"] == true
-                            cfg.requireBossInRange = selected["Boss In Range"] == true
-                            cfg.delayAfterBossSpawn = selected["Delay After Boss Spawn"] == true
-                            cfg.useOnWave = selected["On Wave"] == true
-                            getgenv().Config.abilities[unitName] = getgenv().Config.abilities[unitName] or {}
-                            local store = getgenv().Config.abilities[unitName]
-                            store[abilityName] = store[abilityName] or {}
-                            store[abilityName].onlyOnBoss = cfg.onlyOnBoss
-                            store[abilityName].requireBossInRange = cfg.requireBossInRange
-                            store[abilityName].delayAfterBossSpawn = cfg.delayAfterBossSpawn
-                            store[abilityName].useOnWave = cfg.useOnWave
-                            saveConfig(getgenv().Config)
-                        end,
-                    })
-                    
-                    if dropdownDefault and next(dropdownDefault) then
-                        task.spawn(function()
-                            task.wait(0.5)
-                            if dropdown and dropdown.Select then
-                                pcall(function()
-                                    dropdown:Select(dropdownDefault)
-                                end)
-                            end
-                            if Options[modifierKey] and Options[modifierKey].SetValue then
-                                pcall(function()
-                                    Options[modifierKey]:SetValue(dropdownDefault)
-                                end)
-                            end
-                        end)
-                    end
-                    
-                    GB.Ability_Right:AddInput(unitName .. "_" .. abilityName .. "_Wave", {
-                        Text = "  > Wave Number",
-                        Default = (saved and saved.specificWave and tostring(saved.specificWave)) or "",
-                        Numeric = true,
-                        Finished = true,
-                        Placeholder = "Required if 'On Wave' selected",
-                        Callback = function(text)
-                            local num = tonumber(text)
-                            cfg.specificWave = num
+                    table.sort(sortedAbilities, function(a,b) return a.data.requiredLevel < b.data.requiredLevel end)
+                    for _, ab in ipairs(sortedAbilities) do
+                        local abilityName = ab.name
+                        local abilityData = ab.data
+                        if not getgenv().UnitAbilities[unitName][abilityName] then
+                            getgenv().UnitAbilities[unitName][abilityName] = { enabled = true, onlyOnBoss=false, specificWave=nil, requireBossInRange=false, delayAfterBossSpawn=false, useOnWave=false }
+                        end
+                        local cfg = getgenv().UnitAbilities[unitName][abilityName]
+                        local saved = getgenv().Config.abilities[unitName] and getgenv().Config.abilities[unitName][abilityName]
+                        local defaultToggle = saved and saved.enabled or false
+                        if saved then
+                            cfg.enabled = saved.enabled or false
+                            cfg.onlyOnBoss = saved.onlyOnBoss or false
+                            cfg.specificWave = saved.specificWave
+                            cfg.requireBossInRange = saved.requireBossInRange or false
+                            cfg.delayAfterBossSpawn = saved.delayAfterBossSpawn or false
+                            cfg.useOnWave = saved.useOnWave or false
+                        end
+                        local abilityIcon = abilityData.isAttribute and "🔒" or "⚡"
+                        local abilityInfo = abilityIcon .. " " .. abilityName .. " (CD: " .. tostring(abilityData.cooldown) .. "s)"
+                        addToggle(GB.Ability_Right, unitName .. "_" .. abilityName .. "_Toggle", abilityInfo, defaultToggle, function(v)
+                            cfg.enabled = v
                             getgenv().Config.abilities[unitName] = getgenv().Config.abilities[unitName] or {}
                             getgenv().Config.abilities[unitName][abilityName] = getgenv().Config.abilities[unitName][abilityName] or {}
-                            getgenv().Config.abilities[unitName][abilityName].specificWave = num
+                            getgenv().Config.abilities[unitName][abilityName].enabled = v
                             saveConfig(getgenv().Config)
-                        end,
-                    })
+                        end)
+                        local modifierKey = unitName .. "_" .. abilityName .. "_Modifiers"
+                        local defaultArray = {}
+                        if cfg.onlyOnBoss then table.insert(defaultArray, "Only On Boss") end
+                        if cfg.requireBossInRange then table.insert(defaultArray, "Boss In Range") end
+                        if cfg.delayAfterBossSpawn then table.insert(defaultArray, "Delay After Boss Spawn") end
+                        if cfg.useOnWave then table.insert(defaultArray, "On Wave") end
+                        table.sort(defaultArray)
+                        
+                        local dropdown = GB.Ability_Right:AddDropdown(modifierKey, {
+                            Values = {"Only On Boss","Boss In Range","Delay After Boss Spawn","On Wave"},
+                            Multi = true,
+                            AllowNone = true,
+                            Value = defaultArray,
+                            Text = "  > Conditions",
+                            Callback = function(Value)
+                                local selectedSet = {}
+                                if type(Value) == "table" then
+                                    for _, v in ipairs(Value) do
+                                        selectedSet[v] = true
+                                    end
+                                end
+                                cfg.onlyOnBoss = selectedSet["Only On Boss"] == true
+                                cfg.requireBossInRange = selectedSet["Boss In Range"] == true
+                                cfg.delayAfterBossSpawn = selectedSet["Delay After Boss Spawn"] == true
+                                cfg.useOnWave = selectedSet["On Wave"] == true
+                                getgenv().Config.abilities[unitName] = getgenv().Config.abilities[unitName] or {}
+                                local store = getgenv().Config.abilities[unitName]
+                                store[abilityName] = store[abilityName] or {}
+                                store[abilityName].onlyOnBoss = cfg.onlyOnBoss
+                                store[abilityName].requireBossInRange = cfg.requireBossInRange
+                                store[abilityName].delayAfterBossSpawn = cfg.delayAfterBossSpawn
+                                store[abilityName].useOnWave = cfg.useOnWave
+                                saveConfig(getgenv().Config)
+                            end,
+                        })
+                        GB.Ability_Right:AddInput(unitName .. "_" .. abilityName .. "_Wave", {
+                            Text = "  > Wave Number",
+                            Default = (saved and saved.specificWave and tostring(saved.specificWave)) or "",
+                            Numeric = true,
+                            Finished = true,
+                            Placeholder = "Required if 'On Wave' selected",
+                            Callback = function(text)
+                                local num = tonumber(text)
+                                cfg.specificWave = num
+                                getgenv().Config.abilities[unitName] = getgenv().Config.abilities[unitName] or {}
+                                getgenv().Config.abilities[unitName][abilityName] = getgenv().Config.abilities[unitName][abilityName] or {}
+                                getgenv().Config.abilities[unitName][abilityName].specificWave = num
+                                saveConfig(getgenv().Config)
+                            end,
+                        })
+                    end
                 end
             end
         end
+    end)
+    if not success then
+        warn("[Auto Ability UI] build failed: " .. tostring(err))
     end
+    getgenv()._AbilityUIBuilt = anyBuilt
+    getgenv()._AbilityUIBuilding = false
 end
 
 task.spawn(function()
     task.wait(2 * MOBILE_DELAY_MULTIPLIER)
     local maxRetries, retryDelay = 10, 3 * MOBILE_DELAY_MULTIPLIER
     for i=1,maxRetries do
-        local ok = pcall(function()
+        pcall(function()
             local cd = getClientData()
             if cd and cd.Slots then
                 buildAutoAbilityUI()
@@ -1365,7 +1341,7 @@ task.spawn(function()
                 end
             end
         end)
-        if ok then break end
+        if getgenv()._AbilityUIBuilt then break end
         task.wait(retryDelay)
     end
 end)
@@ -1861,64 +1837,6 @@ GB.Settings_Left:Button({
 })
 
 GB.Settings_Left:Space({ Columns = 1 })
-GB.Settings_Left:Divider({ Title = "UI Preferences" })
-
-GB.Settings_Left:Toggle({
-    Flag = "KeybindMenuOpen",
-    Title = "Show Keybind Menu",
-    Default = Library.KeybindFrame.Visible,
-    Callback = function(value)
-        Library.KeybindFrame.Visible = value
-    end,
-})
-
-GB.Settings_Left:Toggle({
-    Flag = "ShowCustomCursor",
-    Title = "Custom Cursor",
-    Default = getgenv().Config.toggles.ShowCustomCursor ~= false,
-    Callback = function(Value)
-        Library.ShowCustomCursor = Value
-        getgenv().Config.toggles.ShowCustomCursor = Value
-        saveConfig(getgenv().Config)
-    end,
-})
-
-GB.Settings_Left:Dropdown({
-    Flag = "NotificationSide",
-    Title = "Notification Side",
-    Values = { "Left", "Right" },
-    Default = getgenv().Config.inputs.NotificationSide or "Right",
-    Callback = function(Value)
-        Library:SetNotifySide(Value)
-        getgenv().Config.inputs.NotificationSide = Value
-        saveConfig(getgenv().Config)
-    end,
-})
-
-GB.Settings_Right:AddDropdown("DPIDropdown", {
-    Values = { "50%", "75%", "100%", "125%", "150%", "175%", "200%" },
-    Default = getgenv().Config.inputs.DPIScale or "100%",
-    Text = "DPI Scale",
-    Callback = function(Value)
-        Value = Value:gsub("%%", "")
-        local DPI = tonumber(Value)
-        Library:SetDPIScale(DPI)
-        getgenv().Config.inputs.DPIScale = Value .. "%"
-        saveConfig(getgenv().Config)
-    end,
-})
-
-pcall(function()
-    if getgenv().Config.inputs.DPIScale then
-        local savedDPI = getgenv().Config.inputs.DPIScale:gsub("%%", "")
-        local DPI = tonumber(savedDPI)
-        if DPI then
-            Library:SetDPIScale(DPI)
-        end
-    end
-end)
-
-GB.Settings_Right:AddDivider()
 
 local savedKeybind = applyOldConfigValue("MenuKeybind", "input") or "LeftControl"
 
@@ -2276,7 +2194,7 @@ task.spawn(function()
                 local retryButton = buttons:FindFirstChild("Retry")
                 local leaveButton = buttons:FindFirstChild("Leave")
                 local buttonToPress, actionName = nil, ""
-                task.wait(0.5)
+                task.wait(2.5)
                 if getgenv().AutoSmartEnabled then
                     if nextButton and nextButton.Visible then
                         buttonToPress = nextButton
@@ -2299,10 +2217,10 @@ task.spawn(function()
                     actionName = "Leave"
                 end
                 if buttonToPress then
-                    task.wait(0.3)
+                    task.wait(0.5)
                     if getgenv().WebhookEnabled then
                         local timeSinceDetection = tick() - endGameUIDetectedTime
-                        if timeSinceDetection < 3 then
+                        if timeSinceDetection < 6 then
                             return
                         end
                         if isProcessing then
@@ -2367,7 +2285,15 @@ task.spawn(function()
 end)
 
 task.spawn(function()
-    local GAME_SPEED = game:GetService("ReplicatedStorage").TimeScale.Value
+    local function getCurrentTimeScale()
+        local ok, v = pcall(function()
+            local ts = RS:FindFirstChild("TimeScale")
+            return ts and ts.Value or 1
+        end)
+        local scale = (ok and v) or 1
+        if not scale or scale <= 0 then scale = 1 end
+        return scale
+    end
     local Towers = workspace:WaitForChild("Towers", 10)
     local bossSpawnTime = nil
     local bossInRangeTracker = {}
@@ -2455,7 +2381,9 @@ task.spawn(function()
         local key = towerName .. "_" .. abilityName
         local last = abilityCooldowns[key]
         if not last then return false end
-        return (tick() - last) < ((d.cooldown / GAME_SPEED) + 1)
+        local scale = getCurrentTimeScale()
+        local effectiveCd = d.cooldown / scale
+        return (tick() - last) < (effectiveCd + 0.15)
     end
     local function setAbilityUsed(towerName, abilityName) abilityCooldowns[towerName.."_"..abilityName] = tick() end
     local function hasAbilityBeenUnlocked(towerName, abilityName, towerLevel)
@@ -2852,6 +2780,11 @@ task.spawn(function()
             local mapName, mapDifficulty = getMapInfo()
             local clientData = getClientData()
             if not clientData then isProcessing = false return end
+            if matchWave == "0" or matchResult == "Unknown" or matchTime == "00:00:00" then
+                warn("[Webhook] Incomplete data detected, skipping send")
+                isProcessing = false
+                return
+            end
             local function formatStats()
                 local stats = "<:gold:1265957290251522089> "..formatNumber(clientData.Gold or 0)
                 stats = stats .. "\n<:jewel:1217525743408648253> " .. formatNumber(clientData.Jewels or 0)
@@ -2924,7 +2857,7 @@ task.spawn(function()
     end
     LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
         if child.Name == "EndGameUI" and getgenv().WebhookEnabled then
-            task.wait(2)
+            task.wait(3.5)
             sendWebhook()
         end
     end)
