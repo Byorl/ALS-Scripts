@@ -22,18 +22,40 @@ end
 local isInLobby = checkIsInLobby()
 
 local SCRIPT_URL = "https://raw.githubusercontent.com/Byorl/ALS-Scripts/refs/heads/main/ALS%20Halloween%20UI.lua"
+
+local queueteleport = queue_on_teleport or queueonteleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport)
+
 if isfile("ALSHalloweenEvent/autoexec.txt") then
     print("[Auto Execute] Enabled - Setting up teleport hook...")
-    TeleportService.TeleportInitFailed:Connect(function()
-        task.wait(2)
-        loadstring(game:HttpGet(SCRIPT_URL))()
-    end)
-    game:GetService("CoreGui").DescendantRemoving:Connect(function(descendant)
-        if descendant.Name == "Roblox" then
-            task.wait(0.5)
+    
+    if queueteleport then
+        print("[Auto Execute] Using queueteleport method")
+        local TeleportCheck = false
+        LocalPlayer.OnTeleport:Connect(function(State)
+            if not TeleportCheck then
+                TeleportCheck = true
+                queueteleport("loadstring(game:HttpGet('" .. SCRIPT_URL .. "'))()")
+                print("[Auto Execute] Queued script for next teleport")
+            end
+        end)
+    else
+        print("[Auto Execute] queueteleport not found, using fallback methods")
+        -- Fallback method 1: TeleportInitFailed
+        TeleportService.TeleportInitFailed:Connect(function()
+            task.wait(2)
             loadstring(game:HttpGet(SCRIPT_URL))()
-        end
-    end)
+        end)
+        
+        -- Fallback method 2: CoreGui DescendantRemoving
+        game:GetService("CoreGui").DescendantRemoving:Connect(function(descendant)
+            if descendant.Name == "Roblox" then
+                task.wait(0.5)
+                loadstring(game:HttpGet(SCRIPT_URL))()
+            end
+        end)
+    end
+else
+    print("[Auto Execute] Disabled - Enable in Misc tab to auto-load on teleport")
 end
 
 local CONFIG_FOLDER = "ALSHalloweenEvent"
