@@ -1,15 +1,23 @@
 repeat task.wait() until game:IsLoaded()
 
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+print("[ALS] Waiting for TeleportUI to disappear...")
+repeat task.wait(0.1) until not LocalPlayer.PlayerGui:FindFirstChild("TeleportUI")
+print("[ALS] TeleportUI gone, loading script...")
+
 local repo = "https://raw.githubusercontent.com/byorl/Obsidian/main/"
 local Library = loadstring(game:HttpGet(repo .. "Library.lua"))()
 local ThemeManager = loadstring(game:HttpGet(repo .. "addons/ThemeManager.lua"))()
 
-local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 local RS = game:GetService("ReplicatedStorage")
 local VIM = game:GetService("VirtualInputManager")
 local TeleportService = game:GetService("TeleportService")
-local LocalPlayer = Players.LocalPlayer
+
+repeat task.wait(0.5) until not LocalPlayer.PlayerGui:FindFirstChild("TeleportUI")
+
 
 local LOBBY_PLACEIDS = {12886143095, 18583778121}
 local function checkIsInLobby()
@@ -20,20 +28,6 @@ local function checkIsInLobby()
 end
 local isInLobby = checkIsInLobby()
 
-local SCRIPT_URL = "https://raw.githubusercontent.com/Byorl/ALS-Scripts/refs/heads/main/ALS%20Halloween%20UI.lua"
-if isfile("ALSHalloweenEvent/autoexec.txt") then
-    print("[Auto Execute] Enabled - Setting up teleport hook...")
-    TeleportService.TeleportInitFailed:Connect(function()
-        task.wait(2)
-        loadstring(game:HttpGet(SCRIPT_URL))()
-    end)
-    game:GetService("CoreGui").DescendantRemoving:Connect(function(descendant)
-        if descendant.Name == "Roblox" then
-            task.wait(0.5)
-            loadstring(game:HttpGet(SCRIPT_URL))()
-        end
-    end)
-end
 
 local CONFIG_FOLDER = "ALSHalloweenEvent"
 local CONFIG_FILE = "config.json"
@@ -282,28 +276,6 @@ local Tabs = {
 }
 
 print("[UI] Tabs created successfully!")
-
-local ToggleGui = Instance.new("ScreenGui")
-ToggleGui.Name = "ALS_Obsidian_Toggle"
-ToggleGui.ResetOnSpawn = false
-ToggleGui.IgnoreGuiInset = true
-ToggleGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-ToggleGui.Parent = game:GetService("CoreGui")
-local ToggleButton = Instance.new("ImageButton")
-ToggleButton.Name = "ToggleButton"
-ToggleButton.Size = UDim2.new(0, 75, 0, 75)
-ToggleButton.Position = UDim2.new(0, 24, 0, 24)
-ToggleButton.BackgroundTransparency = 1
-ToggleButton.Image = "rbxassetid://72399447876912"
-ToggleButton.Active = true
-ToggleButton.Draggable = true
-ToggleButton.Parent = ToggleGui
-local function toggleUIKey()
-    VIM:SendKeyEvent(true, Enum.KeyCode.LeftControl, false, game)
-    task.wait(0.05)
-    VIM:SendKeyEvent(false, Enum.KeyCode.LeftControl, false, game)
-end
-ToggleButton.MouseButton1Click:Connect(toggleUIKey)
 
 local GB = {}
 GB.WhatsNew_Left = Tabs.WhatsNew:AddLeftGroupbox("📰 Latest Updates")
@@ -1014,17 +986,7 @@ addToggle(GB.Misc_Right, "AntiAFKToggle", "Anti-AFK", getgenv().AntiAFKEnabled, 
     saveConfig(getgenv().Config)
     notify("Anti-AFK", v and "Enabled" or "Disabled", 3)
 end)
-addToggle(GB.Misc_Right, "AutoExecuteToggle", "Auto Execute on Teleport", getgenv().Config.toggles.AutoExecuteToggle or false, function(v)
-    getgenv().Config.toggles.AutoExecuteToggle = v
-    saveConfig(getgenv().Config)
-    if v then
-        writefile("ALSHalloweenEvent/autoexec.txt", "true")
-        notify("Auto Execute", "Enabled - Script will reload on teleport", 3)
-    else
-        if isfile("ALSHalloweenEvent/autoexec.txt") then delfile("ALSHalloweenEvent/autoexec.txt") end
-        notify("Auto Execute", "Disabled", 3)
-    end
-end)
+
 
 GB.Settings_Left:AddLabel("Your settings are automatically saved to: " .. CONFIG_FOLDER .. "/" .. CONFIG_FILE, true)
 GB.Settings_Left:AddButton("Force Save Config Now", function()
@@ -1146,7 +1108,10 @@ local isUnloaded = false
 task.spawn(function()
     while true do
         task.wait(1)
-        if Library.Unloaded then isUnloaded = true break end
+        if Library and Library.Unloaded then 
+            isUnloaded = true 
+            break 
+        end
     end
 end)
 
@@ -1302,21 +1267,18 @@ task.spawn(function()
         end
     end)
     while true do
-        task.wait(1)
+        task.wait(0.5)
         pcall(function()
             local endGameUI = LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
             if endGameUI and endGameUI:FindFirstChild("BG") and endGameUI.BG:FindFirstChild("Buttons") then
                 if hasProcessedCurrentUI then return end
-                if getgenv().WebhookEnabled then
-                    local timeSinceDetection = tick() - endGameUIDetectedTime
-                    if timeSinceDetection < 3 then return end
-                    if isProcessing then return end
-                end
+                
                 local buttons = endGameUI.BG.Buttons
                 local nextButton = buttons:FindFirstChild("Next")
                 local retryButton = buttons:FindFirstChild("Retry")
                 local leaveButton = buttons:FindFirstChild("Leave")
                 local buttonToPress, actionName = nil, ""
+                
                 if getgenv().AutoSmartEnabled then
                     if nextButton and nextButton.Visible then buttonToPress = nextButton actionName = "Next"
                     elseif retryButton and retryButton.Visible then buttonToPress = retryButton actionName = "Replay"
@@ -1328,7 +1290,13 @@ task.spawn(function()
                 elseif getgenv().AutoLeaveEnabled and leaveButton then
                     buttonToPress = leaveButton actionName = "Leave"
                 end
+                
                 if buttonToPress then
+                    if getgenv().WebhookEnabled then
+                        local timeSinceDetection = tick() - endGameUIDetectedTime
+                        if timeSinceDetection < 3 or isProcessing then return end
+                    end
+                    
                     hasProcessedCurrentUI = true
                     GuiService.SelectedObject = buttonToPress
                     repeat press(Enum.KeyCode.Return) task.wait(0.5) until not LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
