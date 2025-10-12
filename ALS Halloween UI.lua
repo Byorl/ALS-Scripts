@@ -302,7 +302,6 @@ print("[UI] Window created successfully!")
 print("[UI] Creating tabs...")
 
 local Tabs = {
-    WhatsNew = Window:AddTab("What's New?", "newspaper"),
     Main = Window:AddTab("Main", "activity"), 
     Ability = Window:AddTab("Ability", "star"),
     CardSelection = Window:AddTab("Card Selection", "layout-grid"),
@@ -364,8 +363,6 @@ end
 ToggleButton.MouseButton1Click:Connect(toggleUIKey)
 
 local GB = {}
-GB.WhatsNew_Left = Tabs.WhatsNew:AddLeftGroupbox("📰 Latest Updates")
-GB.WhatsNew_Right = Tabs.WhatsNew:AddRightGroupbox("✨ All Features")
 GB.Main_Left = Tabs.Main:AddLeftGroupbox("🚀 Auto Join System")
 GB.Main_Right = Tabs.Main:AddRightGroupbox("⚡ Game Automation")
 GB.Ability_Left = Tabs.Ability:AddLeftGroupbox("⚔️ Auto Ability System")
@@ -382,83 +379,6 @@ GB.Misc_Right = Tabs.Misc:AddRightGroupbox("🔒 Safety & UI")
 GB.Settings_Left = Tabs.Settings:AddLeftGroupbox("💾 Config Management")
 GB.Settings_Right = Tabs.Settings:AddRightGroupbox("UI Settings")
 
-GB.WhatsNew_Left:AddLabel("🎨 UI Library Changed", true)
-GB.WhatsNew_Left:AddLabel("• Switched from Fluent UI to Obsidian UI", true)
-GB.WhatsNew_Left:AddLabel("• New modern design with better performance", true)
-GB.WhatsNew_Left:AddLabel("• Menu keybind changed to Left Ctrl", true)
-GB.WhatsNew_Left:AddDivider()
-
-GB.WhatsNew_Left:AddLabel("✨ New Features Added", true)
-GB.WhatsNew_Left:AddLabel("• DPI Scale settings now save & load", true)
-GB.WhatsNew_Left:AddLabel("• Notification side preference saves", true)
-GB.WhatsNew_Left:AddLabel("• Custom cursor toggle saves", true)
-GB.WhatsNew_Left:AddLabel("• Keybind menu toggle added", true)
-GB.WhatsNew_Left:AddLabel("• UI Unload button added", true)
-GB.WhatsNew_Left:AddDivider()
-
-GB.WhatsNew_Left:AddLabel("🔧 Improvements", true)
-GB.WhatsNew_Left:AddLabel("• Fixed text overflow issues", true)
-GB.WhatsNew_Left:AddLabel("• Better label wrapping", true)
-GB.WhatsNew_Left:AddLabel("• Improved settings organization", true)
-GB.WhatsNew_Left:AddLabel("• Main tab layout reorganized", true)
-GB.WhatsNew_Left:AddDivider()
-
-GB.WhatsNew_Left:AddLabel("📅 Version Info", true)
-GB.WhatsNew_Left:AddLabel("Version: Obsidian v1.0", true)
-GB.WhatsNew_Left:AddLabel("Date: August 2025", true)
-
-GB.WhatsNew_Right:AddLabel("⚡ Game Automation", true)
-GB.WhatsNew_Right:AddLabel("• Auto Leave/Replay/Next/Smart", true)
-GB.WhatsNew_Right:AddLabel("• Auto Ready", true)
-GB.WhatsNew_Right:AddLabel("• Auto Join Maps (Lobby)", true)
-GB.WhatsNew_Right:AddDivider()
-
-GB.WhatsNew_Right:AddLabel("⚔️ Auto Abilities", true)
-GB.WhatsNew_Right:AddLabel("• Automatic ability usage", true)
-GB.WhatsNew_Right:AddLabel("• Boss-only conditions", true)
-GB.WhatsNew_Right:AddLabel("• Wave-specific triggers", true)
-GB.WhatsNew_Right:AddLabel("• Boss in range detection", true)
-GB.WhatsNew_Right:AddLabel("• Delay after boss spawn", true)
-GB.WhatsNew_Right:AddDivider()
-
-GB.WhatsNew_Right:AddLabel("🃏 Card Selection", true)
-GB.WhatsNew_Right:AddLabel("• Fast & Slower modes", true)
-GB.WhatsNew_Right:AddLabel("• Priority-based selection", true)
-GB.WhatsNew_Right:AddLabel("• Candy cards support", true)
-GB.WhatsNew_Right:AddLabel("• Boss Rush cards", true)
-GB.WhatsNew_Right:AddDivider()
-
-GB.WhatsNew_Right:AddLabel("🚨 Breach Auto-Join (Lobby)", true)
-GB.WhatsNew_Right:AddLabel("• Auto-join available breaches", true)
-GB.WhatsNew_Right:AddLabel("• Toggle individual breaches", true)
-GB.WhatsNew_Right:AddDivider()
-
-GB.WhatsNew_Right:AddLabel("🔔 Webhook Notifications", true)
-GB.WhatsNew_Right:AddLabel("• Discord webhook support", true)
-GB.WhatsNew_Right:AddLabel("• Match results & stats", true)
-GB.WhatsNew_Right:AddLabel("• Reward detection", true)
-GB.WhatsNew_Right:AddLabel("• Unit kill tracking", true)
-GB.WhatsNew_Right:AddDivider()
-
-GB.WhatsNew_Right:AddLabel("🔄 Seamless Retry Fix", true)
-GB.WhatsNew_Right:AddLabel("• Prevents lag buildup", true)
-GB.WhatsNew_Right:AddLabel("• Configurable round limit", true)
-GB.WhatsNew_Right:AddDivider()
-
-GB.WhatsNew_Right:AddLabel("🎃 Halloween Event", true)
-GB.WhatsNew_Right:AddLabel("• Auto Event Join", true)
-GB.WhatsNew_Right:AddLabel("• Auto Bingo (Lobby)", true)
-GB.WhatsNew_Right:AddLabel("• Auto Capsules (Lobby)", true)
-GB.WhatsNew_Right:AddDivider()
-
-GB.WhatsNew_Right:AddLabel("🛠️ Performance & Misc", true)
-GB.WhatsNew_Right:AddLabel("• FPS Boost", true)
-GB.WhatsNew_Right:AddLabel("• Remove Enemies & Units", true)
-GB.WhatsNew_Right:AddLabel("• Black Screen Mode", true)
-GB.WhatsNew_Right:AddLabel("• Anti-AFK", true)
-GB.WhatsNew_Right:AddLabel("• Auto-execute on teleport", true)
-GB.WhatsNew_Right:AddLabel("• Auto Rejoin on disconnect", true)
-GB.WhatsNew_Right:AddLabel("• Per-user config system", true)
 
 local Options = Library.Options
 local Toggles = Library.Toggles
