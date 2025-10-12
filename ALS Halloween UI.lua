@@ -251,7 +251,7 @@ local windowSuccess, Window = pcall(function()
         Icon = 72399447876912,
         NotifySide = getgenv().Config.inputs.NotificationSide or "Right",
         ShowCustomCursor = getgenv().Config.toggles.ShowCustomCursor ~= false,
-        Size = UDim2.fromOffset(650, 460),
+        Size = UDim2.fromOffset(700, 460),
     })
 end)
 
@@ -260,7 +260,7 @@ if not windowSuccess then
     Window = Library:CreateWindow({
         Title = "ALS Halloween Event",
         Footer = "Anime Last Stand Script",
-        Size = UDim2.fromOffset(580, 460),
+        Size = UDim2.fromOffset(700, 460),
     })
 end
 
@@ -607,7 +607,8 @@ local function buildAutoAbilityUI()
                     if cfg.delayAfterBossSpawn then defaultList["Delay After Boss Spawn"] = true end
                     if cfg.useOnWave then defaultList["On Wave"] = true end
 
-                    GB.Ability_Right:AddDropdown(unitName .. "_" .. abilityName .. "_Modifiers", {
+                    local modifierKey = unitName .. "_" .. abilityName .. "_Modifiers"
+                    GB.Ability_Right:AddDropdown(modifierKey, {
                         Values = {"Only On Boss","Boss In Range","Delay After Boss Spawn","On Wave"},
                         Multi = true,
                         Text = "  > Conditions",
@@ -630,8 +631,12 @@ local function buildAutoAbilityUI()
                             saveConfig(getgenv().Config)
                         end,
                     })
-                    if Options[unitName .. "_" .. abilityName .. "_Modifiers"] then
-                        Options[unitName .. "_" .. abilityName .. "_Modifiers"]:SetValue(defaultList)
+                    
+                    if Options[modifierKey] then
+                        Options[modifierKey]:OnChanged(function() end)
+                        if next(defaultList) then
+                            Options[modifierKey]:SetValue(defaultList)
+                        end
                     end
                     GB.Ability_Right:AddInput(unitName .. "_" .. abilityName .. "_Wave", {
                         Text = "  > Wave Number",
