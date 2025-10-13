@@ -40,6 +40,58 @@ task.wait(1)
 
 local WindUI
 local windUILoaded = false
+local isMobileExecutor = false
+
+-- Detect mobile executor
+local function detectMobileExecutor()
+    local hasPluginCapability = pcall(function()
+        local test = Instance.new("ScreenGui")
+        test.ResetOnSpawn = false
+        test:Destroy()
+    end)
+    return isMobile and not hasPluginCapability
+end
+
+-- Mobile compatibility patch
+local function patchWindUIForMobile(windui)
+    if not windui then return windui end
+    
+    warn("[ALS] Applying mobile compatibility patches...")
+    
+    local oldInstanceNew = Instance.new
+    local function safeInstanceNew(className, parent)
+        local success, result = pcall(function()
+            return oldInstanceNew(className, parent)
+        end)
+        
+        if success then
+            return result
+        else
+            success, result = pcall(function()
+                local instance = oldInstanceNew(className)
+                if parent then pcall(function() instance.Parent = parent end) end
+                return instance
+            end)
+            
+            if success then
+                return result
+            else
+                return oldInstanceNew("Folder")
+            end
+        end
+    end
+    
+    getgenv().Instance = setmetatable({}, {
+        __index = function(_, key)
+            if key == "new" then return safeInstanceNew end
+            return Instance[key]
+        end
+    })
+    
+    return windui
+end
+
+isMobileExecutor = detectMobileExecutor()
 
 do
     local ok, result = pcall(function()
@@ -56,18 +108,16 @@ do
             WindUI = loadResult
             windUILoaded = true
         else
-            warn("[UI] WindUI failed to load - mobile executor may lack required capabilities")
+            warn("[UI] WindUI failed to load")
             warn("[UI] Error:", result or loadResult)
             
             task.wait(1)
-            LocalPlayer:Kick("❌ Your executor doesn't support WindUI\n\n" ..
-                "Your executor lacks 'Plugin' capability needed for UI creation.\n\n" ..
-                "✅ Compatible Executors:\n" ..
+            LocalPlayer:Kick("❌ Failed to load WindUI\n\n" ..
+                "Try:\n" ..
                 "• Solara (PC/Mobile)\n" ..
                 "• Wave\n" ..
                 "• Delta X\n" ..
-                "• Arceus X (enable Plugin mode)\n\n" ..
-                "Contact the script developer for a mobile-compatible version.")
+                "• Arceus X (enable Plugin mode)")
             return
         end
     end
@@ -76,6 +126,12 @@ end
 if not windUILoaded or not WindUI then
     warn("[UI] WindUI not loaded properly")
     return
+end
+
+-- Apply mobile patches
+if isMobileExecutor then
+    WindUI = patchWindUIForMobile(WindUI)
+    warn("[ALS] Mobile compatibility mode enabled")
 end
 
 local oldLogWarn = logwarn or warn
