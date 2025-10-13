@@ -39,99 +39,15 @@ end
 task.wait(1)
 
 local WindUI
-local windUILoaded = false
-local isMobileExecutor = false
-
--- Detect mobile executor
-local function detectMobileExecutor()
-    local hasPluginCapability = pcall(function()
-        local test = Instance.new("ScreenGui")
-        test.ResetOnSpawn = false
-        test:Destroy()
-    end)
-    return isMobile and not hasPluginCapability
-end
-
--- Mobile compatibility patch
-local function patchWindUIForMobile(windui)
-    if not windui then return windui end
-    
-    warn("[ALS] Applying mobile compatibility patches...")
-    
-    local oldInstanceNew = Instance.new
-    local function safeInstanceNew(className, parent)
-        local success, result = pcall(function()
-            return oldInstanceNew(className, parent)
-        end)
-        
-        if success then
-            return result
-        else
-            success, result = pcall(function()
-                local instance = oldInstanceNew(className)
-                if parent then pcall(function() instance.Parent = parent end) end
-                return instance
-            end)
-            
-            if success then
-                return result
-            else
-                return oldInstanceNew("Folder")
-            end
-        end
-    end
-    
-    getgenv().Instance = setmetatable({}, {
-        __index = function(_, key)
-            if key == "new" then return safeInstanceNew end
-            return Instance[key]
-        end
-    })
-    
-    return windui
-end
-
-isMobileExecutor = detectMobileExecutor()
-
 do
     local ok, result = pcall(function()
         return require("./src/init")
     end)
-    if ok and result then
+    if ok then
         WindUI = result
-        windUILoaded = true
     else
-        local loadOk, loadResult = pcall(function()
-            return loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
-        end)
-        if loadOk and loadResult then
-            WindUI = loadResult
-            windUILoaded = true
-        else
-            warn("[UI] WindUI failed to load")
-            warn("[UI] Error:", result or loadResult)
-            
-            task.wait(1)
-            LocalPlayer:Kick("❌ Failed to load WindUI\n\n" ..
-                "Try:\n" ..
-                "• Solara (PC/Mobile)\n" ..
-                "• Wave\n" ..
-                "• Delta X\n" ..
-                "• Arceus X (enable Plugin mode)")
-            return
-        end
+        WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
     end
-end
-
-if not windUILoaded or not WindUI then
-    warn("[UI] WindUI not loaded properly")
-    return
-end
-
--- Apply mobile patches
-if isMobileExecutor then
-    WindUI = patchWindUIForMobile(WindUI)
-    warn("[ALS] Mobile compatibility mode enabled")
 end
 
 local oldLogWarn = logwarn or warn
@@ -751,90 +667,31 @@ local windowCreated = false
 
 while not windowCreated and windowAttempts < 3 do
     windowAttempts = windowAttempts + 1
-    
-    -- Adjust settings for mobile
-    local windowSize = isMobileExecutor and UDim2.fromOffset(400, 350) or UDim2.fromOffset(700, 460)
-    local showCursor = isMobileExecutor and false or (getgenv().Config.toggles.ShowCustomCursor ~= false)
-    
     local windowSuccess, result = pcall(function()
         return Library:CreateWindow({
             Title = "ALS Halloween Event",
             Footer = "Anime Last Stand Script",
-            Icon = isMobileExecutor and nil or 72399447876912,
+            Icon = 72399447876912,
             NotifySide = getgenv().Config.inputs.NotificationSide or "Right",
-            ShowCustomCursor = showCursor,
-            Size = windowSize,
-            Acrylic = not isMobileExecutor,
+            ShowCustomCursor = getgenv().Config.toggles.ShowCustomCursor ~= false,
+            Size = UDim2.fromOffset(700, 460),
         })
     end)
-    
     if windowSuccess and result then
         Window = result
         windowCreated = true
     else
         warn("[UI] Failed to create window (Attempt " .. windowAttempts .. "/3):", result)
-        
-        -- Try mobile-friendly fallback
-        if string.find(tostring(result), "lacking capability") or string.find(tostring(result), "Plugin") then
-            warn("[UI] Attempting mobile-friendly window creation...")
-            
-            windowSuccess, result = pcall(function()
-                return Library:CreateWindow({
-                    Title = "ALS Mobile",
-                    Footer = "Halloween Event",
-                    Size = UDim2.fromOffset(350, 300),
-                    HidePanelBackground = true,
-                    Acrylic = false,
-                    ShowCustomCursor = false,
-                    OpenButton = {
-                        Title = "ALS",
-                        Enabled = true,
-                        OnlyMobile = true,
-                    }
-                })
-            end)
-            
-            if windowSuccess and result then
-                Window = result
-                windowCreated = true
-                isMobileExecutor = true
-                warn("[UI] Mobile-friendly window created successfully")
-            end
-        end
-        
-        if not windowCreated then
-            task.wait(1)
-            if windowAttempts >= 3 then
-                -- Last attempt with minimal settings
-                windowSuccess, result = pcall(function()
-                    return Library:CreateWindow({
-                        Title = "ALS Halloween Event",
-                        Size = UDim2.fromOffset(500, 400),
-                    })
-                end)
-                
-                if windowSuccess and result then
-                    Window = result
-                    windowCreated = true
-                else
-                    LocalPlayer:Kick("Failed to create UI after 3 attempts.\n\nYour executor may not be compatible.\n\nTry: Solara, Wave, Delta X, or Arceus X")
-                    return
-                end
-            end
+        task.wait(1)
+        if windowAttempts >= 3 then
+            Window = Library:CreateWindow({
+                Title = "ALS Halloween Event",
+                Footer = "Anime Last Stand Script",
+                Size = UDim2.fromOffset(700, 460),
+            })
+            windowCreated = true
         end
     end
-end
-
--- Notify if running in mobile mode
-if isMobileExecutor and windowCreated then
-    task.wait(1)
-    pcall(function()
-        Library:Notify({
-            Title = "Mobile Mode",
-            Description = "Running in mobile compatibility mode. Some features may be limited.",
-            Time = 5,
-        })
-    end)
 end
 
 task.wait(0.5)
