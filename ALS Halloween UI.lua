@@ -714,6 +714,7 @@ local Tabs = {
     Performance = SettingsSection:Tab({ Title = "Performance", Icon = "gauge" }),
     Safety = SettingsSection:Tab({ Title = "Safety & UI", Icon = "shield-check" }),
     Config = SettingsSection:Tab({ Title = "Config", Icon = "save" }),
+    Macro = SettingsSection:Tab({ Title = "Macro", Icon = "code" }),
 }
 
 Tabs.Changes:Paragraph({
@@ -1860,6 +1861,32 @@ GB.Settings_Right:AddButton("Unload", function()
         end
     end)
 end)
+
+GB.Macro_Left = adaptTab(Tabs.Macro)
+
+GB.Macro_Left:Paragraph({
+    Title = "Macro System",
+    Desc = "Run the ALS Macro script to automate gameplay actions.",
+})
+
+GB.Macro_Left:Space({ Columns = 1 })
+
+GB.Macro_Left:Button({
+    Title = "▶️ Run Macro",
+    Callback = function()
+        notify("Macro", "Loading macro script...", 3)
+        task.spawn(function()
+            local ok, err = pcall(function()
+                loadstring(game:HttpGet("https://raw.githubusercontent.com/Byorl/ALS-Scripts/refs/heads/main/ALS%20Macro.lua"))()
+            end)
+            if ok then
+                notify("Macro", "Macro script loaded successfully!", 3)
+            else
+                notify("Macro Error", "Failed to load macro: " .. tostring(err), 5)
+            end
+        end)
+    end
+})
 
 task.wait(0.5)
 
@@ -3150,5 +3177,3 @@ if isInLobby then
         end
     end)
 end
-
-
