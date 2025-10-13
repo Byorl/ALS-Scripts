@@ -38,7 +38,6 @@ end
 
 task.wait(1)
 
--- Reset ability UI flags on script reload
 getgenv()._AbilityUIBuilt = false
 getgenv()._AbilityUIBuilding = false
 
@@ -524,6 +523,7 @@ getgenv().CardSelectionEnabled = getgenv().Config.toggles.CardSelectionToggle or
 getgenv().SlowerCardSelectionEnabled = getgenv().Config.toggles.SlowerCardSelectionToggle or false
 getgenv().BossRushEnabled = getgenv().Config.toggles.BossRushToggle or false
 getgenv().WebhookEnabled = getgenv().Config.toggles.WebhookToggle or false
+getgenv().PingOnSecretDrop = getgenv().Config.toggles.PingOnSecretToggle or false
 getgenv().SeamlessLimiterEnabled = getgenv().Config.toggles.SeamlessToggle or false
 getgenv().BingoEnabled = getgenv().Config.toggles.BingoToggle or false
 getgenv().CapsuleEnabled = getgenv().Config.toggles.CapsuleToggle or false
@@ -544,6 +544,7 @@ getgenv().FinalExpAutoSkipShopEnabled = getgenv().Config.toggles.FinalExpAutoSki
 
 
 getgenv().WebhookURL = getgenv().Config.inputs.WebhookURL or ""
+getgenv().DiscordUserID = getgenv().Config.inputs.DiscordUserID or ""
 getgenv().MaxSeamlessRounds = tonumber(getgenv().Config.inputs.SeamlessRounds) or 4
 getgenv().UnitAbilities = getgenv().UnitAbilities or {}
 
@@ -1694,6 +1695,30 @@ GB.Webhook_Left:AddInput("WebhookURL", {
     end,
 })
 
+GB.Webhook_Left:Space({ Columns = 1 })
+
+GB.Webhook_Left:AddInput("DiscordUserID", {
+    Text = "Discord User ID",
+    Default = getgenv().Config.inputs.DiscordUserID or "",
+    Numeric = true,
+    Finished = true,
+    Placeholder = "123456789012345678",
+    Callback = function(Value)
+        getgenv().DiscordUserID = Value or ""
+        getgenv().Config.inputs.DiscordUserID = getgenv().DiscordUserID
+        saveConfig(getgenv().Config)
+    end,
+})
+
+GB.Webhook_Left:Space({ Columns = 1 })
+
+addToggle(GB.Webhook_Left, "PingOnSecretToggle", "🔔 Ping on Secret Drop", getgenv().Config.toggles.PingOnSecretToggle or false, function(v)
+    getgenv().PingOnSecretDrop = v
+    getgenv().Config.toggles.PingOnSecretToggle = v
+    saveConfig(getgenv().Config)
+    notify("Webhook", v and "Will ping on secret drops" or "Ping disabled", 3)
+end)
+
 GB.Seam_Left:Paragraph({
     Title = "Seamless Retry Fix",
     Desc = "Automatically leave after a set number of rounds to prevent game issues"
@@ -2689,9 +2714,12 @@ task.spawn(function()
         while true do s,k = string.gsub(s, "^(-?%d+)(%d%d%d)", '%1,%2') if k==0 then break end end
         return s
     end
-    local function SendMessageEMBED(url, embed)
+    local function SendMessageEMBED(url, embed, content)
         local headers = { ["Content-Type"] = "application/json" }
         local data = { embeds = { { title=embed.title, description=embed.description, color=embed.color, fields=embed.fields, footer=embed.footer, timestamp=os.date("!%Y-%m-%dT%H:%M:%S.000Z") } } }
+        if content and content ~= "" then
+            data.content = content
+        end
         local body = HttpService:JSONEncode(data)
         request({ Url=url, Method="POST", Headers=headers, Body=body })
     end
@@ -2824,6 +2852,14 @@ task.spawn(function()
                     end
                 end
             end
+            local hasUnitDrop = false
+            for _, r in ipairs(rewards) do
+                if r.name and (r.name:find("Unit") or r.type == "Unit") then
+                    hasUnitDrop = true
+                    break
+                end
+            end
+            
             local description = "**Username:** ||"..LocalPlayer.Name.."||\n**Level:** "..(clientData.Level or 0).." ["..formatNumber(clientData.EXP or 0).."/"..formatNumber(clientData.MaxEXP or 0).."]"
             local embed = { title="Anime Last Stand", description=description or "N/A", color=0x00ff00, fields={
                 { name="Player Stats", value=(formatStats() ~= "" and formatStats() or "N/A"), inline=true },
@@ -2831,6 +2867,11 @@ task.spawn(function()
                 { name="Units", value=(unitsText ~= "" and unitsText or "No units"), inline=false },
                 { name="Match Result", value=(matchTime or "00:00:00") .. " - Wave " .. tostring(matchWave or "0") .. "\n" .. (mapName or "Unknown Map") .. ((mapDifficulty and mapDifficulty ~= "Unknown") and (" ["..mapDifficulty.."]") or "") .. " - " .. (matchResult or "Unknown"), inline=false }
             }, footer={ text="Halloween Hook" } }
+            
+            local webhookContent = ""
+            if hasUnitDrop and getgenv().PingOnSecretDrop and getgenv().DiscordUserID and getgenv().DiscordUserID ~= "" then
+                webhookContent = "<@" .. getgenv().DiscordUserID .. "> 🎉 **SECRET UNIT DROP!**"
+            end
             local webhookHash = LocalPlayer.Name .. "_" .. matchTime .. "_" .. matchWave .. "_" .. rewardsText
             if webhookHash == lastWebhookHash then
                 isProcessing = false
@@ -2842,7 +2883,11 @@ task.spawn(function()
             while not sendSuccess and sendAttempts < 2 do
                 sendAttempts = sendAttempts + 1
                 local ok = pcall(function()
-                    SendMessageEMBED(getgenv().WebhookURL, embed)
+                    if webhookContent ~= "" then
+                        SendMessageEMBED(getgenv().WebhookURL, embed, webhookContent)
+                    else
+                        SendMessageEMBED(getgenv().WebhookURL, embed)
+                    end
                 end)
                 if ok then
                     sendSuccess = true
