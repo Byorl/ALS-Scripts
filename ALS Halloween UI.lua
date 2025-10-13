@@ -706,14 +706,14 @@ local MainSection = Window:Section({
     Icon = "archive",
 })
 
+local EventSection = Window:Section({
+    Title = "Halloween Event",
+    Icon = "gift",
+})
+
 local CombatSection = Window:Section({
     Title = "Combat",
     Icon = "swords",
-})
-
-local EventSection = Window:Section({
-    Title = "Event",
-    Icon = "gift",
 })
 
 local ModesSection = Window:Section({
@@ -1032,13 +1032,20 @@ local function addToggle(group, key, text, default, onChanged)
         default = false
     end
     
-    local toggle = group:AddToggle(key, {
-        Text = text,
-        Default = default,
-        Callback = function(val)
-            if onChanged then onChanged(val) end
-        end,
-    })
+    local toggle
+    local success, err = pcall(function()
+        toggle = group:AddToggle(key, {
+            Text = text,
+            Default = default,
+            Callback = function(val)
+                if onChanged then pcall(function() onChanged(val) end) end
+            end,
+        })
+    end)
+    
+    if not success then
+        warn("[addToggle] Failed to create toggle for " .. tostring(key) .. ": " .. tostring(err))
+    end
     
     return toggle
 end
@@ -2205,11 +2212,13 @@ task.spawn(function()
                 end
                 if buttonToPress then
                     if getgenv().WebhookEnabled then
+                        task.wait(4)
                         local maxWait = 0
-                        while isProcessing and maxWait < 10 do
+                        while isProcessing and maxWait < 15 do
                             task.wait(0.5)
                             maxWait = maxWait + 0.5
                         end
+                        task.wait(2)
                     end
                     hasProcessedCurrentUI = true
                     GuiService.SelectedObject = buttonToPress
@@ -2842,7 +2851,7 @@ task.spawn(function()
     end
     LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
         if child.Name == "EndGameUI" and getgenv().WebhookEnabled then
-            task.wait(3.5)
+            task.wait(3)
             sendWebhook()
         end
     end)
@@ -2858,51 +2867,110 @@ task.spawn(function()
 end)
 
 task.spawn(function()
-    if not getgenv().SeamlessLimiterEnabled then return end
     pcall(function()
         local endgameCount = 0
         local hasRun = false
         local lastEndgameTime = 0
         local DEBOUNCE_TIME = 5
         local maxWait = 0
+        
         repeat task.wait(0.5) maxWait = maxWait + 0.5 until not LocalPlayer.PlayerGui:FindFirstChild("TeleportUI") or maxWait > 30
+        
+        print("[Seamless Fix] Waiting for Settings GUI...")
         maxWait = 0
         repeat task.wait(0.5) maxWait = maxWait + 0.5 until LocalPlayer.PlayerGui:FindFirstChild("Settings") or maxWait > 30
+        print("[Seamless Fix] Settings GUI found!")
+        
         local function getSeamlessValue()
             local ok, result = pcall(function()
                 local settings = LocalPlayer.PlayerGui:FindFirstChild("Settings")
                 if settings then
                     local seamless = settings:FindFirstChild("SeamlessRetry")
+                    if seamless then 
+                        print("[Seamless Fix] SeamlessRetry.Value =", seamless.Value)
+                        return seamless.Value 
+                    else
+                        print("[Seamless Fix] SeamlessRetry not found in Settings")
+                    end
                 else
+                    print("[Seamless Fix] Settings not found")
                 end
                 return false
             end)
             return ok and result or false
         end
+        
         local function setSeamlessRetry()
             pcall(function()
                 local remotes = RS:FindFirstChild("Remotes")
                 local setSettings = remotes and remotes:FindFirstChild("SetSettings")
-                if setSettings then setSettings:InvokeServer("SeamlessRetry") end
+                if setSettings then 
+                    setSettings:InvokeServer("SeamlessRetry")
+                end
             end)
         end
-        local currentSeamless = getSeamlessValue()
-        if endgameCount < (getgenv().MaxSeamlessRounds or 4) then
+        
+        local function enableSeamlessIfNeeded()
+            if not getgenv().SeamlessLimiterEnabled then return end
+            if endgameCount < (getgenv().MaxSeamlessRounds or 4) then
+                if not getSeamlessValue() then
+                    setSeamlessRetry()
+                    task.wait(0.5)
+                    print("[Seamless Fix] Enabled Seamless Retry")
+                else
+                    print("[Seamless Fix] Seamless Retry already enabled")
+                end
+            end
         end
+        
+        print("[Seamless Fix] Checking initial seamless state...")
+        enableSeamlessIfNeeded()
+        
+        local seamlessToggleConnection
+        seamlessToggleConnection = task.spawn(function()
+            while true do
+                task.wait(1)
+                if getgenv().SeamlessLimiterEnabled then
+                    enableSeamlessIfNeeded()
+                end
+            end
+        end)
+        
         LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
             pcall(function()
                 if child.Name == "EndGameUI" and not hasRun then
                     local currentTime = tick()
+                    if currentTime - lastEndgameTime < DEBOUNCE_TIME then
+                        print("[Seamless Fix] Debounced duplicate EndGameUI trigger")
+                        return
+                    end
                     hasRun = true
                     lastEndgameTime = currentTime
                     endgameCount = endgameCount + 1
                     local maxRounds = getgenv().MaxSeamlessRounds or 4
+                    print("[Seamless Fix] Endgame detected. Current seamless rounds: " .. endgameCount .. "/" .. maxRounds)
+                    
                     if endgameCount >= maxRounds then
+                        if getSeamlessValue() then
+                            task.wait(0.5)
+                            setSeamlessRetry()
+                            print("[Seamless Fix] Max rounds reached, disabling seamless retry to restart match...")
+                            task.wait(0.5)
+                            print("[Seamless Fix] Disabled Seamless Retry")
+                        else
+                            print("[Seamless Fix] Max rounds reached but seamless already disabled")
+                        end
                     end
                 end
             end)
         end)
-        LocalPlayer.PlayerGui.ChildRemoved:Connect(function(child) if child.Name == "EndGameUI" then task.wait(2) hasRun = false end end)
+        
+        LocalPlayer.PlayerGui.ChildRemoved:Connect(function(child) 
+            if child.Name == "EndGameUI" then 
+                task.wait(2) 
+                hasRun = false 
+            end 
+        end)
     end)
 end)
 
@@ -2914,15 +2982,27 @@ task.spawn(function()
     local UseStampEvent = BingoEvents:FindFirstChild("UseStamp")
     local ClaimRewardEvent = BingoEvents:FindFirstChild("ClaimReward")
     local CompleteBoardEvent = BingoEvents:FindFirstChild("CompleteBoard")
+    print("[Auto Bingo] Bingo automation loaded!")
     while true do
         task.wait(0.1)
         if getgenv().BingoEnabled then
             pcall(function()
-                if UseStampEvent then for i=1,25 do UseStampEvent:FireServer() end end
-                if ClaimRewardEvent then for i=1,25 do ClaimRewardEvent:InvokeServer(i) end end
-                if CompleteBoardEvent then CompleteBoardEvent:InvokeServer() end
+                if UseStampEvent then
+                    for i=1,25 do 
+                        UseStampEvent:FireServer()
+                    end
+                end
+                if ClaimRewardEvent then
+                    for i=1,25 do 
+                        ClaimRewardEvent:InvokeServer(i)
+                    end
+                end
+                if CompleteBoardEvent then 
+                    CompleteBoardEvent:InvokeServer()
+                end
             end)
         end
+        if Library and Library.Unloaded then break end
     end
 end)
 
