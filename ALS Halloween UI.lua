@@ -751,35 +751,90 @@ local windowCreated = false
 
 while not windowCreated and windowAttempts < 3 do
     windowAttempts = windowAttempts + 1
+    
+    -- Adjust settings for mobile
+    local windowSize = isMobileExecutor and UDim2.fromOffset(400, 350) or UDim2.fromOffset(700, 460)
+    local showCursor = isMobileExecutor and false or (getgenv().Config.toggles.ShowCustomCursor ~= false)
+    
     local windowSuccess, result = pcall(function()
         return Library:CreateWindow({
             Title = "ALS Halloween Event",
             Footer = "Anime Last Stand Script",
-            Icon = 72399447876912,
+            Icon = isMobileExecutor and nil or 72399447876912,
             NotifySide = getgenv().Config.inputs.NotificationSide or "Right",
-            ShowCustomCursor = getgenv().Config.toggles.ShowCustomCursor ~= false,
-            Size = UDim2.fromOffset(700, 460),
+            ShowCustomCursor = showCursor,
+            Size = windowSize,
+            Acrylic = not isMobileExecutor,
         })
     end)
+    
     if windowSuccess and result then
         Window = result
         windowCreated = true
     else
         warn("[UI] Failed to create window (Attempt " .. windowAttempts .. "/3):", result)
-        if string.find(tostring(result), "lacking capability") then
-            LocalPlayer:Kick("Your mobile executor lacks required capabilities. Try a different executor like Solara or Wave.")
-            return
+        
+        -- Try mobile-friendly fallback
+        if string.find(tostring(result), "lacking capability") or string.find(tostring(result), "Plugin") then
+            warn("[UI] Attempting mobile-friendly window creation...")
+            
+            windowSuccess, result = pcall(function()
+                return Library:CreateWindow({
+                    Title = "ALS Mobile",
+                    Footer = "Halloween Event",
+                    Size = UDim2.fromOffset(350, 300),
+                    HidePanelBackground = true,
+                    Acrylic = false,
+                    ShowCustomCursor = false,
+                    OpenButton = {
+                        Title = "ALS",
+                        Enabled = true,
+                        OnlyMobile = true,
+                    }
+                })
+            end)
+            
+            if windowSuccess and result then
+                Window = result
+                windowCreated = true
+                isMobileExecutor = true
+                warn("[UI] Mobile-friendly window created successfully")
+            end
         end
-        task.wait(1)
-        if windowAttempts >= 3 then
-            Window = Library:CreateWindow({
-                Title = "ALS Halloween Event",
-                Footer = "Anime Last Stand Script",
-                Size = UDim2.fromOffset(700, 460),
-            })
-            windowCreated = true
+        
+        if not windowCreated then
+            task.wait(1)
+            if windowAttempts >= 3 then
+                -- Last attempt with minimal settings
+                windowSuccess, result = pcall(function()
+                    return Library:CreateWindow({
+                        Title = "ALS Halloween Event",
+                        Size = UDim2.fromOffset(500, 400),
+                    })
+                end)
+                
+                if windowSuccess and result then
+                    Window = result
+                    windowCreated = true
+                else
+                    LocalPlayer:Kick("Failed to create UI after 3 attempts.\n\nYour executor may not be compatible.\n\nTry: Solara, Wave, Delta X, or Arceus X")
+                    return
+                end
+            end
         end
     end
+end
+
+-- Notify if running in mobile mode
+if isMobileExecutor and windowCreated then
+    task.wait(1)
+    pcall(function()
+        Library:Notify({
+            Title = "Mobile Mode",
+            Description = "Running in mobile compatibility mode. Some features may be limited.",
+            Time = 5,
+        })
+    end)
 end
 
 task.wait(0.5)
