@@ -308,7 +308,7 @@ local function createObsidianCompat()
                 StrokeThickness = 1,
                 Enabled = true,
                 Draggable = true,
-                OnlyMobile = true,
+                OnlyMobile = false,
                 Color = ColorSequence.new(Color3.fromRGB(48, 255, 106), Color3.fromRGB(231, 255, 47)),
             },
         })
@@ -375,7 +375,6 @@ local function cleanupBeforeTeleport()
             Library:Unload()
         end
     end)
-    task.wait(0.1)
     
     pcall(function()
         getgenv().ALS_Library = nil
@@ -397,29 +396,6 @@ local function cleanupBeforeTeleport()
     end)
     
     pcall(function()
-        for _, obj in pairs(workspace:GetDescendants()) do
-            if obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Beam") then
-                obj.Enabled = false
-                obj:Destroy()
-            elseif obj:IsA("Sound") then
-                obj:Stop()
-                obj.Volume = 0
-                obj:Destroy()
-            elseif obj:IsA("Fire") or obj:IsA("Smoke") or obj:IsA("Sparkles") then
-                obj:Destroy()
-            end
-        end
-    end)
-    
-    pcall(function()
-        for _, gui in pairs(LocalPlayer.PlayerGui:GetChildren()) do
-            if gui.Name ~= "Chat" and gui.Name ~= "CoreGui" and gui.Name ~= "PlayerList" then
-                gui:Destroy()
-            end
-        end
-    end)
-    
-    pcall(function()
         local coreGui = game:GetService("CoreGui")
         for _, gui in pairs(coreGui:GetChildren()) do
             if gui.Name:find("Wind") or gui.Name:find("ALS") or gui.Name:find("UI") then
@@ -429,22 +405,10 @@ local function cleanupBeforeTeleport()
     end)
     
     pcall(function()
-        local lighting = game:GetService("Lighting")
-        for _, effect in pairs(lighting:GetChildren()) do
-            if not effect:IsA("Sky") and not effect:IsA("Atmosphere") then
-                effect:Destroy()
-            end
-        end
+        collectgarbage("collect")
     end)
     
-    pcall(function()
-        for i = 1, 5 do
-            collectgarbage("collect")
-            task.wait(0.15)
-        end
-    end)
-    
-    task.wait(0.8)
+    task.wait(0.2)
 
 end
 
@@ -2348,15 +2312,11 @@ task.spawn(function()
     end
     local function getCurrentWave()
         local ok, result = pcall(function()
-            local gui = LocalPlayer.PlayerGui:FindFirstChild("Top") if not gui then return 0 end
-            local frame = gui:FindFirstChild("Frame") if not frame then return 0 end
-            frame = frame:FindFirstChild("Frame") if not frame then return 0 end
-            frame = frame:FindFirstChild("Frame") if not frame then return 0 end
-            frame = frame:FindFirstChild("Frame") if not frame then return 0 end
-            local button = frame:FindFirstChild("TextButton") if not button then return 0 end
-            local children = button:GetChildren() if #children < 3 then return 0 end
-            local text = children[3].Text
-            return tonumber(text) or 0
+            local waveValue = RS:FindFirstChild("Wave")
+            if waveValue and waveValue:IsA("IntValue") then
+                return waveValue.Value or 0
+            end
+            return 0
         end)
         return ok and result or 0
     end
@@ -2428,30 +2388,46 @@ task.spawn(function()
             return false
         end
     end
-    local function getBossPosition()
-        local ok,res = pcall(function()
-            local enemies = workspace:FindFirstChild("Enemies") if not enemies then return nil end
-            local boss = enemies:FindFirstChild("Boss") if not boss then return nil end
-            local hrp = boss:FindFirstChild("HumanoidRootPart") if hrp then return hrp.Position end
+    local function getBossCFrame()
+        local ok, res = pcall(function()
+            local enemies = workspace:FindFirstChild("Enemies")
+            if not enemies then return nil end
+            local boss = enemies:FindFirstChild("Boss")
+            if not boss then return nil end
+            local hrp = boss:FindFirstChild("HumanoidRootPart")
+            if hrp then return hrp.CFrame end
             return nil
         end)
         return ok and res or nil
     end
-    local function getTowerPosition(tower)
+    local function getTowerCFrame(tower)
         if not tower then return nil end
-        local ok,res = pcall(function() local hrp = tower:FindFirstChild("HumanoidRootPart") if hrp then return hrp.Position end return nil end)
+        local ok, res = pcall(function()
+            local hrp = tower:FindFirstChild("HumanoidRootPart")
+            if hrp then return hrp.CFrame end
+            return nil
+        end)
         return ok and res or nil
     end
     local function getTowerRange(tower)
         if not tower then return 0 end
-        local ok,res = pcall(function() local stats = tower:FindFirstChild("Stats") if not stats then return 0 end local range = stats:FindFirstChild("Range") if not range then return 0 end return range.Value or 0 end)
+        local ok, res = pcall(function()
+            local stats = tower:FindFirstChild("Stats")
+            if not stats then return 0 end
+            local range = stats:FindFirstChild("Range")
+            if not range then return 0 end
+            return range.Value or 0
+        end)
         return ok and res or 0
     end
     local function isBossInRange(tower)
-        local b = getBossPosition() local t = getTowerPosition(tower)
-        if not b or not t then return false end
-        local r = getTowerRange(tower) if r <= 0 then return false end
-        return (b - t).Magnitude <= r
+        local bossCF = getBossCFrame()
+        local towerCF = getTowerCFrame(tower)
+        if not bossCF or not towerCF then return false end
+        local range = getTowerRange(tower)
+        if range <= 0 then return false end
+        local distance = (bossCF.Position - towerCF.Position).Magnitude
+        return distance <= range
     end
     local function checkBossInRangeForDuration(tower, requiredDuration)
         if not tower then return false end
@@ -2961,9 +2937,6 @@ task.spawn(function()
                 if not getSeamlessValue() then
                     setSeamlessRetry()
                     task.wait(0.5)
-                    print("[Seamless Fix] Enabled Seamless Retry")
-                else
-                    print("[Seamless Fix] Seamless Retry already enabled")
                 end
             end
         end
