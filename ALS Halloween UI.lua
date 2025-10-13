@@ -38,6 +38,10 @@ end
 
 task.wait(1)
 
+-- Reset ability UI flags on script reload
+getgenv()._AbilityUIBuilt = false
+getgenv()._AbilityUIBuilding = false
+
 local WindUI
 do
     local ok, result = pcall(function()
@@ -46,7 +50,7 @@ do
     if ok then
         WindUI = result
     else
-        WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+        WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Byorl/WindUI/refs/heads/main/main.lua"))()
     end
 end
 
@@ -695,6 +699,8 @@ while not windowCreated and windowAttempts < 3 do
 end
 
 task.wait(0.5)
+
+
 
 local UpdatesSection = Window:Section({
     Title = "Updates",
@@ -2873,6 +2879,7 @@ task.spawn(function()
         local lastEndgameTime = 0
         local DEBOUNCE_TIME = 5
         local maxWait = 0
+        local maxRoundsReached = false
         
         repeat task.wait(0.5) maxWait = maxWait + 0.5 until not LocalPlayer.PlayerGui:FindFirstChild("TeleportUI") or maxWait > 30
         
@@ -2911,11 +2918,16 @@ task.spawn(function()
         
         local function enableSeamlessIfNeeded()
             if not getgenv().SeamlessLimiterEnabled then return end
+            if maxRoundsReached then 
+                return 
+            end
             if endgameCount < (getgenv().MaxSeamlessRounds or 4) then
                 if not getSeamlessValue() then
                     setSeamlessRetry()
                     task.wait(0.5)
                     print("[Seamless Fix] Enabled Seamless Retry")
+                else
+                    print("[Seamless Fix] Seamless Retry already enabled")
                 end
             end
         end
@@ -2948,6 +2960,7 @@ task.spawn(function()
                     print("[Seamless Fix] Endgame detected. Current seamless rounds: " .. endgameCount .. "/" .. maxRounds)
                     
                     if endgameCount >= maxRounds then
+                        maxRoundsReached = true
                         if getSeamlessValue() then
                             task.wait(0.5)
                             setSeamlessRetry()
@@ -2967,6 +2980,16 @@ task.spawn(function()
                 task.wait(2) 
                 hasRun = false 
             end 
+        end)
+        
+        LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
+            if child.Name == "TeleportUI" and maxRoundsReached then
+                print("[Seamless Fix] New match starting, resetting seamless counter...")
+                endgameCount = 0
+                maxRoundsReached = false
+                task.wait(2)
+                enableSeamlessIfNeeded()
+            end
         end)
     end)
 end)
