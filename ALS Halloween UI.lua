@@ -46,7 +46,16 @@ do
     if ok then
         WindUI = result
     else
-        WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+        local loadOk, loadResult = pcall(function()
+            return loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+        end)
+        if loadOk and loadResult then
+            WindUI = loadResult
+        else
+            warn("[UI] WindUI failed to load - mobile executor may lack required capabilities")
+            LocalPlayer:Kick("Your executor doesn't support this UI library. Please use a different executor or contact support.")
+            return
+        end
     end
 end
 
@@ -682,6 +691,10 @@ while not windowCreated and windowAttempts < 3 do
         windowCreated = true
     else
         warn("[UI] Failed to create window (Attempt " .. windowAttempts .. "/3):", result)
+        if string.find(tostring(result), "lacking capability") then
+            LocalPlayer:Kick("Your mobile executor lacks required capabilities. Try a different executor like Solara or Wave.")
+            return
+        end
         task.wait(1)
         if windowAttempts >= 3 then
             Window = Library:CreateWindow({
