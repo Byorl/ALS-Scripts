@@ -41,17 +41,8 @@ task.wait(1)
 getgenv()._AbilityUIBuilt = false
 getgenv()._AbilityUIBuilding = false
 
-local WindUI
-do
-    local ok, result = pcall(function()
-        return require("./src/init")
-    end)
-    if ok then
-        WindUI = result
-    else
-        WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
-    end
-end
+local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+
 
 local oldLogWarn = logwarn or warn
 local function filteredWarn(...)
