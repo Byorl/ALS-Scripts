@@ -398,7 +398,7 @@ local function createObsidianCompat()
                 StrokeThickness = 1,
                 Enabled = true,
                 Draggable = true,
-                OnlyMobile = false,
+                OnlyMobile = true,
                 Color = ColorSequence.new(Color3.fromRGB(48, 255, 106), Color3.fromRGB(231, 255, 47)),
             },
         })
