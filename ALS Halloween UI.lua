@@ -39,24 +39,43 @@ end
 task.wait(1)
 
 local WindUI
+local windUILoaded = false
+
 do
     local ok, result = pcall(function()
         return require("./src/init")
     end)
-    if ok then
+    if ok and result then
         WindUI = result
+        windUILoaded = true
     else
         local loadOk, loadResult = pcall(function()
-            return loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+            return loadstring(game:HttpGet("https://raw.githubusercontent.com/Byorl/WindUI/refs/heads/main/main.lua"))()
         end)
         if loadOk and loadResult then
             WindUI = loadResult
+            windUILoaded = true
         else
             warn("[UI] WindUI failed to load - mobile executor may lack required capabilities")
-            LocalPlayer:Kick("Your executor doesn't support this UI library. Please use a different executor or contact support.")
+            warn("[UI] Error:", result or loadResult)
+            
+            task.wait(1)
+            LocalPlayer:Kick("❌ Your executor doesn't support WindUI\n\n" ..
+                "Your executor lacks 'Plugin' capability needed for UI creation.\n\n" ..
+                "✅ Compatible Executors:\n" ..
+                "• Solara (PC/Mobile)\n" ..
+                "• Wave\n" ..
+                "• Delta X\n" ..
+                "• Arceus X (enable Plugin mode)\n\n" ..
+                "Contact the script developer for a mobile-compatible version.")
             return
         end
     end
+end
+
+if not windUILoaded or not WindUI then
+    warn("[UI] WindUI not loaded properly")
+    return
 end
 
 local oldLogWarn = logwarn or warn
