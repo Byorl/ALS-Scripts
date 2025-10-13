@@ -102,7 +102,7 @@ do
         windUILoaded = true
     else
         local loadOk, loadResult = pcall(function()
-            return loadstring(game:HttpGet("https://raw.githubusercontent.com/Byorl/WindUI/refs/heads/main/main.lua"))()
+            return loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
         end)
         if loadOk and loadResult then
             WindUI = loadResult
