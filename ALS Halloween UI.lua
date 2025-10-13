@@ -574,8 +574,6 @@ local MAX_CASH_HISTORY = 30
 
 getgenv().MacroMaps = getgenv().Config.macroMaps or {}
 
-local MacroStatusLabel, MacroStepLabel, MacroActionLabel, MacroUnitLabel, MacroWaitingLabel
-
 local function cacheMacroTowerInfo()
     if next(getgenv().MacroTowerInfoCache) then return end
     local towerInfoPath = RS:WaitForChild("Modules"):WaitForChild("TowerInfo")
@@ -732,22 +730,7 @@ local function getMacroNames()
     return names
 end
 
-local macroStatusUpdateDebounce = false
 local function updateMacroStatus()
-    if macroStatusUpdateDebounce then return end
-    macroStatusUpdateDebounce = true
-    
-    task.spawn(function()
-        pcall(function()
-            if MacroStatusLabel then MacroStatusLabel:SetTitle("📊 Status: " .. getgenv().MacroStatusText) end
-            if MacroStepLabel then MacroStepLabel:SetTitle("📝 Step: " .. getgenv().MacroCurrentStep .. "/" .. getgenv().MacroTotalSteps) end
-            if MacroActionLabel then MacroActionLabel:SetTitle("⚡ Action: " .. getgenv().MacroActionText) end
-            if MacroUnitLabel then MacroUnitLabel:SetTitle("🗼 Unit: " .. getgenv().MacroUnitText) end
-            if MacroWaitingLabel then MacroWaitingLabel:SetTitle("⏳ Waiting: " .. getgenv().MacroWaitingText) end
-        end)
-        task.wait(0.05)
-        macroStatusUpdateDebounce = false
-    end)
 end
 
 loadMacros()
@@ -1921,64 +1904,71 @@ Tabs.MacroControls:Space()
 
 Tabs.MacroControls:Section({ Title = "🎮 Recording & Playback" })
 
-addToggle(Tabs.MacroControls, "MacroRecordToggle", "🔴 Record Macro", false, function(v)
-    getgenv().MacroRecording = v
-    if v then
-        if not getgenv().CurrentMacro then
-            notify("Error", "Please select or create a macro first", 5)
-            getgenv().MacroRecording = false
-            if Toggles.MacroRecordToggle then
-                Toggles.MacroRecordToggle:SetValue(false)
+Tabs.MacroControls:Toggle({
+    Flag = "MacroRecordToggle",
+    Title = "🔴 Record Macro",
+    Default = false,
+    Callback = function(v)
+        getgenv().MacroRecording = v
+        if v then
+            if not getgenv().CurrentMacro then
+                notify("Error", "Please select or create a macro first", 5)
+                getgenv().MacroRecording = false
+                return
             end
-            return
-        end
-        getgenv().MacroData = {}
-        getgenv().MacroStatusText = "Recording"
-        getgenv().TowerPlaceCounts = {}
-        getgenv().MacroCashHistory = {}
-        getgenv().MacroCurrentStep = 0
-        getgenv().MacroTotalSteps = 0
-        getgenv().MacroActionText = ""
-        getgenv().MacroUnitText = ""
-        getgenv().MacroWaitingText = ""
-        updateMacroStatus()
-        notify("Recording Started", getgenv().CurrentMacro, 3)
-    else
-        getgenv().MacroStatusText = "Idle"
-        getgenv().MacroActionText = ""
-        getgenv().MacroUnitText = ""
-        getgenv().MacroWaitingText = ""
-        updateMacroStatus()
-        if getgenv().CurrentMacro and #getgenv().MacroData > 0 then
-            local success = saveMacro(getgenv().CurrentMacro, getgenv().MacroData)
-            if success then
-                notify("Recording Saved", #getgenv().MacroData .. " steps saved to " .. getgenv().CurrentMacro, 5)
-            else
-                notify("Save Failed", "Could not save macro", 5)
+            getgenv().MacroData = {}
+            getgenv().MacroStatusText = "Recording"
+            getgenv().TowerPlaceCounts = {}
+            getgenv().MacroCashHistory = {}
+            getgenv().MacroCurrentStep = 0
+            getgenv().MacroTotalSteps = 0
+            getgenv().MacroActionText = ""
+            getgenv().MacroUnitText = ""
+            getgenv().MacroWaitingText = ""
+            updateMacroStatus()
+            notify("Recording Started", getgenv().CurrentMacro, 3)
+        else
+            getgenv().MacroStatusText = "Idle"
+            getgenv().MacroActionText = ""
+            getgenv().MacroUnitText = ""
+            getgenv().MacroWaitingText = ""
+            updateMacroStatus()
+            if getgenv().CurrentMacro and #getgenv().MacroData > 0 then
+                local success = saveMacro(getgenv().CurrentMacro, getgenv().MacroData)
+                if success then
+                    notify("Recording Saved", #getgenv().MacroData .. " steps saved to " .. getgenv().CurrentMacro, 5)
+                else
+                    notify("Save Failed", "Could not save macro", 5)
+                end
             end
         end
     end
-end)
+})
 
 Tabs.MacroControls:Space()
 
-addToggle(Tabs.MacroControls, "MacroPlayToggle", "▶️ Play Macro", getgenv().MacroPlaying, function(v)
-    getgenv().MacroPlaying = v
-    getgenv().Config.toggles.MacroPlayToggle = v
-    saveConfig(getgenv().Config)
-    
-    if v then
-        notify("Macro Playback", "Enabled - Will auto-play when game starts", 3)
-    else
-        notify("Macro Playback", "Disabled", 3)
-        getgenv().MacroStatusText = "Idle"
-        getgenv().MacroWaitingText = ""
-        getgenv().MacroActionText = ""
-        getgenv().MacroUnitText = ""
-        clearMacroPlaybackState()
-        updateMacroStatus()
+Tabs.MacroControls:Toggle({
+    Flag = "MacroPlayToggle",
+    Title = "▶️ Play Macro",
+    Default = getgenv().MacroPlaying,
+    Callback = function(v)
+        getgenv().MacroPlaying = v
+        getgenv().Config.toggles.MacroPlayToggle = v
+        saveConfig(getgenv().Config)
+        
+        if v then
+            notify("Macro Playback", "Enabled - Will auto-play when game starts", 3)
+        else
+            notify("Macro Playback", "Disabled", 3)
+            getgenv().MacroStatusText = "Idle"
+            getgenv().MacroWaitingText = ""
+            getgenv().MacroActionText = ""
+            getgenv().MacroUnitText = ""
+            clearMacroPlaybackState()
+            updateMacroStatus()
+        end
     end
-end)
+})
 
 Tabs.MacroControls:Space()
 Tabs.MacroControls:Divider()
@@ -2145,16 +2135,56 @@ end)
 
 Tabs.MacroStatus:Paragraph({
     Title = "📊 Live Status",
-    Desc = "Real-time information about macro recording and playback."
+    Desc = "Real-time information about macro recording and playback. Status updates every second."
 })
 
 Tabs.MacroStatus:Space()
 
-MacroStatusLabel = Tabs.MacroStatus:Paragraph({ Title = "📊 Status: Idle", Desc = "" })
-MacroStepLabel = Tabs.MacroStatus:Paragraph({ Title = "📝 Step: 0/0", Desc = "" })
-MacroActionLabel = Tabs.MacroStatus:Paragraph({ Title = "⚡ Action: ", Desc = "" })
-MacroUnitLabel = Tabs.MacroStatus:Paragraph({ Title = "🗼 Unit: ", Desc = "" })
-MacroWaitingLabel = Tabs.MacroStatus:Paragraph({ Title = "⏳ Waiting: ", Desc = "" })
+local macroStatusSection = Tabs.MacroStatus:Section({ Title = "Current Status", Opened = true })
+
+task.spawn(function()
+    while true do
+        task.wait(1)
+        pcall(function()
+            if macroStatusSection and macroStatusSection.Destroy then
+                macroStatusSection:Destroy()
+            end
+            
+            macroStatusSection = Tabs.MacroStatus:Section({ Title = "Current Status", Opened = true })
+            
+            macroStatusSection:Paragraph({
+                Title = "📊 Status: " .. getgenv().MacroStatusText,
+                Desc = ""
+            })
+            
+            macroStatusSection:Paragraph({
+                Title = "📝 Step: " .. getgenv().MacroCurrentStep .. "/" .. getgenv().MacroTotalSteps,
+                Desc = ""
+            })
+            
+            if getgenv().MacroActionText ~= "" then
+                macroStatusSection:Paragraph({
+                    Title = "⚡ Action: " .. getgenv().MacroActionText,
+                    Desc = ""
+                })
+            end
+            
+            if getgenv().MacroUnitText ~= "" then
+                macroStatusSection:Paragraph({
+                    Title = "🗼 Unit: " .. getgenv().MacroUnitText,
+                    Desc = ""
+                })
+            end
+            
+            if getgenv().MacroWaitingText ~= "" then
+                macroStatusSection:Paragraph({
+                    Title = "⏳ Waiting: " .. getgenv().MacroWaitingText,
+                    Desc = ""
+                })
+            end
+        end)
+    end
+end)
 
 GB.Webhook_Left:Paragraph({
     Title = "Discord Notifications",
