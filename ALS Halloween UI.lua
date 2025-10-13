@@ -49,7 +49,7 @@ do
     if ok then
         WindUI = result
     else
-        WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Byorl/ALS-Scripts/refs/heads/main/ALS%20Halloween%20UI.lua"))()
+        WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Byorl/WindUI/refs/heads/main/main.lua"))()
     end
 end
 
@@ -3004,7 +3004,7 @@ task.spawn(function()
                     local maxRounds = getgenv().MaxSeamlessRounds or 4
                     print("[Seamless Fix] Endgame detected. Current seamless rounds: " .. endgameCount .. "/" .. maxRounds)
                     
-                    if endgameCount >= maxRounds then
+                    if endgameCount >= maxRounds and getgenv().SeamlessLimiterEnabled then
                         maxRoundsReached = true
                         if getSeamlessValue() then
                             task.wait(0.5)
