@@ -2887,7 +2887,6 @@ task.spawn(function()
                 if settings then
                     local seamless = settings:FindFirstChild("SeamlessRetry")
                     if seamless then 
-                        print("[Seamless Fix] SeamlessRetry.Value =", seamless.Value)
                         return seamless.Value 
                     else
                         print("[Seamless Fix] SeamlessRetry not found in Settings")
@@ -2917,8 +2916,6 @@ task.spawn(function()
                     setSeamlessRetry()
                     task.wait(0.5)
                     print("[Seamless Fix] Enabled Seamless Retry")
-                else
-                    print("[Seamless Fix] Seamless Retry already enabled")
                 end
             end
         end
