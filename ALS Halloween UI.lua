@@ -835,10 +835,33 @@ getgenv().MacroData = {}
 getgenv().TowerPlaceCounts = {}
 local placementMonitor = {}
 
-local mt = getrawmetatable(game)
-local old = mt.__namecall
-setreadonly(mt, false)
+local hookSuccess = false
+local mt, old
 
+pcall(function()
+    mt = getrawmetatable(game)
+    old = mt.__namecall
+    
+    local makeWritableSuccess = pcall(function()
+        setreadonly(mt, false)
+    end)
+    
+    if not makeWritableSuccess then
+        if make_writeable then
+            make_writeable(mt)
+        elseif setwriteable then
+            setwriteable(mt, true)
+        end
+    end
+    
+    hookSuccess = true
+end)
+
+if not hookSuccess then
+    warn("[Macro] Failed to hook metatable - recording may not work")
+end
+
+if hookSuccess then
 mt.__namecall = function(self, ...)
     local method, args = getnamecallmethod(), {...}
     local remoteName = tostring(self.Name or "")
@@ -957,7 +980,15 @@ mt.__namecall = function(self, ...)
     return result
 end
 
-setreadonly(mt, true)
+pcall(function()
+    setreadonly(mt, true)
+end)
+
+if not hookSuccess then
+    warn("[Macro] Metatable hook was not set up - macro recording will not work!")
+    warn("[Macro] This is usually caused by executor limitations or conflicts with other scripts")
+end
+end
 
 task.spawn(function()
     while true do
@@ -1996,11 +2027,11 @@ local function detectMacroProgress()
     local lastCompletedStep = 0
     
     pcall(function()
-        if not getgenv().CurrentMacro or not getgenv().Macros[getgenv().CurrentMacro] then
+        if not getgenv().CurrentMacro or not getgenv().MacroData then
             return
         end
         
-        local macroData = getgenv().Macros[getgenv().CurrentMacro]
+        local macroData = getgenv().MacroData
         if not macroData or #macroData == 0 then return end
         
         local towerStates = {}
@@ -2092,7 +2123,7 @@ addToggle(GB.Macro, "MacroPlayToggle", "▶️ Play Macro", getgenv().MacroPlayE
         getgenv().MacroPlayEnabled = val
         saveMacroSettings()
         if val then
-            if getgenv().CurrentMacro and getgenv().Macros[getgenv().CurrentMacro] then
+            if getgenv().CurrentMacro and getgenv().MacroData and #getgenv().MacroData > 0 then
                 task.spawn(function()
                     pcall(function()
                 getgenv().MacroStatusText = "Initializing"
