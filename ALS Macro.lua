@@ -776,15 +776,28 @@ local playToggle = Tabs.Main:Toggle({
                                     
                                     if afterLevel > beforeLevel then
                                         actionSuccess = true
-                                        print("[Macro] Success: " .. action.TowerName .. " upgraded from " .. beforeLevel .. " to " .. afterLevel)
-                                    elseif retryCount >= maxRetries - 1 then
-                                        print("[Macro] Warning: Upgrade level didn't increase after " .. retryCount .. " retries, moving on...")
-                                        actionSuccess = true
+                                        print("[Macro] ✓ Success: " .. action.TowerName .. " upgraded from Lv" .. beforeLevel .. " to Lv" .. afterLevel)
                                     else
-                                        print("[Macro] Warning: Upgrade level didn't increase for " .. action.TowerName .. " (Before: " .. beforeLevel .. ", After: " .. afterLevel .. ", Retry: " .. retryCount .. ")")
+                                        if retryCount >= maxRetries - 1 then
+                                            print("[Macro] ✗ FAILED: Upgrade didn't complete after " .. maxRetries .. " retries - SKIPPING STEP")
+                                            actionSuccess = true
+                                        else
+                                            print("[Macro] ⚠ Retry " .. (retryCount + 1) .. ": Upgrade level didn't increase for " .. action.TowerName .. " (Before: Lv" .. beforeLevel .. ", After: Lv" .. afterLevel .. ")")
+                                        end
                                     end
                                 end
                             else
+                                local towerName = action.TowerName or "Unknown"
+                                
+                                local countBefore = 0
+                                pcall(function()
+                                    for _, t in pairs(workspace.Towers:GetChildren()) do
+                                        if t.Name == towerName and t:FindFirstChild("Owner") and t.Owner.Value == LocalPlayer then
+                                            countBefore = countBefore + 1
+                                        end
+                                    end
+                                end)
+                                
                                 local args = {action.Args[1]}
                                 if action.Args[2] and type(action.Args[2]) == "table" then
                                     args[2] = CFrame.new(unpack(action.Args[2]))
@@ -792,16 +805,46 @@ local playToggle = Tabs.Main:Toggle({
                                     args[2] = action.Args[2]
                                 end
                                 
-                                print("[Macro] Placing: " .. (action.TowerName or "Unknown"))
+                                print("[Macro] Placing: " .. towerName .. " (Current count: " .. countBefore .. ")")
                                 
                                 if remote:IsA("RemoteFunction") then
                                     remote:InvokeServer(unpack(args))
                                 else
                                     remote:FireServer(unpack(args))
                                 end
-                                task.wait(0.1)
-                                actionSuccess = true
-                                print("[Macro] Success: Placed " .. (action.TowerName or "Unknown"))
+                                
+                                local placementWaitTime = 0
+                                local maxPlacementWait = 3
+                                local countAfter = countBefore
+                                
+                                while placementWaitTime < maxPlacementWait do
+                                    task.wait(0.1)
+                                    placementWaitTime = placementWaitTime + 0.1
+                                    
+                                    countAfter = 0
+                                    pcall(function()
+                                        for _, t in pairs(workspace.Towers:GetChildren()) do
+                                            if t.Name == towerName and t:FindFirstChild("Owner") and t.Owner.Value == LocalPlayer then
+                                                countAfter = countAfter + 1
+                                            end
+                                        end
+                                    end)
+                                    
+                                    if countAfter > countBefore then
+                                        actionSuccess = true
+                                        print("[Macro] Success: Placed " .. towerName .. " (New count: " .. countAfter .. ")")
+                                        break
+                                    end
+                                end
+                                
+                                if not actionSuccess then
+                                    if retryCount >= maxRetries - 1 then
+                                        print("[Macro] Warning: Placement failed after " .. retryCount .. " retries, moving on...")
+                                        actionSuccess = true
+                                    else
+                                        print("[Macro] Warning: Tower count didn't increase for " .. towerName .. " (Before: " .. countBefore .. ", After: " .. countAfter .. ", Retry: " .. retryCount .. ")")
+                                    end
+                                end
                             end
                         end)
                         
@@ -817,12 +860,14 @@ local playToggle = Tabs.Main:Toggle({
                         end
                     end
                     
-                    if not actionSuccess then
-                        print("[Macro] Warning: Action failed at step " .. step .. " - " .. (action.ActionType or "Unknown") .. ", skipping...")
+                    if actionSuccess then
+                        step = step + 1
+                        print("[Macro] ✓ Step " .. (step - 1) .. " completed, moving to step " .. step)
+                    else
+                        print("[Macro] ✗ CRITICAL: Step " .. step .. " failed verification - NOT MOVING TO NEXT STEP")
+                        print("[Macro] This should never happen - check the retry logic!")
+                        step = step + 1
                     end
-                    
-                    step = step + 1
-                    print("[Macro] Moving to step " .. step)
                     
                     if StepDelay > 0 then
                         task.wait(StepDelay)
