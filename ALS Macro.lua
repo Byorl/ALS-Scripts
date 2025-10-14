@@ -38,32 +38,35 @@ task.wait(1)
 local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
 
 local function shouldFilterMessage(msg)
-    local filters = {
-        "PlayerModule",
-        "CameraModule", 
-        "ZoomController",
-        "Popper",
-        "Poppercam",
-        "ImageLabel",
-        "not a valid member",
-        "is not a valid member",
-        "attempt to perform arithmetic",
-        "PlayerScripts%.Player",
-        "byorials",
-    }
+    local msgLower = msg:lower()
     
-    for _, filter in ipairs(filters) do
-        if msg:find(filter) then
-            return true
-        end
+    if msgLower:find("playermodule") 
+        or msgLower:find("cameramodule") 
+        or msgLower:find("zoomcontroller")
+        or msgLower:find("popper")
+        or msgLower:find("poppercam")
+        or msgLower:find("imagelabel")
+        or msgLower:find("not a valid member")
+        or msgLower:find("is not a valid member")
+        or msgLower:find("attempt to perform arithmetic")
+        or msgLower:find("playerscripts")
+        or msgLower:find("byorials")
+        or msgLower:find("stack begin")
+        or msgLower:find("stack end") then
+        return true
     end
+    
     return false
 end
 
 local oldLogWarn = logwarn or warn
 local oldWarn = warn
 local function filteredWarn(...)
-    local msg = tostring(...)
+    local args = {...}
+    local msg = ""
+    for i, v in ipairs(args) do
+        msg = msg .. tostring(v)
+    end
     if not shouldFilterMessage(msg) then
         oldLogWarn(...)
     end
@@ -73,7 +76,11 @@ warn = filteredWarn
 
 local oldLogError = logerror or error
 local function filteredError(...)
-    local msg = tostring(...)
+    local args = {...}
+    local msg = ""
+    for i, v in ipairs(args) do
+        msg = msg .. tostring(v)
+    end
     if not shouldFilterMessage(msg) then
         oldLogError(...)
     end
@@ -83,21 +90,31 @@ if logerror then logerror = filteredError end
 local LogService = game:GetService("LogService")
 local ScriptContext = game:GetService("ScriptContext")
 
+local messageConnection
 pcall(function()
-    ScriptContext.Error:Connect(function(message, stackTrace, script)
-        if shouldFilterMessage(message) or shouldFilterMessage(stackTrace or "") then
-            return
-        end
-    end)
-end)
-
-pcall(function()
-    LogService.MessageOut:Connect(function(message, messageType)
+    messageConnection = LogService.MessageOut:Connect(function(message, messageType)
         if shouldFilterMessage(message) then
             return
         end
     end)
 end)
+
+local errorConnection
+pcall(function()
+    errorConnection = ScriptContext.Error:Connect(function(message, stackTrace, script)
+        local fullMsg = message .. " " .. (stackTrace or "")
+        if shouldFilterMessage(fullMsg) then
+            return
+        end
+    end)
+end)
+
+setthreadidentity = setthreadidentity or set_thread_identity or setidentity or syn and syn.set_thread_identity
+if setthreadidentity then
+    pcall(function()
+        setthreadidentity(2)
+    end)
+end
 
 local RS = game:GetService("ReplicatedStorage")
 local HttpService = game:GetService("HttpService")
@@ -641,7 +658,6 @@ local playToggle = Tabs.Main:Toggle({
                     while playing do
                         if hasStartButton() then
                             shouldRestart = true
-                            print("[Macro] Starting Macro/Restart detected - Start button appeared")
                         end
                         task.wait()
                     end
