@@ -3094,12 +3094,18 @@ task.spawn(function()
         
         local function enableSeamlessIfNeeded()
             if not getgenv().SeamlessLimiterEnabled then return end
-            if maxRoundsReached then 
-                return 
-            end
-            if endgameCount < (getgenv().MaxSeamlessRounds or 4) then
+            local maxRounds = getgenv().MaxSeamlessRounds or 4
+            
+            if endgameCount < maxRounds then
                 if not getSeamlessValue() then
                     setSeamlessRetry()
+                    print("[Seamless Fix] Enabled Seamless Retry (" .. endgameCount .. "/" .. maxRounds .. ")")
+                    task.wait(0.5)
+                end
+            elseif endgameCount >= maxRounds then
+                if getSeamlessValue() then
+                    setSeamlessRetry()
+                    print("[Seamless Fix] Disabled Seamless Retry - Max rounds reached (" .. endgameCount .. "/" .. maxRounds .. ")")
                     task.wait(0.5)
                 end
             end
@@ -3134,15 +3140,44 @@ task.spawn(function()
                     
                     if endgameCount >= maxRounds and getgenv().SeamlessLimiterEnabled then
                         maxRoundsReached = true
+                        print("[Seamless Fix] Max rounds reached, disabling seamless retry to restart match...")
+                        task.wait(0.5)
                         if getSeamlessValue() then
-                            task.wait(0.5)
                             setSeamlessRetry()
-                            print("[Seamless Fix] Max rounds reached, disabling seamless retry to restart match...")
-                            task.wait(0.5)
                             print("[Seamless Fix] Disabled Seamless Retry")
+                            task.wait(0.5)
                         else
-                            print("[Seamless Fix] Max rounds reached but seamless already disabled")
+                            print("[Seamless Fix] Seamless already disabled")
                         end
+                        
+                        task.spawn(function()
+                            print("[Seamless Fix] Waiting for EndGameUI to close...")
+                            local maxWait = 0
+                            while LocalPlayer.PlayerGui:FindFirstChild("EndGameUI") and maxWait < 30 do
+                                task.wait(0.5)
+                                maxWait = maxWait + 0.5
+                            end
+                            
+                            if not LocalPlayer.PlayerGui:FindFirstChild("EndGameUI") then
+                                print("[Seamless Fix] EndGameUI closed, firing RestartMatch...")
+                                task.wait(0.5)
+                                local success, err = pcall(function()
+                                    local remotes = RS:FindFirstChild("Remotes")
+                                    local restartEvent = remotes and remotes:FindFirstChild("RestartMatch")
+                                    if restartEvent then
+                                        restartEvent:FireServer()
+                                        print("[Seamless Fix] RestartMatch fired successfully")
+                                    else
+                                        warn("[Seamless Fix] RestartMatch not found")
+                                    end
+                                end)
+                                if not success then
+                                    warn("[Seamless Fix] Failed to fire RestartMatch: " .. tostring(err))
+                                end
+                            else
+                                warn("[Seamless Fix] EndGameUI did not close in time, skipping restart")
+                            end
+                        end)
                     end
                 end
             end)
