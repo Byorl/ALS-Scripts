@@ -194,19 +194,33 @@ local function cacheTowerInfo()
 end
 
 local function cacheRemotes()
-    if next(RemoteCache) then return end
+    if next(RemoteCache) then return true end
     for _, v in pairs(RS:GetDescendants()) do
         if v:IsA("RemoteEvent") or v:IsA("RemoteFunction") then
             RemoteCache[v.Name:lower()] = v
         end
     end
-    print("[Macro] Cached " .. tostring(#RemoteCache) .. " remotes")
+    local count = 0
+    for _ in pairs(RemoteCache) do count = count + 1 end
+    print("[Macro] Cached " .. count .. " remotes")
+    return count > 0
+end
+
+local function ensureCachesReady()
+    cacheTowerInfo()
+    local attempts = 0
+    while not cacheRemotes() and attempts < 10 do
+        task.wait(0.5)
+        attempts = attempts + 1
+    end
+    if attempts >= 10 then
+        warn("[Macro] Warning: Remote cache may be incomplete")
+    end
 end
 
 task.spawn(function()
     task.wait(2)
-    cacheTowerInfo()
-    cacheRemotes()
+    ensureCachesReady()
 end)
 
 local cashTrackingActive = false
@@ -622,10 +636,92 @@ local playToggle = Tabs.Main:Toggle({
                     return hasStart
                 end
                 
-                StatusText = "Waiting for Start"
-                WaitingText = ""
+                local function detectMacroProgress()
+                    local towerStates = {}
+                    pcall(function()
+                        for _, tower in pairs(workspace.Towers:GetChildren()) do
+                            if tower:FindFirstChild("Owner") and tower.Owner.Value == LocalPlayer then
+                                local towerName = tower.Name
+                                local upgradeLevel = tower:FindFirstChild("Upgrade") and tower.Upgrade.Value or 0
+                                
+                                if not towerStates[towerName] then
+                                    towerStates[towerName] = {count = 0, levels = {}}
+                                end
+                                towerStates[towerName].count = towerStates[towerName].count + 1
+                                table.insert(towerStates[towerName].levels, upgradeLevel)
+                            end
+                        end
+                    end)
+                    
+                    local placedTowers = {}
+                    local towerUpgrades = {}
+                    
+                    for i, action in ipairs(macroData) do
+                        if action.ActionType == "Place" and action.TowerName then
+                            placedTowers[action.TowerName] = (placedTowers[action.TowerName] or 0) + 1
+                        elseif action.ActionType == "Upgrade" and action.TowerName then
+                            if not towerUpgrades[action.TowerName] then
+                                towerUpgrades[action.TowerName] = {}
+                            end
+                            table.insert(towerUpgrades[action.TowerName], i)
+                        end
+                    end
+                    
+                    local lastCompletedStep = 0
+                    
+                    for i, action in ipairs(macroData) do
+                        if action.ActionType == "Place" and action.TowerName then
+                            local expectedCount = 0
+                            for j = 1, i do
+                                if macroData[j].ActionType == "Place" and macroData[j].TowerName == action.TowerName then
+                                    expectedCount = expectedCount + 1
+                                end
+                            end
+                            
+                            local actualCount = towerStates[action.TowerName] and towerStates[action.TowerName].count or 0
+                            
+                            if actualCount < expectedCount then
+                                break
+                            end
+                            
+                            lastCompletedStep = i
+                        elseif action.ActionType == "Upgrade" and action.TowerName then
+                            local towerName = action.TowerName
+                            
+                            if not towerStates[towerName] or towerStates[towerName].count == 0 then
+                                break
+                            end
+                            
+                            local expectedUpgrades = 0
+                            for j = 1, i do
+                                if macroData[j].ActionType == "Upgrade" and macroData[j].TowerName == towerName then
+                                    expectedUpgrades = expectedUpgrades + 1
+                                end
+                            end
+                            
+                            local actualLevel = towerStates[towerName].levels[1] or 0
+                            
+                            if actualLevel < expectedUpgrades then
+                                break
+                            end
+                            
+                            lastCompletedStep = i
+                        end
+                    end
+                    
+                    return lastCompletedStep
+                end
+                
+                StatusText = "Initializing"
+                WaitingText = "Caching remotes..."
                 ActionText = ""
                 UnitText = ""
+                updateStatus()
+                
+                ensureCachesReady()
+                
+                StatusText = "Waiting for Start"
+                WaitingText = ""
                 updateStatus()
                 
                 repeat task.wait(0.1) until not hasStartButton() or not playing
@@ -633,6 +729,13 @@ local playToggle = Tabs.Main:Toggle({
                 
                 pcall(function() lastWave = RS.Wave.Value end)
                 task.wait(0.5)
+                
+                local resumeStep = detectMacroProgress()
+                if resumeStep > 0 then
+                    step = resumeStep + 1
+                    notify("Auto-Resume", "Resuming from step " .. step .. "/" .. #macroData, 4)
+                    print("[Macro] Auto-resumed from step " .. step .. " based on game state")
+                end
                 
                 while playing do
                     if step > #macroData then
