@@ -1829,7 +1829,7 @@ getgenv().MacroDropdown = nil
 getgenv().TotalSteps = 0
 
 pcall(function()
-    getgenv().MacroDropdown = GB.Macro:AddDropdown("MacroSelect", {
+    local dropdown = GB.Macro:AddDropdown("MacroSelect", {
         Text = "Select Macro",
         Values = getMacroNames(),
         Default = getgenv().CurrentMacro,
@@ -1849,6 +1849,15 @@ pcall(function()
             end)
         end
     })
+    
+    getgenv().MacroDropdown = dropdown
+    
+    -- Debug: verify dropdown has Refresh method
+    if dropdown and type(dropdown.Refresh) == "function" then
+        print("[Macro] Dropdown created successfully with Refresh method")
+    else
+        warn("[Macro] Dropdown missing Refresh method!")
+    end
 end)
 
 pcall(function()
@@ -1886,11 +1895,30 @@ pcall(function()
     GB.Macro:AddButton("Refresh Macro List", function()
         pcall(function()
             loadMacros()
-            local macroNames = getMacroNames()
-            if getgenv().MacroDropdown and getgenv().MacroDropdown.SetValues then
-                getgenv().MacroDropdown:SetValues(macroNames)
+            local newMacroNames = getMacroNames()
+            
+            print("[Macro] Loaded macros:", table.concat(newMacroNames, ", "))
+            print("[Macro] MacroDropdown exists:", getgenv().MacroDropdown ~= nil)
+            
+            if getgenv().MacroDropdown then
+                print("[Macro] MacroDropdown type:", type(getgenv().MacroDropdown))
+                print("[Macro] Has Refresh method:", type(getgenv().MacroDropdown.Refresh))
+                
+                local success, err = pcall(function()
+                    getgenv().MacroDropdown:Refresh(newMacroNames)
+                    print("[Macro] Refresh called successfully")
+                end)
+                
+                if not success then
+                    warn("[Macro] Refresh failed:", err)
+                    notify("Refresh Error", tostring(err), 5)
+                else
+                    notify("Macro List", "Refreshed (" .. #newMacroNames .. " macros)", 3)
+                end
+            else
+                warn("[Macro] MacroDropdown is nil")
+                notify("Error", "Dropdown not found - try reloading UI", 3)
             end
-            notify("Macro List", "Refreshed (" .. #macroNames .. " macros)", 3)
         end)
     end)
 end)
