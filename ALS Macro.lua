@@ -621,6 +621,7 @@ local playToggle = Tabs.Main:Toggle({
             task.spawn(function()
                 local step = 1
                 local lastWave = 0
+                local shouldRestart = false
                 
                 local function hasStartButton()
                     local hasStart = false
@@ -635,6 +636,16 @@ local playToggle = Tabs.Main:Toggle({
                     end)
                     return hasStart
                 end
+                
+                task.spawn(function()
+                    while playing do
+                        if hasStartButton() then
+                            shouldRestart = true
+                            print("[Macro] Restart detected - Start button appeared")
+                        end
+                        task.wait()
+                    end
+                end)
                 
                 local function detectMacroProgress()
                     local towerStates = {}
@@ -738,6 +749,24 @@ local playToggle = Tabs.Main:Toggle({
                 end
                 
                 while playing do
+                    if shouldRestart then
+                        StatusText = "Restart Detected"
+                        WaitingText = "Waiting for start..."
+                        ActionText = ""
+                        UnitText = ""
+                        updateStatus()
+                        
+                        repeat task.wait() until not hasStartButton() or not playing
+                        if not playing then break end
+                        
+                        shouldRestart = false
+                        step = 1
+                        task.wait(0.5)
+                        notify("Game Restarted", "Macro restarting from step 1", 3)
+                        print("[Macro] Restarted macro due to game restart")
+                        continue
+                    end
+                    
                     if step > #macroData then
                         StatusText = "Waiting Next Round"
                         WaitingText = ""
