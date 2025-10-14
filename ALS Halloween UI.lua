@@ -288,7 +288,7 @@ local function createObsidianCompat()
                 return function(_, opts)
                     return self._wnd:Section(opts)
                 end
-            el
+            else
                 return self._wnd[k]
             end
         end
