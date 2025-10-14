@@ -628,14 +628,18 @@ getgenv().MacroStepDelay = savedMacroSettings.stepDelay or 0
 getgenv().CurrentMacro = savedMacroSettings.selectedMacro
 getgenv().MacroPlayEnabled = savedMacroSettings.playMacroEnabled or false
 
+print("[Macro] Loaded settings - CurrentMacro:", getgenv().CurrentMacro)
+
 loadMacros()
 
 if getgenv().CurrentMacro and getgenv().Macros[getgenv().CurrentMacro] then
     getgenv().MacroData = getgenv().Macros[getgenv().CurrentMacro]
     getgenv().TotalSteps = #getgenv().MacroData
+    print("[Macro] Loaded MacroData for", getgenv().CurrentMacro, "- Steps:", getgenv().TotalSteps)
 else
     getgenv().MacroData = {}
     getgenv().TotalSteps = 0
+    print("[Macro] No macro data loaded - CurrentMacro:", getgenv().CurrentMacro)
 end
 
 getgenv().LoadMacroSettings = loadMacroSettings
@@ -831,7 +835,9 @@ task.spawn(function()
 end)
 
 getgenv().MacroRecording = false
-getgenv().MacroData = {}
+if not getgenv().MacroData then
+    getgenv().MacroData = {}
+end
 getgenv().TowerPlaceCounts = {}
 local placementMonitor = {}
 
@@ -1874,6 +1880,9 @@ pcall(function()
         Default = getgenv().CurrentMacro,
         Callback = function(value)
             pcall(function()
+                print("[Macro] Dropdown callback triggered for:", value)
+                print("[Macro] MacroData before callback:", getgenv().MacroData and #getgenv().MacroData or "nil")
+                
                 getgenv().CurrentMacro = value
                 if value and getgenv().Macros[value] then
                     getgenv().MacroData = getgenv().Macros[value]
@@ -1882,6 +1891,8 @@ pcall(function()
                     getgenv().MacroCurrentStep = 0
                     getgenv().UpdateMacroStatus()
                     saveMacroSettings()
+                    
+                    print("[Macro] MacroData after callback:", #getgenv().MacroData)
                     notify("Macro Selected", value .. " (" .. getgenv().TotalSteps .. " steps)", 3)
                 else
                     getgenv().MacroData = {}
@@ -1904,9 +1915,10 @@ pcall(function()
 end)
 
 pcall(function()
-    GB.Macro:AddInput("MacroCreate", {
+    local createInput = GB.Macro:AddInput("MacroCreate", {
         Text = "Create New Macro",
         Placeholder = "Enter macro name...",
+        Finished = true,
         Callback = function(value)
             pcall(function()
                 if value and value ~= "" then
@@ -1921,6 +1933,7 @@ pcall(function()
                     getgenv().CurrentMacro = value
                     getgenv().MacroData = {}
                     getgenv().TotalSteps = 0
+                    getgenv().MacroTotalSteps = 0
                     
                     if getgenv().MacroDropdown and getgenv().MacroDropdown.SetValue then
                         getgenv().MacroDropdown:SetValue(value)
@@ -1928,10 +1941,22 @@ pcall(function()
                     
                     saveMacroSettings()
                     notify("Macro Created", value, 3)
+                    
+                    if createInput and createInput.Set then
+                        task.spawn(function()
+                            task.wait(0.1)
+                            pcall(function()
+                                createInput:Set("")
+                            end)
+                        end)
+                    end
                 end
             end)
         end
     })
+    
+    getgenv().Config.inputs.MacroCreate = nil
+    saveConfig(getgenv().Config)
 end)
 
 pcall(function()
@@ -2122,8 +2147,15 @@ addToggle(GB.Macro, "MacroPlayToggle", "▶️ Play Macro", getgenv().MacroPlayE
         if isKilled() then return end
         getgenv().MacroPlayEnabled = val
         saveMacroSettings()
+        
+        print("[Macro] Play toggle changed to:", val)
+        print("[Macro] CurrentMacro:", getgenv().CurrentMacro)
+        print("[Macro] MacroData exists:", getgenv().MacroData ~= nil)
+        print("[Macro] MacroData length:", getgenv().MacroData and #getgenv().MacroData or 0)
+        
         if val then
             if getgenv().CurrentMacro and getgenv().MacroData and #getgenv().MacroData > 0 then
+                print("[Macro] Starting playback...")
                 task.spawn(function()
                     pcall(function()
                 getgenv().MacroStatusText = "Initializing"
@@ -2403,8 +2435,12 @@ addToggle(GB.Macro, "MacroPlayToggle", "▶️ Play Macro", getgenv().MacroPlayE
                     end)
                 end)
             else
+                print("[Macro] Cannot start playback - missing requirements")
+                print("[Macro] CurrentMacro:", getgenv().CurrentMacro or "nil")
+                print("[Macro] MacroData:", getgenv().MacroData and "exists" or "nil")
+                print("[Macro] MacroData length:", getgenv().MacroData and #getgenv().MacroData or 0)
                 getgenv().MacroPlayEnabled = false
-                notify("Playback", "No macro selected", 3)
+                notify("Playback", "No macro selected or macro is empty", 3)
             end
         else
             getgenv().MacroStatusText = "Idle"
@@ -2419,6 +2455,281 @@ addToggle(GB.Macro, "MacroPlayToggle", "▶️ Play Macro", getgenv().MacroPlayE
         end
     end)
 end)
+
+if getgenv().MacroPlayEnabled and getgenv().CurrentMacro and getgenv().MacroData and #getgenv().MacroData > 0 then
+    task.spawn(function()
+        task.wait(1)
+        if getgenv().MacroPlayEnabled and not isKilled() then
+            notify("Auto-Start", "Resuming macro playback: " .. getgenv().CurrentMacro, 3)
+            
+            task.spawn(function()
+                pcall(function()
+                    getgenv().MacroStatusText = "Initializing"
+                    getgenv().MacroCurrentStep = 0
+                    getgenv().MacroTotalSteps = getgenv().TotalSteps or 0
+                    getgenv().MacroActionText = "Preparing..."
+                    getgenv().MacroUnitText = ""
+                    getgenv().MacroWaitingText = ""
+                    getgenv().UpdateMacroStatus()
+                    
+                    getgenv().MacroActionText = "Loading caches..."
+                    getgenv().UpdateMacroStatus()
+                    ensureCachesReady()
+                    
+                    getgenv().MacroActionText = "Waiting for game start..."
+                    getgenv().UpdateMacroStatus()
+                    
+                    local waitStartTime = tick()
+                    while hasStartButton() and getgenv().MacroPlayEnabled and not isKilled() do
+                        task.wait(0.1)
+                        local elapsed = math.floor(tick() - waitStartTime)
+                        getgenv().MacroWaitingText = elapsed .. "s"
+                        getgenv().UpdateMacroStatus()
+                    end
+                    
+                    if isKilled() or not getgenv().MacroPlayEnabled then
+                        getgenv().MacroStatusText = "Idle"
+                        getgenv().MacroActionText = ""
+                        getgenv().MacroWaitingText = ""
+                        getgenv().UpdateMacroStatus()
+                        return
+                    end
+                    
+                    getgenv().MacroActionText = "Detecting progress..."
+                    getgenv().MacroWaitingText = ""
+                    getgenv().UpdateMacroStatus()
+                    
+                    local resumeStep = detectMacroProgress()
+                    
+                    if resumeStep > 0 then
+                        getgenv().MacroCurrentStep = resumeStep + 1
+                        notify("Auto-Resume", "Resuming from step " .. (resumeStep + 1), 5)
+                    else
+                        getgenv().MacroCurrentStep = 1
+                    end
+                    
+                    getgenv().MacroStatusText = "Playing"
+                    getgenv().MacroActionText = "Ready"
+                    getgenv().UpdateMacroStatus()
+                    
+                    local step = getgenv().MacroCurrentStep or 1
+                    local macroData = getgenv().MacroData
+                    local shouldRestart = false
+                    local lastWave = 0
+                    
+                    pcall(function()
+                        lastWave = RS.Wave.Value
+                    end)
+                    
+                    task.spawn(function()
+                        while getgenv().MacroPlayEnabled and not isKilled() do
+                            if hasStartButton() then
+                                shouldRestart = true
+                            end
+                            task.wait()
+                        end
+                        if isKilled() then
+                            getgenv().MacroPlayEnabled = false
+                        end
+                    end)
+                    
+                    while getgenv().MacroPlayEnabled and not isKilled() do
+                        if isKilled() then
+                            getgenv().MacroPlayEnabled = false
+                            break
+                        end
+                        
+                        if shouldRestart then
+                            getgenv().MacroStatusText = "Starting Macro/Restart Detected"
+                            getgenv().MacroWaitingText = "Waiting for start..."
+                            getgenv().MacroActionText = ""
+                            getgenv().MacroUnitText = ""
+                            getgenv().UpdateMacroStatus()
+                            
+                            repeat 
+                                task.wait() 
+                            until not hasStartButton() or not getgenv().MacroPlayEnabled or isKilled()
+                            
+                            if not getgenv().MacroPlayEnabled or isKilled() then break end
+                            
+                            shouldRestart = false
+                            step = 1
+                            task.wait(0.5)
+                            notify("Game Restarted", "Macro restarting from step 1", 3)
+                            continue
+                        end
+                        
+                        if step > #macroData then
+                            getgenv().MacroStatusText = "Waiting Next Round"
+                            getgenv().MacroWaitingText = ""
+                            getgenv().MacroActionText = ""
+                            getgenv().MacroUnitText = ""
+                            getgenv().UpdateMacroStatus()
+                            
+                            local currentWave = 0
+                            repeat
+                                task.wait(0.1)
+                                
+                                if isKilled() then
+                                    getgenv().MacroPlayEnabled = false
+                                    break
+                                end
+                                
+                                pcall(function() 
+                                    currentWave = RS.Wave.Value 
+                                end)
+                                
+                                if currentWave < lastWave and not hasStartButton() then
+                                    lastWave = currentWave
+                                    step = 1
+                                    task.wait(0.5)
+                                    notify("Seamless Retry", "Restarting macro...", 2)
+                                    break
+                                end
+                                
+                                lastWave = currentWave
+                            until not getgenv().MacroPlayEnabled or isKilled()
+                            
+                            if not getgenv().MacroPlayEnabled or isKilled() then break end
+                            continue
+                        end
+                        
+                        local action = macroData[step]
+                        
+                        if not action then
+                            step = step + 1
+                            continue
+                        end
+                        
+                        getgenv().MacroCurrentStep = step
+                        getgenv().MacroTotalSteps = #macroData
+                        
+                        local cash = getgenv().MacroCurrentCash or 0
+                        local actionCost = action.Cost or 0
+                        
+                        if actionCost > 0 and cash < actionCost then
+                            if isKilled() then
+                                getgenv().MacroPlayEnabled = false
+                                break
+                            end
+                            
+                            if not action.waitStartTime then
+                                action.waitStartTime = tick()
+                            end
+                            
+                            local waitTime = tick() - action.waitStartTime
+                            
+                            getgenv().MacroStatusText = "Waiting Cash"
+                            getgenv().MacroWaitingText = "$" .. actionCost .. " (" .. math.floor(waitTime) .. "s)"
+                            getgenv().MacroActionText = action.ActionType or "Action"
+                            getgenv().MacroUnitText = action.TowerName or "?"
+                            getgenv().UpdateMacroStatus()
+                            
+                            RunService.Heartbeat:Wait()
+                            continue
+                        end
+                        
+                        action.waitStartTime = nil
+                        
+                        getgenv().MacroStatusText = "Playing"
+                        getgenv().MacroWaitingText = ""
+                        getgenv().MacroActionText = action.ActionType or "Action"
+                        getgenv().MacroUnitText = action.TowerName or "?"
+                        getgenv().UpdateMacroStatus()
+                        
+                        local function isAutoUpgradeClone(towerName)
+                            return towerName == "NarutoBaryonClone" or towerName == "WukongClone"
+                        end
+                        
+                        if action.TowerName and action.ActionType == "Upgrade" and isAutoUpgradeClone(action.TowerName) then
+                            step = step + 1
+                            continue
+                        end
+                        
+                        pcall(function()
+                            if not action.RemoteName then
+                                return
+                            end
+                            
+                            local remote = getgenv().MacroRemoteCache[action.RemoteName:lower()]
+                            if not remote then 
+                                return 
+                            end
+                            
+                            if action.RemoteName:lower():find("upgrade") then
+                                local towerToUpgrade = nil
+                                
+                                for _, t in pairs(workspace.Towers:GetChildren()) do
+                                    if t:FindFirstChild("Owner") and t.Owner.Value == LocalPlayer and t.Name == action.TowerName then
+                                        towerToUpgrade = t
+                                        break
+                                    end
+                                end
+                                
+                                if not towerToUpgrade then
+                                    return
+                                end
+                                
+                                local beforeLevel = towerToUpgrade:FindFirstChild("Upgrade") and towerToUpgrade.Upgrade.Value or 0
+                                local maxLevel = towerToUpgrade:FindFirstChild("MaxUpgrade") and towerToUpgrade.MaxUpgrade.Value or 999
+                                
+                                if beforeLevel >= maxLevel then
+                                    return
+                                end
+                                
+                                if remote:IsA("RemoteFunction") then
+                                    remote:InvokeServer(towerToUpgrade)
+                                else
+                                    remote:FireServer(towerToUpgrade)
+                                end
+                                
+                                task.wait(0.3)
+                                
+                            else
+                                local towerName = action.TowerName or "Unknown"
+                                
+                                local args = {action.Args[1]}
+                                if action.Args[2] and type(action.Args[2]) == "table" then
+                                    args[2] = CFrame.new(unpack(action.Args[2]))
+                                else
+                                    args[2] = action.Args[2]
+                                end
+                                
+                                if remote:IsA("RemoteFunction") then
+                                    remote:InvokeServer(unpack(args))
+                                else
+                                    remote:FireServer(unpack(args))
+                                end
+                                
+                                task.wait(0.3)
+                            end
+                        end)
+                        
+                        step = step + 1
+                        
+                        local stepDelay = getgenv().MacroStepDelay or 0
+                        if stepDelay > 0 then
+                            task.wait(stepDelay * MOBILE_DELAY_MULTIPLIER)
+                        else
+                            task.wait(0.15 * MOBILE_DELAY_MULTIPLIER)
+                        end
+                    end
+                    
+                    getgenv().MacroCurrentStep = 0
+                    getgenv().MacroStatusText = "Idle"
+                    getgenv().MacroActionText = ""
+                    getgenv().MacroUnitText = ""
+                    getgenv().MacroWaitingText = ""
+                    getgenv().UpdateMacroStatus()
+                    
+                    if step > #macroData then
+                        notify("Playback Finished", getgenv().CurrentMacro, 3)
+                    end
+                end)
+            end)
+        end
+    end)
+end
 
 GB.Macro:Space()
 GB.Macro:Section({ Title = "⚙️ Playback Settings" })
