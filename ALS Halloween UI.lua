@@ -499,7 +499,8 @@ getgenv().FinalExpAutoSkipShopEnabled = getgenv().Config.toggles.FinalExpAutoSki
 
 getgenv().MacroEnabled = getgenv().Config.toggles.MacroToggle or false
 
-if getgenv().MacroEnabled then
+if getgenv().MacroEnabled and not getgenv()._MacroExecuted then
+    getgenv()._MacroExecuted = true
     task.spawn(function()
         task.wait(5)
         local success, err = pcall(function()
@@ -511,6 +512,8 @@ if getgenv().MacroEnabled then
             warn("[ALS] Macro auto-execution failed: " .. tostring(err))
         end
     end)
+elseif getgenv().MacroEnabled and getgenv()._MacroExecuted then
+    print("[ALS] Macro already executed, skipping duplicate execution")
 end
 
 getgenv().AutoExecuteEnabled = getgenv().Config.toggles.AutoExecuteToggle or false
@@ -1873,6 +1876,11 @@ GB.Settings_Left:Divider({ Title = "🎯 Macro Settings" })
 getgenv().MacroEnabled = getgenv().Config.toggles.MacroToggle or false
 
 local function executeMacro()
+    if getgenv()._MacroExecuted then
+        notify("Macro", "Already executed, skipping duplicate", 3)
+        return
+    end
+    getgenv()._MacroExecuted = true
     local success, err = pcall(function()
         loadstring(game:HttpGet("https://raw.githubusercontent.com/Byorl/ALS-Scripts/refs/heads/main/ALS%20Macro.lua"))()
     end)
