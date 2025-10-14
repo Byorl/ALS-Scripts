@@ -38,14 +38,32 @@ task.wait(1)
 local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
 
 local oldLogWarn = logwarn or warn
+local oldWarn = warn
 local function filteredWarn(...)
     local msg = tostring(...)
-    if not (msg:find("ImageLabel") or msg:find("not a valid member") or msg:find("is not a valid member")) then
+    if not (msg:find("ImageLabel") 
+        or msg:find("not a valid member") 
+        or msg:find("is not a valid member")
+        or msg:find("PlayerModule")
+        or msg:find("CameraModule")
+        or msg:find("ZoomController")
+        or msg:find("Camera")) then
         oldLogWarn(...)
     end
 end
 if logwarn then logwarn = filteredWarn end
 warn = filteredWarn
+
+local oldLogError = logerror or error
+local function filteredError(...)
+    local msg = tostring(...)
+    if not (msg:find("PlayerModule")
+        or msg:find("CameraModule")
+        or msg:find("ZoomController")) then
+        oldLogError(...)
+    end
+end
+if logerror then logerror = filteredError end
 
 local RS = game:GetService("ReplicatedStorage")
 local HttpService = game:GetService("HttpService")
@@ -56,7 +74,6 @@ local MACRO_FOLDER = CONFIG_FOLDER .. "/macros"
 if not isfolder(CONFIG_FOLDER) then makefolder(CONFIG_FOLDER) end
 if not isfolder(MACRO_FOLDER) then makefolder(MACRO_FOLDER) end
 
-local STATE_FILE = MACRO_FOLDER .. "/playback_state.json"
 local SETTINGS_FILE = MACRO_FOLDER .. "/settings.json"
 
 local Macros = {}
@@ -65,7 +82,6 @@ local recording = false
 local playing = false
 local macroData = {}
 local StepDelay = 0
-local resumeFromStep = 0
 
 local StatusText = "Idle"
 local ActionText = ""
@@ -242,34 +258,7 @@ local function saveMacro(name, data)
     return success
 end
 
-local function savePlaybackState(macroName, currentStep)
-    pcall(function()
-        local state = {
-            macro = macroName,
-            step = currentStep,
-            timestamp = tick()
-        }
-        writefile(STATE_FILE, HttpService:JSONEncode(state))
-    end)
-end
 
-local function loadPlaybackState()
-    local state = nil
-    pcall(function()
-        if isfile(STATE_FILE) then
-            state = HttpService:JSONDecode(readfile(STATE_FILE))
-        end
-    end)
-    return state
-end
-
-local function clearPlaybackState()
-    pcall(function()
-        if isfile(STATE_FILE) then
-            delfile(STATE_FILE)
-        end
-    end)
-end
 
 local function isAutoUpgradeClone(towerName)
     local autoUpgradeClones = {
@@ -578,17 +567,10 @@ local playToggle = Tabs.Main:Toggle({
                 return
             end
             
-            local savedState = loadPlaybackState()
-            if savedState and savedState.macro == CurrentMacro and (tick() - savedState.timestamp) < 300 then
-                resumeFromStep = savedState.step
-                notify("Resuming Playback", CurrentMacro .. " from step " .. resumeFromStep, 4)
-            else
-                resumeFromStep = 0
-                notify("Playback Started", CurrentMacro, 3)
-            end
+            notify("Playback Started", CurrentMacro, 3)
             
             task.spawn(function()
-                local step = resumeFromStep > 0 and resumeFromStep or 1
+                local step = 1
                 local lastWave = 0
                 
                 local function hasStartButton()
@@ -605,23 +587,17 @@ local playToggle = Tabs.Main:Toggle({
                     return hasStart
                 end
                 
-                if resumeFromStep == 0 then
-                    StatusText = "Waiting for Start"
-                    WaitingText = ""
-                    ActionText = ""
-                    UnitText = ""
-                    updateStatus()
-                    
-                    repeat task.wait(0.1) until not hasStartButton() or not playing
-                    if not playing then return end
-                    
-                    pcall(function() lastWave = RS.Wave.Value end)
-                    task.wait(0.5)
-                else
-                    StatusText = "Resuming"
-                    updateStatus()
-                    task.wait(0.5)
-                end
+                StatusText = "Waiting for Start"
+                WaitingText = ""
+                ActionText = ""
+                UnitText = ""
+                updateStatus()
+                
+                repeat task.wait(0.1) until not hasStartButton() or not playing
+                if not playing then return end
+                
+                pcall(function() lastWave = RS.Wave.Value end)
+                task.wait(0.5)
                 
                 while playing or (seamlessMode and autoReplayOnRestart) do
                     if step > #macroData then
@@ -663,8 +639,6 @@ local playToggle = Tabs.Main:Toggle({
                     
                     CurrentStep = step
                     TotalSteps = #macroData
-                    
-                    savePlaybackState(CurrentMacro, step)
                                         
                     local cash = 0
                     pcall(function() cash = LocalPlayer.Cash.Value end)
@@ -894,7 +868,6 @@ local playToggle = Tabs.Main:Toggle({
                 ActionText = ""
                 UnitText = ""
                 WaitingText = ""
-                clearPlaybackState()
                 updateStatus()
                 notify("Playback Finished", CurrentMacro, 3)
             end)
@@ -903,7 +876,6 @@ local playToggle = Tabs.Main:Toggle({
             WaitingText = ""
             ActionText = ""
             UnitText = ""
-            clearPlaybackState()
             updateStatus()
         end
     end
@@ -1082,15 +1054,6 @@ Tabs.Settings:Button({
     end
 })
 
-Tabs.Settings:Button({
-    Title = "🔁 Clear Resume State",
-    Callback = function()
-        clearPlaybackState()
-        resumeFromStep = 0
-        notify("Cleared", "Resume state cleared - will start from beginning", 3)
-    end
-})
-
 Tabs.Settings:Space()
 Tabs.Settings:Divider()
 Tabs.Settings:Space()
@@ -1134,7 +1097,6 @@ Tabs.Settings:Space()
 Tabs.Settings:Button({
     Title = "🗑️ Unload UI",
     Callback = function()
-        clearPlaybackState()
         pcall(function()
             if Window and Window.Destroy then
                 Window:Destroy()
