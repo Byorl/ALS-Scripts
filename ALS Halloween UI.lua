@@ -714,7 +714,6 @@ local Tabs = {
     Performance = SettingsSection:Tab({ Title = "Performance", Icon = "gauge" }),
     Safety = SettingsSection:Tab({ Title = "Safety & UI", Icon = "shield-check" }),
     Config = SettingsSection:Tab({ Title = "Config", Icon = "save" }),
-    Macro = SettingsSection:Tab({ Title = "Macro", Icon = "code" }),
 }
 
 Tabs.Changes:Paragraph({
@@ -1204,6 +1203,7 @@ local function buildAutoAbilityUI()
                     GB.Ability_Right:AddLabel("📦 " .. unitName .. " (" .. slotName .. " • Lvl " .. tostring(slotData.Level or 0) .. ")")
                     anyBuilt = true
                     if not getgenv().UnitAbilities[unitName] then getgenv().UnitAbilities[unitName] = {} end
+                    if not getgenv().Config.abilities[unitName] then getgenv().Config.abilities[unitName] = {} end
                     local sortedAbilities = {}
                     for abilityName, data in pairs(abilities) do
                         table.insert(sortedAbilities, { name = abilityName, data = data })
@@ -1212,20 +1212,19 @@ local function buildAutoAbilityUI()
                     for _, ab in ipairs(sortedAbilities) do
                         local abilityName = ab.name
                         local abilityData = ab.data
+                        local saved = getgenv().Config.abilities[unitName] and getgenv().Config.abilities[unitName][abilityName]
                         if not getgenv().UnitAbilities[unitName][abilityName] then
-                            getgenv().UnitAbilities[unitName][abilityName] = { enabled = true, onlyOnBoss=false, specificWave=nil, requireBossInRange=false, delayAfterBossSpawn=false, useOnWave=false }
+                            getgenv().UnitAbilities[unitName][abilityName] = {
+                                enabled = (saved and saved.enabled) or false,
+                                onlyOnBoss = (saved and saved.onlyOnBoss) or false,
+                                specificWave = (saved and saved.specificWave) or nil,
+                                requireBossInRange = (saved and saved.requireBossInRange) or false,
+                                delayAfterBossSpawn = (saved and saved.delayAfterBossSpawn) or false,
+                                useOnWave = (saved and saved.useOnWave) or false
+                            }
                         end
                         local cfg = getgenv().UnitAbilities[unitName][abilityName]
-                        local saved = getgenv().Config.abilities[unitName] and getgenv().Config.abilities[unitName][abilityName]
-                        local defaultToggle = saved and saved.enabled or false
-                        if saved then
-                            cfg.enabled = saved.enabled or false
-                            cfg.onlyOnBoss = saved.onlyOnBoss or false
-                            cfg.specificWave = saved.specificWave
-                            cfg.requireBossInRange = saved.requireBossInRange or false
-                            cfg.delayAfterBossSpawn = saved.delayAfterBossSpawn or false
-                            cfg.useOnWave = saved.useOnWave or false
-                        end
+                        local defaultToggle = cfg.enabled
                         local abilityIcon = abilityData.isAttribute and "🔒" or "⚡"
                         local abilityInfo = abilityIcon .. " " .. abilityName .. " (CD: " .. tostring(abilityData.cooldown) .. "s)"
                         addToggle(GB.Ability_Right, unitName .. "_" .. abilityName .. "_Toggle", abilityInfo, defaultToggle, function(v)
@@ -1272,7 +1271,7 @@ local function buildAutoAbilityUI()
                         })
                         GB.Ability_Right:AddInput(unitName .. "_" .. abilityName .. "_Wave", {
                             Text = "  > Wave Number",
-                            Default = (saved and saved.specificWave and tostring(saved.specificWave)) or "",
+                            Default = (cfg.specificWave and tostring(cfg.specificWave)) or "",
                             Numeric = true,
                             Finished = true,
                             Placeholder = "Required if 'On Wave' selected",
@@ -1862,32 +1861,6 @@ GB.Settings_Right:AddButton("Unload", function()
     end)
 end)
 
-GB.Macro_Left = adaptTab(Tabs.Macro)
-
-GB.Macro_Left:Paragraph({
-    Title = "Macro System",
-    Desc = "Run the ALS Macro script to automate gameplay actions.",
-})
-
-GB.Macro_Left:Space({ Columns = 1 })
-
-GB.Macro_Left:Button({
-    Title = "▶️ Run Macro",
-    Callback = function()
-        notify("Macro", "Loading macro script...", 3)
-        task.spawn(function()
-            local ok, err = pcall(function()
-                loadstring(game:HttpGet("https://raw.githubusercontent.com/Byorl/ALS-Scripts/refs/heads/main/ALS%20Macro.lua"))()
-            end)
-            if ok then
-                notify("Macro", "Macro script loaded successfully!", 3)
-            else
-                notify("Macro Error", "Failed to load macro: " .. tostring(err), 5)
-            end
-        end)
-    end
-})
-
 task.wait(0.5)
 
 local notifyAttempts = 0
@@ -2234,16 +2207,23 @@ task.spawn(function()
                         task.wait(2)
                     end
                     hasProcessedCurrentUI = true
-                    GuiService.SelectedObject = buttonToPress
+                    local isValidDescendant = pcall(function()
+                        return buttonToPress:IsDescendantOf(LocalPlayer.PlayerGui)
+                    end)
+                    if isValidDescendant then
+                        GuiService.SelectedObject = buttonToPress
+                    end
                     repeat
                         press(Enum.KeyCode.Return)
                         task.wait(0.5)
                     until not LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
-                    GuiService.SelectedObject = nil
+                    pcall(function() GuiService.SelectedObject = nil end)
                 end
-                if GuiService.SelectedObject ~= nil then
-                    GuiService.SelectedObject = nil
-                end
+                pcall(function()
+                    if GuiService.SelectedObject ~= nil then
+                        GuiService.SelectedObject = nil
+                    end
+                end)
             end
         end)
         if not success then
@@ -2306,12 +2286,31 @@ task.spawn(function()
     local towerInfoCache = {}
     local generalBossSpawnTime = nil
     local lastWave = 0
+    local trackedSpawnedUnits = {}
+    local lastGameEndedState = false
     local function resetRoundTrackers()
         bossSpawnTime = nil
         bossInRangeTracker = {}
         generalBossSpawnTime = nil
         abilityCooldowns = {}
         towerInfoCache = {}
+        if not getgenv().SeamlessLimiterEnabled then
+            trackedSpawnedUnits = {}
+        end
+    end
+    local function checkGameEndedReset()
+        local ok, gameEnded = pcall(function()
+            local ge = RS:FindFirstChild("GameEnded")
+            return ge and ge.Value or false
+        end)
+        if ok and gameEnded and not lastGameEndedState then
+            lastGameEndedState = true
+            if not getgenv().SeamlessLimiterEnabled then
+                trackedSpawnedUnits = {}
+            end
+        elseif ok and not gameEnded and lastGameEndedState then
+            lastGameEndedState = false
+        end
     end
     local function getTowerInfoCached(towerName)
         if towerInfoCache[towerName] then return towerInfoCache[towerName] end
@@ -2468,10 +2467,49 @@ task.spawn(function()
         end
         return false
     end
+    local function addSpawnedUnitAbilities(unitName)
+        if trackedSpawnedUnits[unitName] then return end
+        trackedSpawnedUnits[unitName] = true
+        local abilities = getAllAbilities(unitName)
+        if not next(abilities) then return end
+        if not getgenv().UnitAbilities[unitName] then
+            getgenv().UnitAbilities[unitName] = {}
+        end
+        if not getgenv().Config.abilities[unitName] then
+            getgenv().Config.abilities[unitName] = {}
+        end
+        for abilityName, abilityData in pairs(abilities) do
+            if not getgenv().UnitAbilities[unitName][abilityName] then
+                local saved = getgenv().Config.abilities[unitName] and getgenv().Config.abilities[unitName][abilityName]
+                getgenv().UnitAbilities[unitName][abilityName] = {
+                    enabled = (saved and saved.enabled) or false,
+                    onlyOnBoss = (saved and saved.onlyOnBoss) or false,
+                    specificWave = (saved and saved.specificWave) or nil,
+                    requireBossInRange = (saved and saved.requireBossInRange) or false,
+                    delayAfterBossSpawn = (saved and saved.delayAfterBossSpawn) or false,
+                    useOnWave = (saved and saved.useOnWave) or false
+                }
+            end
+        end
+    end
+    task.spawn(function()
+        if Towers then
+            Towers.ChildAdded:Connect(function(child)
+                task.wait(0.5)
+                if child and child:IsA("Model") then
+                    local unitName = child.Name
+                    if unitName and unitName ~= "" then
+                        addSpawnedUnitAbilities(unitName)
+                    end
+                end
+            end)
+        end
+    end)
     while true do
         task.wait(1)
         if getgenv().AutoAbilitiesEnabled then
             pcall(function()
+                checkGameEndedReset()
                 local currentWave = getCurrentWave()
                 local hasBoss = bossExists()
                 if currentWave < lastWave then resetRoundTrackers() end
@@ -2934,7 +2972,11 @@ task.spawn(function()
                     local seamless = settings:FindFirstChild("SeamlessRetry")
                     if seamless then 
                         return seamless.Value 
+                    else
+                        print("[Seamless Fix] SeamlessRetry not found in Settings")
                     end
+                else
+                    print("[Seamless Fix] Settings not found")
                 end
                 return false
             end)
@@ -3177,3 +3219,5 @@ if isInLobby then
         end
     end)
 end
+
+
