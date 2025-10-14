@@ -2581,13 +2581,43 @@ task.spawn(function()
                             
                             if cfg.enabled then
                                 local shouldUse = true
-                                if not hasAbilityBeenUnlocked(infoName, abilityName, towerLevel) then shouldUse=false end
-                                if shouldUse and isOnCooldown(infoName, abilityName) then shouldUse=false end
-                                if shouldUse and cfg.onlyOnBoss then if not hasBoss or not bossReadyForAbilities() then shouldUse=false end end
-                                if shouldUse and cfg.useOnWave and cfg.specificWave then if currentWave ~= cfg.specificWave then shouldUse=false end end
-                                if shouldUse and cfg.requireBossInRange then if not hasBoss or not checkBossInRangeForDuration(tower,0) then shouldUse=false end end
-                                if shouldUse and cfg.delayAfterBossSpawn then if not hasBoss or not checkBossSpawnTime() then shouldUse=false end end
-                                if shouldUse then useAbility(tower, abilityName) setAbilityUsed(infoName, abilityName) end
+                                
+                                if not hasAbilityBeenUnlocked(infoName, abilityName, towerLevel) then
+                                    shouldUse = false
+                                end
+                                
+                                if shouldUse and isOnCooldown(infoName, abilityName) then
+                                    shouldUse = false
+                                end
+                                
+                                if shouldUse and cfg.onlyOnBoss then
+                                    if not hasBoss or not bossReadyForAbilities() then
+                                        shouldUse = false
+                                    end
+                                end
+                                
+                                if shouldUse and cfg.useOnWave and cfg.specificWave then
+                                    if currentWave ~= cfg.specificWave then
+                                        shouldUse = false
+                                    end
+                                end
+                                
+                                if shouldUse and cfg.requireBossInRange then
+                                    if not hasBoss or not checkBossInRangeForDuration(tower, 0) then
+                                        shouldUse = false
+                                    end
+                                end
+                                
+                                if shouldUse and cfg.delayAfterBossSpawn then
+                                    if not hasBoss or not checkBossSpawnTime() then
+                                        shouldUse = false
+                                    end
+                                end
+                                
+                                if shouldUse then
+                                    useAbility(tower, abilityName)
+                                    setAbilityUsed(infoName, abilityName)
+                                end
                             end
                         end
                     end
