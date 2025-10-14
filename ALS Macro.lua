@@ -1,14 +1,27 @@
 repeat task.wait() until game:IsLoaded()
 
-if getgenv().MacroSystemKillSwitch then
-    getgenv().MacroSystemKillSwitch = true
-    print("[Macro] Killing previous instance...")
-    task.wait(1)
-end
+getgenv().MacroSystemKillSwitch = true
+task.wait(2)
+
+local CoreGui = game:GetService("CoreGui")
+pcall(function()
+    for _, ui in pairs(CoreGui:GetChildren()) do
+        pcall(function()
+            for _, child in pairs(ui:GetChildren()) do
+                if child.Name == "Window" and child:FindFirstChild("Frame") then
+                    local success, titleText = pcall(function()
+                        return child.Frame.Main.Topbar.Left.Title.Title.Text
+                    end)
+                    if success and titleText and titleText:find("Macro System") then
+                        ui:Destroy()
+                    end
+                end
+            end
+        end)
+    end
+end)
 
 getgenv().MacroSystemKillSwitch = false
-local instanceId = tick()
-print("[Macro] New instance started: " .. instanceId)
 
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
@@ -194,7 +207,6 @@ local function cacheTowerInfo()
             if ok then TowerInfoCache[mod.Name] = data end
         end
     end
-    print("[Macro] Cached tower info for " .. tostring(#TowerInfoCache) .. " towers")
 end
 
 local function cacheRemotes()
@@ -206,7 +218,6 @@ local function cacheRemotes()
     end
     local count = 0
     for _ in pairs(RemoteCache) do count = count + 1 end
-    print("[Macro] Cached " .. count .. " remotes")
     return count > 0
 end
 
@@ -476,8 +487,6 @@ Tabs.Main:Input({
     Placeholder = "Enter macro name",
     Callback = function(v)
         if v and v ~= "" and not Macros[v] then
-            print("[Macro] Creating macro: " .. v)
-            
             saveMacro(v, {})
             
             task.wait(0.1)
@@ -488,15 +497,11 @@ Tabs.Main:Input({
             macroData = {}
             TotalSteps = 0
             
-            print("[Macro] Macro created successfully!")
-            print("[Macro] CurrentMacro set to: " .. v)
-            
             task.spawn(function()
                 task.wait(0.1)
                 
                 loadMacros()
                 local newMacroNames = getMacroNames()
-                print("[Macro] Refreshing dropdown with " .. #newMacroNames .. " macros:", table.concat(newMacroNames, ", "))
                 
                 if macroDropdown then
                     pcall(function()
@@ -507,11 +512,9 @@ Tabs.Main:Input({
                     
                     pcall(function()
                         macroDropdown:Select(v)
-                        print("[Macro] Selected '" .. v .. "' in dropdown")
                     end)
                 end
                 
-                print("[Macro] Refreshing map assignment dropdowns...")
                 pcall(function()
                     updateMapDisplay()
                 end)
@@ -542,6 +545,7 @@ Tabs.Main:Toggle({
     Title = "🔴 Record Macro",
     Default = false,
     Callback = function(v)
+        if isKilled() then return end
         recording = v
         if v then
             if not CurrentMacro then
@@ -585,6 +589,7 @@ local playToggle = Tabs.Main:Toggle({
     Title = "▶️ Play Macro",
     Default = savedSettings.playMacroEnabled or false,
     Callback = function(v)
+        if isKilled() then return end
         playing = v
         saveSettings()
         if v then
@@ -650,7 +655,6 @@ local playToggle = Tabs.Main:Toggle({
                     end
                     if isKilled() then
                         playing = false
-                        print("[Macro] Monitor killed by new instance")
                     end
                 end)
                 
@@ -752,13 +756,11 @@ local playToggle = Tabs.Main:Toggle({
                 if resumeStep > 0 then
                     step = resumeStep + 1
                     notify("Auto-Resume", "Resuming from step " .. step .. "/" .. #macroData, 4)
-                    print("[Macro] Auto-resumed from step " .. step .. " based on game state")
                 end
                 
                 while playing and not isKilled() do
                     if isKilled() then
                         playing = false
-                        print("[Macro] Playback killed by new instance")
                         break
                     end
                     
@@ -776,7 +778,6 @@ local playToggle = Tabs.Main:Toggle({
                         step = 1
                         task.wait(0.5)
                         notify("Game Restarted", "Macro restarting from step 1", 3)
-                        print("[Macro] Restarted macro due to game restart")
                         continue
                     end
                     
@@ -810,7 +811,6 @@ local playToggle = Tabs.Main:Toggle({
                     local action = macroData[step]
                     
                     if not action then
-                        print("[Macro] Error: No action at step " .. step)
                         step = step + 1
                         continue
                     end
@@ -825,7 +825,6 @@ local playToggle = Tabs.Main:Toggle({
                     if actionCost > 0 and cash < actionCost then
                         if isKilled() then
                             playing = false
-                            print("[Macro] Killed while waiting for cash")
                             break
                         end
                         
@@ -846,8 +845,6 @@ local playToggle = Tabs.Main:Toggle({
                     
                     action.waitStartTime = nil
                     
-                    print("[Macro] Executing step " .. step .. ": " .. (action.ActionType or "Unknown") .. " - " .. (action.TowerName or "Unknown") .. " (Cost: $" .. actionCost .. ", Cash: $" .. cash .. ")")
-                    
                     StatusText = "Playing"
                     WaitingText = ""
                     ActionText = action.ActionType or "Action"
@@ -855,20 +852,17 @@ local playToggle = Tabs.Main:Toggle({
                     updateStatus()
                     
                     if action.TowerName and action.ActionType == "Upgrade" and isAutoUpgradeClone(action.TowerName) then
-                        print("[Macro] Skipping auto-clone: " .. action.TowerName)
                         step = step + 1
                         continue
                     end
                     
                     pcall(function()
                         if not action.RemoteName then
-                            print("[Macro] Error: No RemoteName at step " .. step)
                             return
                         end
                         
                         local remote = RemoteCache[action.RemoteName:lower()]
                         if not remote then 
-                            print("[Macro] Warning: Remote not found: " .. action.RemoteName)
                             return 
                         end
                         
@@ -883,7 +877,6 @@ local playToggle = Tabs.Main:Toggle({
                             end
                             
                             if not towerToUpgrade then
-                                print("[Macro] Tower not found: " .. (action.TowerName or "Unknown"))
                                 return
                             end
                             
@@ -891,7 +884,6 @@ local playToggle = Tabs.Main:Toggle({
                             local maxLevel = towerToUpgrade:FindFirstChild("MaxUpgrade") and towerToUpgrade.MaxUpgrade.Value or 999
                             
                             if beforeLevel >= maxLevel then
-                                print("[Macro] Skipping: " .. action.TowerName .. " already maxed (Lv" .. beforeLevel .. ")")
                                 return
                             end
                             
@@ -901,22 +893,7 @@ local playToggle = Tabs.Main:Toggle({
                                 remote:FireServer(towerToUpgrade)
                             end
                             
-                            local waitTime = 0
-                            local afterLevel = beforeLevel
-                            while waitTime < 1 do
-                                task.wait(0.1)
-                                waitTime = waitTime + 0.1
-                                afterLevel = towerToUpgrade:FindFirstChild("Upgrade") and towerToUpgrade.Upgrade.Value or beforeLevel
-                                if afterLevel > beforeLevel then
-                                    break
-                                end
-                            end
-                            
-                            if afterLevel > beforeLevel then
-                                print("[Macro] ✓ " .. action.TowerName .. " upgraded Lv" .. beforeLevel .. " → Lv" .. afterLevel)
-                            else
-                                print("[Macro] ⚠ " .. action.TowerName .. " upgrade didn't verify after 3s (Lv" .. beforeLevel .. ") - moving on")
-                            end
+                            task.wait(0.3)
                         else
                             local towerName = action.TowerName or "Unknown"
                             
@@ -940,20 +917,7 @@ local playToggle = Tabs.Main:Toggle({
                                 remote:FireServer(unpack(args))
                             end
                             
-                            task.wait(0.5)
-                            
-                            local countAfter = 0
-                            for _, t in pairs(workspace.Towers:GetChildren()) do
-                                if t.Name == towerName and t:FindFirstChild("Owner") and t.Owner.Value == LocalPlayer then
-                                    countAfter = countAfter + 1
-                                end
-                            end
-                            
-                            if countAfter > countBefore then
-                                print("[Macro] ✓ Placed " .. towerName .. " (" .. countBefore .. " → " .. countAfter .. ")")
-                            else
-                                print("[Macro] ✗ Failed to place " .. towerName .. " (count stayed " .. countBefore .. ")")
-                            end
+                            task.wait(0.3)
                         end
                     end)
                     
@@ -1013,7 +977,6 @@ if savedSettings.playMacroEnabled then
             pcall(function()
                 playToggle:Set(true)
                 playing = true
-                print("[Macro] Play toggle restored to ON from saved settings")
             end)
         end
     end)
@@ -1267,8 +1230,6 @@ monitorConnection = RunService.Heartbeat:Connect(function()
                             UnitText = towerName
                             WaitingText = ""
                             updateStatus()
-                            
-                            print("[Macro] ✓ Recorded Upgrade:", towerName, "Lv" .. levelBefore, "→", "Lv" .. upgradeLevel, "($" .. cost .. ")", "[Total:", #macroData .. "]")
                         end)
                     end
                 end
@@ -1380,8 +1341,6 @@ mt.__namecall = function(self, ...)
                             UnitText = towerName
                             WaitingText = ""
                             updateStatus()
-                            
-                            print("[Macro] ✓ Recorded Place:", towerName, "($" .. cost .. ")", countBefore, "→", countAfter, "/", placementLimit, "[Total:", #macroData .. "]")
                         else
                             StatusText = "Recording"
                             ActionText = ""
@@ -1423,5 +1382,4 @@ task.spawn(function()
     end
 end)
 
-notify("🎬 Macro System ", "Macro Script!", 5)
-print("[Macro System] Loaded successfully!")
+notify("🎬 Macro System ", "Loaded!", 3)
