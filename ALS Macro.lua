@@ -109,13 +109,6 @@ pcall(function()
     end)
 end)
 
-setthreadidentity = setthreadidentity or set_thread_identity or setidentity or syn and syn.set_thread_identity
-if setthreadidentity then
-    pcall(function()
-        setthreadidentity(2)
-    end)
-end
-
 local RS = game:GetService("ReplicatedStorage")
 local HttpService = game:GetService("HttpService")
 local RunService = game:GetService("RunService")
