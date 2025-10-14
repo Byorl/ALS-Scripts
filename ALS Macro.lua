@@ -426,45 +426,50 @@ Tabs.Main:Input({
     Callback = function(v)
         if v and v ~= "" and not Macros[v] then
             print("[Macro] Creating macro: " .. v)
+            
+            saveMacro(v, {})
             Macros[v] = {}
             CurrentMacro = v
             macroData = {}
             TotalSteps = 0
-            saveMacro(v, {})
             
-            task.spawn(function()
-                task.wait(0.1)
+            local newMacroNames = getMacroNames()
+            print("[Macro] New macro list:", table.concat(newMacroNames, ", "))
+            
+            if macroDropdown then
+                print("[Macro] Refreshing dropdown with " .. #newMacroNames .. " macros")
                 
-                local newMacroNames = getMacroNames()
-                print("[Macro] New macro list:", table.concat(newMacroNames, ", "))
-                
-                if macroDropdown then
-                    print("[Macro] Refreshing dropdown...")
-                    local success, err = pcall(function()
+                task.spawn(function()
+                    local refreshSuccess = pcall(function()
                         macroDropdown:Refresh(newMacroNames)
                     end)
                     
-                    if success then
-                        print("[Macro] Refresh successful, selecting: " .. v)
-                        task.wait(0.2)
-                        local selectSuccess, selectErr = pcall(function()
+                    if refreshSuccess then
+                        print("[Macro] Dropdown refreshed successfully")
+                        task.wait(0.3)
+                        
+                        local selectSuccess = pcall(function()
                             macroDropdown:Select(v)
                         end)
+                        
                         if selectSuccess then
-                            print("[Macro] Select successful!")
+                            print("[Macro] ✓ Macro '" .. v .. "' selected in dropdown")
                         else
-                            print("[Macro] Select failed:", selectErr)
+                            print("[Macro] ✗ Failed to select macro in dropdown")
                         end
                     else
-                        print("[Macro] Refresh failed:", err)
+                        print("[Macro] ✗ Failed to refresh dropdown")
                     end
-                else
-                    print("[Macro] macroDropdown is nil!")
-                end
-                
-                updateStatus()
+                    
+                    updateStatus()
+                    notify("Macro Created", v .. " - Ready to record!", 3)
+                end)
+            else
+                print("[Macro] ✗ macroDropdown is nil!")
                 notify("Macro Created", v .. " - Ready to record!", 3)
-            end)
+            end
+            
+            saveSettings()
         elseif Macros[v] then
             notify("Error", "Macro '" .. v .. "' already exists!", 3)
         end
@@ -1265,6 +1270,12 @@ mt.__namecall = function(self, ...)
                             return
                         end
                         
+                        StatusText = "Recording"
+                        ActionText = "Placing..."
+                        UnitText = towerName
+                        WaitingText = ""
+                        updateStatus()
+                        
                         task.wait(0.65)
                         
                         local countAfter = 0
@@ -1319,6 +1330,12 @@ mt.__namecall = function(self, ...)
                             updateStatus()
                             
                             print("[Macro] ✓ Recorded Place:", towerName, "($" .. cost .. ")", countBefore, "→", countAfter, "/", placementLimit, "[Total:", #macroData .. "]")
+                        else
+                            StatusText = "Recording"
+                            ActionText = ""
+                            UnitText = ""
+                            WaitingText = ""
+                            updateStatus()
                         end
                         
                         placementMonitor[actionKey] = nil
