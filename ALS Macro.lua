@@ -37,17 +37,34 @@ task.wait(1)
 
 local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
 
+local function shouldFilterMessage(msg)
+    local filters = {
+        "PlayerModule",
+        "CameraModule", 
+        "ZoomController",
+        "Popper",
+        "Poppercam",
+        "ImageLabel",
+        "not a valid member",
+        "is not a valid member",
+        "attempt to perform arithmetic",
+        "PlayerScripts%.Player",
+        "byorials",
+    }
+    
+    for _, filter in ipairs(filters) do
+        if msg:find(filter) then
+            return true
+        end
+    end
+    return false
+end
+
 local oldLogWarn = logwarn or warn
 local oldWarn = warn
 local function filteredWarn(...)
     local msg = tostring(...)
-    if not (msg:find("ImageLabel") 
-        or msg:find("not a valid member") 
-        or msg:find("is not a valid member")
-        or msg:find("PlayerModule")
-        or msg:find("CameraModule")
-        or msg:find("ZoomController")
-        or msg:find("Camera")) then
+    if not shouldFilterMessage(msg) then
         oldLogWarn(...)
     end
 end
@@ -57,9 +74,7 @@ warn = filteredWarn
 local oldLogError = logerror or error
 local function filteredError(...)
     local msg = tostring(...)
-    if not (msg:find("PlayerModule")
-        or msg:find("CameraModule")
-        or msg:find("ZoomController")) then
+    if not shouldFilterMessage(msg) then
         oldLogError(...)
     end
 end
@@ -70,11 +85,7 @@ local ScriptContext = game:GetService("ScriptContext")
 
 pcall(function()
     ScriptContext.Error:Connect(function(message, stackTrace, script)
-        if message:find("PlayerModule") 
-            or message:find("CameraModule") 
-            or message:find("ZoomController")
-            or message:find("Popper")
-            or message:find("attempt to perform arithmetic") then
+        if shouldFilterMessage(message) or shouldFilterMessage(stackTrace or "") then
             return
         end
     end)
@@ -82,13 +93,8 @@ end)
 
 pcall(function()
     LogService.MessageOut:Connect(function(message, messageType)
-        if messageType == Enum.MessageType.MessageError then
-            if message:find("PlayerModule") 
-                or message:find("CameraModule") 
-                or message:find("ZoomController")
-                or message:find("Popper") then
-                return
-            end
+        if shouldFilterMessage(message) then
+            return
         end
     end)
 end)
@@ -137,16 +143,11 @@ local MAX_CASH_HISTORY = 30
 
 local StatusLabel, StepLabel, ActionLabel, UnitLabel, WaitingLabel
 
-local seamlessMode = false
-local autoReplayOnRestart = false
-
 local function loadSettings()
     local settings = {
         playMacroEnabled = false,
         selectedMacro = nil,
         macroMaps = {},
-        seamlessMode = false,
-        autoReplayOnRestart = false,
         stepDelay = 0
     }
     pcall(function()
@@ -166,8 +167,6 @@ local function saveSettings()
             playMacroEnabled = playing,
             selectedMacro = CurrentMacro,
             macroMaps = getgenv().MacroMaps or {},
-            seamlessMode = seamlessMode,
-            autoReplayOnRestart = autoReplayOnRestart,
             stepDelay = StepDelay
         }
         writefile(SETTINGS_FILE, HttpService:JSONEncode(settings))
@@ -362,8 +361,6 @@ loadMacros()
 
 local savedSettings = loadSettings()
 getgenv().MacroMaps = savedSettings.macroMaps or {}
-seamlessMode = savedSettings.seamlessMode or false
-autoReplayOnRestart = savedSettings.autoReplayOnRestart or false
 StepDelay = savedSettings.stepDelay or 0
 local MapData = nil
 pcall(function()
@@ -637,7 +634,7 @@ local playToggle = Tabs.Main:Toggle({
                 pcall(function() lastWave = RS.Wave.Value end)
                 task.wait(0.5)
                 
-                while playing or (seamlessMode and autoReplayOnRestart) do
+                while playing do
                     if step > #macroData then
                         StatusText = "Waiting Next Round"
                         WaitingText = ""
@@ -654,16 +651,14 @@ local playToggle = Tabs.Main:Toggle({
                                 lastWave = currentWave
                                 step = 1
                                 task.wait(0.5)
-                                if seamlessMode then
-                                    notify("Seamless Mode", "Restarting macro...", 2)
-                                end
+                                notify("Seamless Retry", "Restarting macro...", 2)
                                 break
                             end
                             
                             lastWave = currentWave
-                        until not playing and not (seamlessMode and autoReplayOnRestart)
+                        until not playing
                         
-                        if not playing and not (seamlessMode and autoReplayOnRestart) then break end
+                        if not playing then break end
                         continue
                     end
                     
@@ -688,13 +683,6 @@ local playToggle = Tabs.Main:Toggle({
                         end
                         
                         local waitTime = tick() - action.waitStartTime
-                        
-                        if waitTime > 60 then
-                            print("[Macro] Warning: Waited 60s for cash at step " .. step .. ", skipping...")
-                            action.waitStartTime = nil
-                            step = step + 1
-                            continue
-                        end
                         
                         StatusText = "Waiting Cash"
                         WaitingText = "$" .. actionCost .. " (" .. math.floor(waitTime) .. "s)"
@@ -1035,41 +1023,7 @@ Tabs.Settings:Space()
 Tabs.Settings:Divider()
 Tabs.Settings:Space()
 
-Tabs.Settings:Paragraph({
-    Title = "🔄 Seamless Mode",
-    Desc = "Automatically restart macro when round ends"
-})
 
-Tabs.Settings:Space()
-
-Tabs.Settings:Toggle({
-    Flag = "SeamlessMode",
-    Title = "Enable Seamless Mode",
-    Default = seamlessMode,
-    Callback = function(v)
-        seamlessMode = v
-        saveSettings()
-        if v then
-            notify("Seamless Mode", "Enabled - Macro will auto-restart", 3)
-        else
-            notify("Seamless Mode", "Disabled", 3)
-        end
-    end
-})
-
-Tabs.Settings:Toggle({
-    Flag = "AutoReplayOnRestart",
-    Title = "Auto Replay on Restart",
-    Default = autoReplayOnRestart,
-    Callback = function(v)
-        autoReplayOnRestart = v
-        saveSettings()
-    end
-})
-
-Tabs.Settings:Space()
-Tabs.Settings:Divider()
-Tabs.Settings:Space()
 
 Tabs.Settings:Button({
     Title = "🗑️ Unload UI",
