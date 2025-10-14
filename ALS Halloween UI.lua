@@ -630,6 +630,14 @@ getgenv().MacroPlayEnabled = savedMacroSettings.playMacroEnabled or false
 
 loadMacros()
 
+if getgenv().CurrentMacro and getgenv().Macros[getgenv().CurrentMacro] then
+    getgenv().MacroData = getgenv().Macros[getgenv().CurrentMacro]
+    getgenv().TotalSteps = #getgenv().MacroData
+else
+    getgenv().MacroData = {}
+    getgenv().TotalSteps = 0
+end
+
 getgenv().LoadMacroSettings = loadMacroSettings
 getgenv().SaveMacroSettings = saveMacroSettings
 getgenv().LoadMacros = loadMacros
@@ -1836,15 +1844,20 @@ pcall(function()
         Callback = function(value)
             pcall(function()
                 getgenv().CurrentMacro = value
-                if getgenv().Macros[value] then
+                if value and getgenv().Macros[value] then
                     getgenv().MacroData = getgenv().Macros[value]
                     getgenv().TotalSteps = #getgenv().MacroData
-                    
                     getgenv().MacroTotalSteps = getgenv().TotalSteps
+                    getgenv().MacroCurrentStep = 0
                     getgenv().UpdateMacroStatus()
-                    
                     saveMacroSettings()
                     notify("Macro Selected", value .. " (" .. getgenv().TotalSteps .. " steps)", 3)
+                else
+                    getgenv().MacroData = {}
+                    getgenv().TotalSteps = 0
+                    getgenv().MacroTotalSteps = 0
+                    getgenv().MacroCurrentStep = 0
+                    getgenv().UpdateMacroStatus()
                 end
             end)
         end
@@ -1852,7 +1865,6 @@ pcall(function()
     
     getgenv().MacroDropdown = dropdown
     
-    -- Debug: verify dropdown has Refresh method
     if dropdown and type(dropdown.Refresh) == "function" then
         print("[Macro] Dropdown created successfully with Refresh method")
     else
@@ -2010,9 +2022,11 @@ local function detectMacroProgress()
                     
                     towerStates[towerName].count = towerStates[towerName].count + 1
                     
-                    local levelValue = tower:FindFirstChild("Level")
-                    if levelValue then
-                        table.insert(towerStates[towerName].levels, levelValue.Value)
+                    local upgradeValue = tower:FindFirstChild("Upgrade")
+                    if upgradeValue then
+                        table.insert(towerStates[towerName].levels, upgradeValue.Value)
+                    else
+                        table.insert(towerStates[towerName].levels, 0)
                     end
                 end
             end)
@@ -2143,7 +2157,7 @@ addToggle(GB.Macro, "MacroPlayToggle", "▶️ Play Macro", getgenv().MacroPlayE
                 notify("Playback", "Started playing " .. getgenv().CurrentMacro, 3)
                 
                 local step = getgenv().MacroCurrentStep or 1
-                local macroData = getgenv().Macros[getgenv().CurrentMacro]
+                local macroData = getgenv().MacroData
                 local shouldRestart = false
                 local lastWave = 0
                 
@@ -2398,6 +2412,7 @@ pcall(function()
         Title = "Status: Idle",
         Desc = ""
     })
+    print("[Macro] StatusLabel created:", getgenv().MacroStatusLabel ~= nil, "Has SetTitle:", type(getgenv().MacroStatusLabel.SetTitle))
 end)
 
 pcall(function()
@@ -2405,6 +2420,7 @@ pcall(function()
         Title = "📝 Step: 0/0",
         Desc = ""
     })
+    print("[Macro] StepLabel created:", getgenv().MacroStepLabel ~= nil, "Has SetTitle:", type(getgenv().MacroStepLabel.SetTitle))
 end)
 
 pcall(function()
@@ -2412,6 +2428,7 @@ pcall(function()
         Title = "⚡ Action: None",
         Desc = ""
     })
+    print("[Macro] ActionLabel created:", getgenv().MacroActionLabel ~= nil, "Has SetTitle:", type(getgenv().MacroActionLabel.SetTitle))
 end)
 
 pcall(function()
@@ -2419,6 +2436,7 @@ pcall(function()
         Title = "🗼 Unit: None",
         Desc = ""
     })
+    print("[Macro] UnitLabel created:", getgenv().MacroUnitLabel ~= nil, "Has SetTitle:", type(getgenv().MacroUnitLabel.SetTitle))
 end)
 
 pcall(function()
@@ -2426,6 +2444,7 @@ pcall(function()
         Title = "⏳ Waiting: None",
         Desc = ""
     })
+    print("[Macro] WaitingLabel created:", getgenv().MacroWaitingLabel ~= nil, "Has SetTitle:", type(getgenv().MacroWaitingLabel.SetTitle))
 end)
 
     if not isInLobby then
