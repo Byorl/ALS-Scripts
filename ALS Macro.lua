@@ -641,7 +641,7 @@ local playToggle = Tabs.Main:Toggle({
                     while playing do
                         if hasStartButton() then
                             shouldRestart = true
-                            print("[Macro] Restart detected - Start button appeared")
+                            print("[Macro] Starting Macro/Restart detected - Start button appeared")
                         end
                         task.wait()
                     end
@@ -750,7 +750,7 @@ local playToggle = Tabs.Main:Toggle({
                 
                 while playing do
                     if shouldRestart then
-                        StatusText = "Restart Detected"
+                        StatusText = "Starting Macro/Restart Detected"
                         WaitingText = "Waiting for start..."
                         ActionText = ""
                         UnitText = ""
