@@ -512,6 +512,24 @@ if getgenv().MacroEnabled then
     end)
 end
 
+getgenv().AutoExecuteEnabled = getgenv().Config.toggles.AutoExecuteToggle or false
+
+local queueteleport = queue_on_teleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport)
+
+if getgenv().AutoExecuteEnabled and queueteleport then
+    local TeleportCheck = false
+    LocalPlayer.OnTeleport:Connect(function(State)
+        if getgenv().AutoExecuteEnabled and (not TeleportCheck) and queueteleport then
+            TeleportCheck = true
+            queueteleport('loadstring(game:HttpGet("https://raw.githubusercontent.com/Byorl/ALS-Scripts/refs/heads/main/ALS%20Halloween%20UI.lua"))()')
+            print("[ALS] Auto Execute queued for next game")
+        end
+    end)
+    print("[ALS] Auto Execute on Teleport enabled")
+elseif getgenv().AutoExecuteEnabled and not queueteleport then
+    warn("[ALS] Auto Execute enabled but queueteleport function not found in your executor")
+end
+
 getgenv().WebhookURL = getgenv().Config.inputs.WebhookURL or ""
 getgenv().DiscordUserID = getgenv().Config.inputs.DiscordUserID or ""
 getgenv().MaxSeamlessRounds = tonumber(getgenv().Config.inputs.SeamlessRounds) or 4
@@ -1809,6 +1827,23 @@ addToggle(GB.Misc_Right, "AutoHideUIToggle", "Auto Hide UI on Load", getgenv().C
     saveConfig(getgenv().Config)
     notify("Auto Hide UI", v and "Enabled - UI will minimize on next load" or "Disabled", 3)
 end)
+
+GB.Misc_Right:Space({ Columns = 1 })
+GB.Misc_Right:Divider({ Title = "🔄 Auto Execute" })
+
+getgenv().AutoExecuteEnabled = getgenv().Config.toggles.AutoExecuteToggle or false
+
+addToggle(GB.Misc_Right, "AutoExecuteToggle", "Auto Execute on Teleport", getgenv().AutoExecuteEnabled, function(v)
+    getgenv().AutoExecuteEnabled = v
+    getgenv().Config.toggles.AutoExecuteToggle = v
+    saveConfig(getgenv().Config)
+    notify("Auto Execute", v and "Enabled - Script will auto-load on teleport" or "Disabled", 3)
+end)
+
+GB.Misc_Right:Paragraph({
+    Title = "⚠️ Important Note",
+    Desc = "Do NOT enable this if you already have this script in your executor's auto-execute folder! This will cause the script to run twice."
+})
 
 GB.Settings_Left:Paragraph({
     Title = "Config Management",
