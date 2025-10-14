@@ -496,7 +496,21 @@ getgenv().FinalExpAutoJoinEasyEnabled = getgenv().Config.toggles.FinalExpAutoJoi
 getgenv().FinalExpAutoJoinHardEnabled = getgenv().Config.toggles.FinalExpAutoJoinHardToggle or false
 getgenv().FinalExpAutoSkipShopEnabled = getgenv().Config.toggles.FinalExpAutoSkipShopToggle or false
 
+getgenv().MacroEnabled = getgenv().Config.toggles.MacroToggle or false
 
+if getgenv().MacroEnabled then
+    task.spawn(function()
+        task.wait(5)
+        local success, err = pcall(function()
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/Byorl/ALS-Scripts/refs/heads/main/ALS%20Macro.lua"))()
+        end)
+        if success then
+            print("[ALS] Macro auto-executed successfully")
+        else
+            warn("[ALS] Macro auto-execution failed: " .. tostring(err))
+        end
+    end)
+end
 
 getgenv().WebhookURL = getgenv().Config.inputs.WebhookURL or ""
 getgenv().DiscordUserID = getgenv().Config.inputs.DiscordUserID or ""
@@ -1818,6 +1832,39 @@ GB.Settings_Left:Button({
 })
 
 GB.Settings_Left:Space({ Columns = 1 })
+GB.Settings_Left:Divider({ Title = "🎯 Macro Settings" })
+
+getgenv().MacroEnabled = getgenv().Config.toggles.MacroToggle or false
+
+local function executeMacro()
+    local success, err = pcall(function()
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/Byorl/ALS-Scripts/refs/heads/main/ALS%20Macro.lua"))()
+    end)
+    if success then
+        notify("Macro", "ResourceSaver executed successfully!", 3)
+    else
+        notify("Macro", "Failed to execute: " .. tostring(err), 5)
+    end
+end
+
+addToggle(GB.Settings_Left, "MacroToggle", "🔄 Auto-Execute Macro", getgenv().MacroEnabled, function(v)
+    getgenv().MacroEnabled = v
+    getgenv().Config.toggles.MacroToggle = v
+    saveConfig(getgenv().Config)
+    if v then
+        notify("Macro", "Auto-Execute Enabled - Executing now...", 3)
+        task.spawn(executeMacro)
+    else
+        notify("Macro", "Auto-Execute Disabled", 3)
+    end
+end)
+
+GB.Settings_Left:Paragraph({
+    Title = "ℹ️ About Macro",
+    Desc = "When enabled, the Macro will execute automatically when the script loads and immediately when you toggle it on."
+})
+
+GB.Settings_Left:Space({ Columns = 1 })
 
 local savedKeybind = applyOldConfigValue("MenuKeybind", "input") or "LeftControl"
 
@@ -2577,9 +2624,19 @@ task.spawn(function()
         return ok and result or nil
     end
     local function findBestCard(list)
-        local bestIndex, bestPriority = 1, math.huge
-        for i=1,#list do local nm = list[i].name local p = getgenv().CardPriority[nm] or 999 if p < bestPriority then bestPriority=p bestIndex=i end end
-        return bestIndex, list[bestIndex], bestPriority
+        local bestIndex, bestPriority = nil, math.huge
+        for i=1,#list do
+            local nm = list[i].name
+            local p = getgenv().CardPriority[nm] or 999
+            if p < bestPriority and p < 999 then
+                bestPriority = p
+                bestIndex = i
+            end
+        end
+        if bestIndex then
+            return bestIndex, list[bestIndex], bestPriority
+        end
+        return nil, nil, nil
     end
     local function pressConfirm()
         local ok, confirmButton = pcall(function()
@@ -2602,8 +2659,9 @@ task.spawn(function()
         if not getgenv().CardSelectionEnabled then return false end
         local ok = pcall(function()
             local list = getAvailableCards() if not list then return false end
-            local _, best = findBestCard(list)
-            if not best or not best.button then return false end
+            local _, best, priority = findBestCard(list)
+            if not best or not best.button or not priority then return false end
+            if priority >= 999 then return false end
             local button = best.button
             local events = {"Activated","MouseButton1Click","MouseButton1Down","MouseButton1Up"}
             for _, ev in ipairs(events) do
@@ -2624,8 +2682,9 @@ task.spawn(function()
         if not getgenv().SlowerCardSelectionEnabled then return false end
         local ok = pcall(function()
             local list = getAvailableCards() if not list then return false end
-            local _, best = findBestCard(list)
-            if not best or not best.button then return false end
+            local _, best, priority = findBestCard(list)
+            if not best or not best.button or not priority then return false end
+            if priority >= 999 then return false end
             local GuiService = game:GetService("GuiService")
             local function press(key)
                 VIM:SendKeyEvent(true, key, false, game)
@@ -2697,9 +2756,19 @@ task.spawn(function()
         return ok and result or nil
     end
     local function best(list)
-        local idx, bestPriority = 1, math.huge
-        for i=1,#list do local nm=list[i].name local p=getgenv().BossRushCardPriority[nm] or 999 if p<bestPriority then bestPriority=p idx=i end end
-        return idx, list[idx], bestPriority
+        local idx, bestPriority = nil, math.huge
+        for i=1,#list do
+            local nm=list[i].name
+            local p=getgenv().BossRushCardPriority[nm] or 999
+            if p<bestPriority and p<999 then
+                bestPriority=p
+                idx=i
+            end
+        end
+        if idx then
+            return idx, list[idx], bestPriority
+        end
+        return nil, nil, nil
     end
     local function confirm()
         local ok, confirmButton = pcall(function()
@@ -2847,8 +2916,8 @@ task.spawn(function()
                 return
             end
             local function formatStats()
-                local stats = "<:gold:1265957290251522089> "..formatNumber(clientData.Gold or 0)
-                stats = stats .. "\n<:jewel:1217525743408648253> " .. formatNumber(clientData.Jewels or 0)
+                local stats = "<:jewel:1217525743408648253> " .. formatNumber(clientData.Jewels or 0)
+                stats = stats .. "\n<:gold:1265957290251522089> "..formatNumber(clientData.Gold or 0)
                 stats = stats .. "\n<:emerald:1389165843966984192> " .. formatNumber(clientData.Emeralds or 0)
                 stats = stats .. "\n<:rerollshard:1426315987019501598> " .. formatNumber(clientData.Rerolls or 0)
                 stats = stats .. "\n<:candybasket:1426304615284084827> " .. formatNumber(clientData.CandyBasket or 0)
