@@ -30,7 +30,7 @@ repeat
 until (not isTeleportUIVisible() and isPlayerInValidState()) or maxWaitTime > maxWait
 
 if maxWaitTime > maxWait and not isPlayerInValidState() then
-    task.wait(3)
+    task.wait(1)
 end
 
 task.wait(1)
@@ -65,9 +65,47 @@ local function filteredError(...)
 end
 if logerror then logerror = filteredError end
 
+local LogService = game:GetService("LogService")
+local ScriptContext = game:GetService("ScriptContext")
+
+pcall(function()
+    ScriptContext.Error:Connect(function(message, stackTrace, script)
+        if message:find("PlayerModule") 
+            or message:find("CameraModule") 
+            or message:find("ZoomController")
+            or message:find("Popper")
+            or message:find("attempt to perform arithmetic") then
+            return
+        end
+    end)
+end)
+
+pcall(function()
+    LogService.MessageOut:Connect(function(message, messageType)
+        if messageType == Enum.MessageType.MessageError then
+            if message:find("PlayerModule") 
+                or message:find("CameraModule") 
+                or message:find("ZoomController")
+                or message:find("Popper") then
+                return
+            end
+        end
+    end)
+end)
+
 local RS = game:GetService("ReplicatedStorage")
 local HttpService = game:GetService("HttpService")
 local RunService = game:GetService("RunService")
+
+local currentCash = 0
+task.spawn(function()
+    while true do
+        RunService.Heartbeat:Wait()
+        pcall(function()
+            currentCash = LocalPlayer.Cash.Value
+        end)
+    end
+end)
 
 local CONFIG_FOLDER = "ALSHalloweenEvent"
 local MACRO_FOLDER = CONFIG_FOLDER .. "/macros"
@@ -640,8 +678,7 @@ local playToggle = Tabs.Main:Toggle({
                     CurrentStep = step
                     TotalSteps = #macroData
                                         
-                    local cash = 0
-                    pcall(function() cash = LocalPlayer.Cash.Value end)
+                    local cash = currentCash
                     
                     local actionCost = action.Cost or 0
                     
@@ -684,182 +721,109 @@ local playToggle = Tabs.Main:Toggle({
                         continue
                     end
                     
-                    local actionSuccess = false
-                    local retryCount = 0
-                    local maxRetries = 5
-                    
-                    while not actionSuccess and retryCount < maxRetries and playing do
-                        local success = pcall(function()
-                            if not action.RemoteName then
-                                print("[Macro] Error: No RemoteName at step " .. step)
-                                actionSuccess = true
+                    pcall(function()
+                        if not action.RemoteName then
+                            print("[Macro] Error: No RemoteName at step " .. step)
+                            return
+                        end
+                        
+                        local remote = RemoteCache[action.RemoteName:lower()]
+                        if not remote then 
+                            print("[Macro] Warning: Remote not found: " .. action.RemoteName)
+                            return 
+                        end
+                        
+                        if action.RemoteName:lower():find("upgrade") then
+                            local towerToUpgrade = nil
+                            
+                            for _, t in pairs(workspace.Towers:GetChildren()) do
+                                if t:FindFirstChild("Owner") and t.Owner.Value == LocalPlayer and t.Name == action.TowerName then
+                                    towerToUpgrade = t
+                                    break
+                                end
+                            end
+                            
+                            if not towerToUpgrade then
+                                print("[Macro] Tower not found: " .. (action.TowerName or "Unknown"))
                                 return
                             end
                             
-                            local remote = RemoteCache[action.RemoteName:lower()]
-                            if not remote then 
-                                print("[Macro] Warning: Remote not found: " .. action.RemoteName)
-                                actionSuccess = true
-                                return 
+                            local beforeLevel = towerToUpgrade:FindFirstChild("Upgrade") and towerToUpgrade.Upgrade.Value or 0
+                            local maxLevel = towerToUpgrade:FindFirstChild("MaxUpgrade") and towerToUpgrade.MaxUpgrade.Value or 999
+                            
+                            if beforeLevel >= maxLevel then
+                                print("[Macro] Skipping: " .. action.TowerName .. " already maxed (Lv" .. beforeLevel .. ")")
+                                return
                             end
                             
-                            if action.RemoteName:lower():find("upgrade") then
-                                local foundTower = false
-                                local towerToUpgrade = nil
-                                
-                                for _, t in pairs(workspace.Towers:GetChildren()) do
-                                    if t:FindFirstChild("Owner") and t.Owner.Value == LocalPlayer and t.Name == action.TowerName then
-                                        towerToUpgrade = t
-                                        foundTower = true
-                                        break
-                                    end
-                                end
-                                
-                                if not foundTower then
-                                    print("[Macro] Warning: Tower not found for upgrade: " .. (action.TowerName or "Unknown"))
-                                    actionSuccess = true
-                                    return
-                                end
-                                
-                                if towerToUpgrade then
-                                    local beforeLevel = 0
-                                    if towerToUpgrade:FindFirstChild("Upgrade") then
-                                        beforeLevel = towerToUpgrade.Upgrade.Value
-                                    end
-                                    
-                                    local maxLevel = 999
-                                    if towerToUpgrade:FindFirstChild("MaxUpgrade") then
-                                        maxLevel = towerToUpgrade.MaxUpgrade.Value
-                                    end
-                                    
-                                    if beforeLevel >= maxLevel then
-                                        print("[Macro] Info: " .. action.TowerName .. " already at max level (" .. beforeLevel .. "/" .. maxLevel .. ")")
-                                        actionSuccess = true
-                                        return
-                                    end
-                                    
-                                    if remote:IsA("RemoteFunction") then
-                                        remote:InvokeServer(towerToUpgrade)
-                                    else
-                                        remote:FireServer(towerToUpgrade)
-                                    end
-                                    
-                                    local upgradeWaitTime = 0
-                                    local maxUpgradeWait = 2
-                                    local afterLevel = beforeLevel
-                                    
-                                    while upgradeWaitTime < maxUpgradeWait do
-                                        task.wait(0.05)
-                                        upgradeWaitTime = upgradeWaitTime + 0.05
-                                        
-                                        if towerToUpgrade:FindFirstChild("Upgrade") then
-                                            afterLevel = towerToUpgrade.Upgrade.Value
-                                        end
-                                        
-                                        if afterLevel > beforeLevel then
-                                            break
-                                        end
-                                    end
-                                    
-                                    if afterLevel > beforeLevel then
-                                        actionSuccess = true
-                                        print("[Macro] ✓ Success: " .. action.TowerName .. " upgraded from Lv" .. beforeLevel .. " to Lv" .. afterLevel)
-                                    else
-                                        if retryCount >= maxRetries - 1 then
-                                            print("[Macro] ✗ FAILED: Upgrade didn't complete after " .. maxRetries .. " retries - SKIPPING STEP")
-                                            actionSuccess = true
-                                        else
-                                            print("[Macro] ⚠ Retry " .. (retryCount + 1) .. ": Upgrade level didn't increase for " .. action.TowerName .. " (Before: Lv" .. beforeLevel .. ", After: Lv" .. afterLevel .. ")")
-                                        end
-                                    end
-                                end
+                            if remote:IsA("RemoteFunction") then
+                                remote:InvokeServer(towerToUpgrade)
                             else
-                                local towerName = action.TowerName or "Unknown"
-                                
-                                local countBefore = 0
-                                pcall(function()
-                                    for _, t in pairs(workspace.Towers:GetChildren()) do
-                                        if t.Name == towerName and t:FindFirstChild("Owner") and t.Owner.Value == LocalPlayer then
-                                            countBefore = countBefore + 1
-                                        end
-                                    end
-                                end)
-                                
-                                local args = {action.Args[1]}
-                                if action.Args[2] and type(action.Args[2]) == "table" then
-                                    args[2] = CFrame.new(unpack(action.Args[2]))
-                                else
-                                    args[2] = action.Args[2]
-                                end
-                                
-                                print("[Macro] Placing: " .. towerName .. " (Current count: " .. countBefore .. ")")
-                                
-                                if remote:IsA("RemoteFunction") then
-                                    remote:InvokeServer(unpack(args))
-                                else
-                                    remote:FireServer(unpack(args))
-                                end
-                                
-                                local placementWaitTime = 0
-                                local maxPlacementWait = 3
-                                local countAfter = countBefore
-                                
-                                while placementWaitTime < maxPlacementWait do
-                                    task.wait(0.1)
-                                    placementWaitTime = placementWaitTime + 0.1
-                                    
-                                    countAfter = 0
-                                    pcall(function()
-                                        for _, t in pairs(workspace.Towers:GetChildren()) do
-                                            if t.Name == towerName and t:FindFirstChild("Owner") and t.Owner.Value == LocalPlayer then
-                                                countAfter = countAfter + 1
-                                            end
-                                        end
-                                    end)
-                                    
-                                    if countAfter > countBefore then
-                                        actionSuccess = true
-                                        print("[Macro] Success: Placed " .. towerName .. " (New count: " .. countAfter .. ")")
-                                        break
-                                    end
-                                end
-                                
-                                if not actionSuccess then
-                                    if retryCount >= maxRetries - 1 then
-                                        print("[Macro] Warning: Placement failed after " .. retryCount .. " retries, moving on...")
-                                        actionSuccess = true
-                                    else
-                                        print("[Macro] Warning: Tower count didn't increase for " .. towerName .. " (Before: " .. countBefore .. ", After: " .. countAfter .. ", Retry: " .. retryCount .. ")")
-                                    end
+                                remote:FireServer(towerToUpgrade)
+                            end
+                            
+                            local waitTime = 0
+                            local afterLevel = beforeLevel
+                            while waitTime < 1 do
+                                task.wait(0.1)
+                                waitTime = waitTime + 0.1
+                                afterLevel = towerToUpgrade:FindFirstChild("Upgrade") and towerToUpgrade.Upgrade.Value or beforeLevel
+                                if afterLevel > beforeLevel then
+                                    break
                                 end
                             end
-                        end)
-                        
-                        if not success or not actionSuccess then
-                            retryCount = retryCount + 1
-                            if retryCount < maxRetries then
-                                print("[Macro] Retry " .. retryCount .. "/" .. maxRetries .. " for step " .. step)
-                                task.wait(0.1)
+                            
+                            if afterLevel > beforeLevel then
+                                print("[Macro] ✓ " .. action.TowerName .. " upgraded Lv" .. beforeLevel .. " → Lv" .. afterLevel)
                             else
-                                print("[Macro] Max retries reached for step " .. step .. ", moving on...")
-                                actionSuccess = true
+                                print("[Macro] ⚠ " .. action.TowerName .. " upgrade didn't verify after 3s (Lv" .. beforeLevel .. ") - moving on")
+                            end
+                        else
+                            local towerName = action.TowerName or "Unknown"
+                            
+                            local countBefore = 0
+                            for _, t in pairs(workspace.Towers:GetChildren()) do
+                                if t.Name == towerName and t:FindFirstChild("Owner") and t.Owner.Value == LocalPlayer then
+                                    countBefore = countBefore + 1
+                                end
+                            end
+                            
+                            local args = {action.Args[1]}
+                            if action.Args[2] and type(action.Args[2]) == "table" then
+                                args[2] = CFrame.new(unpack(action.Args[2]))
+                            else
+                                args[2] = action.Args[2]
+                            end
+                            
+                            if remote:IsA("RemoteFunction") then
+                                remote:InvokeServer(unpack(args))
+                            else
+                                remote:FireServer(unpack(args))
+                            end
+                            
+                            task.wait(0.5)
+                            
+                            local countAfter = 0
+                            for _, t in pairs(workspace.Towers:GetChildren()) do
+                                if t.Name == towerName and t:FindFirstChild("Owner") and t.Owner.Value == LocalPlayer then
+                                    countAfter = countAfter + 1
+                                end
+                            end
+                            
+                            if countAfter > countBefore then
+                                print("[Macro] ✓ Placed " .. towerName .. " (" .. countBefore .. " → " .. countAfter .. ")")
+                            else
+                                print("[Macro] ✗ Failed to place " .. towerName .. " (count stayed " .. countBefore .. ")")
                             end
                         end
-                    end
+                    end)
                     
-                    if actionSuccess then
-                        step = step + 1
-                        print("[Macro] ✓ Step " .. (step - 1) .. " completed, moving to step " .. step)
-                    else
-                        print("[Macro] ✗ CRITICAL: Step " .. step .. " failed verification - NOT MOVING TO NEXT STEP")
-                        print("[Macro] This should never happen - check the retry logic!")
-                        step = step + 1
-                    end
+                    step = step + 1
                     
                     if StepDelay > 0 then
                         task.wait(StepDelay)
                     else
-                        RunService.Heartbeat:Wait()
+                        task.wait(0.15)
                     end
                 end
                 
@@ -902,6 +866,19 @@ Tabs.Main:Input({
         saveSettings()
     end
 })
+
+if savedSettings.playMacroEnabled then
+    task.spawn(function()
+        task.wait(0.3)
+        if playToggle and playToggle.Set then
+            pcall(function()
+                playToggle:Set(true)
+                playing = true
+                print("[Macro] Play toggle restored to ON from saved settings")
+            end)
+        end
+    end)
+end
 
 Tabs.Main:Space()
 Tabs.Main:Divider()
