@@ -5,18 +5,20 @@ task.wait(2)
 
 local CoreGui = game:GetService("CoreGui")
 pcall(function()
-    for _, ui in pairs(CoreGui:GetChildren()) do
+    local coreChildren = CoreGui:GetChildren()
+    for i = 1, #coreChildren do
+        local ui = coreChildren[i]
         pcall(function()
             local children = ui:GetChildren()
-            if children then
-                for _, child in pairs(children) do
-                    if child.Name == "Window" and child:FindFirstChild("Frame") then
-                        local success, titleText = pcall(function()
-                            return child.Frame.Main.Topbar.Left.Title.Title.Text
-                        end)
-                        if success and titleText and titleText:find("Macro System") then
-                            ui:Destroy()
-                        end
+            for j = 1, #children do
+                local child = children[j]
+                if child.Name == "Window" and child:FindFirstChild("Frame") then
+                    local success, titleText = pcall(function()
+                        return child.Frame.Main.Topbar.Left.Title.Title.Text
+                    end)
+                    if success and titleText and titleText:find("Macro System", 1, true) then
+                        ui:Destroy()
+                        break
                     end
                 end
             end
@@ -69,58 +71,113 @@ getgenv()._AbilityUIBuilding = false
 
 local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
 
+getgenv().SuppressCameraErrors = true
+
+local FILTER_PATTERNS = {
+    "playermodule", "cameramodule", "zoomcontroller", "popper", "poppercam",
+    "imagelabel", "not a valid member", "is not a valid member",
+    "attempt to perform arithmetic", "playerscripts", "byorials",
+    "stack begin", "stack end", "runservice", "firerenderstepearlyfunctions",
+    "vector3", "nil and vector", "querypoint", "queryviewport"
+}
 
 local function shouldFilterMessage(msg)
+    if not getgenv().SuppressCameraErrors then return false end
+    if not msg or msg == "" then return false end
     local msgLower = msg:lower()
-    
-    if msgLower:find("playermodule") 
-        or msgLower:find("cameramodule") 
-        or msgLower:find("zoomcontroller")
-        or msgLower:find("popper")
-        or msgLower:find("poppercam")
-        or msgLower:find("imagelabel")
-        or msgLower:find("not a valid member")
-        or msgLower:find("is not a valid member")
-        or msgLower:find("attempt to perform arithmetic")
-        or msgLower:find("playerscripts")
-        or msgLower:find("byorials")
-        or msgLower:find("stack begin")
-        or msgLower:find("stack end")
-        or msgLower:find("runservice")
-        or msgLower:find("firerenderstepearlyfunctions") then
-        return true
+    for i = 1, #FILTER_PATTERNS do
+        if msgLower:find(FILTER_PATTERNS[i], 1, true) then
+            return true
+        end
     end
-    
     return false
 end
 
 local oldLogWarn = logwarn or warn
 local oldWarn = warn
+local oldPrint = print
+
 local function filteredWarn(...)
     local args = {...}
-    local msg = ""
-    for i, v in ipairs(args) do
-        msg = msg .. tostring(v)
-    end
+    if #args == 0 then return end
+    local msg = table.concat(args, " ")
     if not shouldFilterMessage(msg) then
         oldLogWarn(...)
     end
 end
+
+local function filteredError(...)
+    local args = {...}
+    if #args == 0 then return end
+    local msg = table.concat(args, " ")
+    if not shouldFilterMessage(msg) then
+        if logerror then
+            logerror(...)
+        else
+            error(msg, 2)
+        end
+    end
+end
+
 if logwarn then logwarn = filteredWarn end
 warn = filteredWarn
 
-local oldLogError = logerror or error
-local function filteredError(...)
-    local args = {...}
-    local msg = ""
-    for i, v in ipairs(args) do
-        msg = msg .. tostring(v)
-    end
-    if not shouldFilterMessage(msg) then
-        oldLogError(...)
-    end
-end
 if logerror then logerror = filteredError end
+
+local game_LogService = game:GetService("LogService")
+pcall(function()
+    game_LogService.MessageOut:Connect(function(message, messageType)
+        if messageType == Enum.MessageType.MessageError or messageType == Enum.MessageType.MessageWarning then
+            if shouldFilterMessage(message) then
+                return
+            end
+        end
+    end)
+end)
+
+pcall(function()
+    local ScriptContext = game:GetService("ScriptContext")
+    ScriptContext.Error:Connect(function(message, stackTrace, script)
+        if shouldFilterMessage(message) or shouldFilterMessage(stackTrace) then
+            return
+        end
+    end)
+end)
+
+task.spawn(function()
+    pcall(function()
+        local StarterPlayer = game:GetService("StarterPlayer")
+        local StarterPlayerScripts = StarterPlayer:FindFirstChild("StarterPlayerScripts")
+        if StarterPlayerScripts then
+            local PlayerModule = StarterPlayerScripts:FindFirstChild("PlayerModule")
+            if PlayerModule then
+                local CameraModule = PlayerModule:FindFirstChild("CameraModule")
+                if CameraModule then
+                    local ZoomController = CameraModule:FindFirstChild("ZoomController")
+                    if ZoomController then
+                        local Popper = ZoomController:FindFirstChild("Popper")
+                        if Popper and Popper:IsA("ModuleScript") then
+                            local success = pcall(function()
+                                local popperModule = require(Popper)
+                                if popperModule and type(popperModule) == "table" then
+                                    for key, value in pairs(popperModule) do
+                                        if type(value) == "function" then
+                                            popperModule[key] = function(...)
+                                                local ok, result = pcall(value, ...)
+                                                if ok then return result end
+                                                return nil
+                                            end
+                                        end
+                                    end
+                                end
+                            end)
+                        end
+                    end
+                end
+            end
+        end
+    end)
+end)
 
 local function createObsidianCompat()
     local compat = {
@@ -138,14 +195,12 @@ local function createObsidianCompat()
         local listeners = {}
         return {
             Connect = function(_, fn)
-                table.insert(listeners, fn)
+                listeners[#listeners + 1] = fn
                 return { Disconnect = function() end }
             end,
             Fire = function(_, ...)
                 for i = 1, #listeners do
-                    local fn = listeners[i]
-                    local ok = pcall(fn, ...)
-                    if not ok then end
+                    pcall(listeners[i], ...)
                 end
             end
         }
@@ -455,10 +510,13 @@ local function cleanupBeforeTeleport()
     
     pcall(function()
         if getconnections then
-            for _, service in pairs({RunService.Heartbeat, RunService.RenderStepped, RunService.Stepped}) do
-                for _, connection in pairs(getconnections(service)) do
-                    if connection.Disable then connection:Disable() end
-                    if connection.Disconnect then connection:Disconnect() end
+            local services = {RunService.Heartbeat, RunService.RenderStepped, RunService.Stepped}
+            for i = 1, #services do
+                local connections = getconnections(services[i])
+                for j = 1, #connections do
+                    local conn = connections[j]
+                    if conn.Disable then conn:Disable() end
+                    if conn.Disconnect then conn:Disconnect() end
                 end
             end
         end
@@ -466,27 +524,27 @@ local function cleanupBeforeTeleport()
     
     pcall(function()
         local coreGui = game:GetService("CoreGui")
-        for _, gui in pairs(coreGui:GetChildren()) do
-            if gui.Name:find("Wind") or gui.Name:find("ALS") or gui.Name:find("UI") then
+        local children = coreGui:GetChildren()
+        for i = 1, #children do
+            local gui = children[i]
+            local name = gui.Name
+            if name:find("Wind") or name:find("ALS") or name:find("UI") then
                 gui:Destroy()
             end
         end
     end)
     
-    pcall(function()
-        collectgarbage("collect")
-    end)
-    
+    pcall(collectgarbage, "collect")
     task.wait(0.2)
-
 end
 
 getgenv().CleanupBeforeTeleport = cleanupBeforeTeleport
 
 local LOBBY_PLACEIDS = {12886143095, 18583778121}
 local function checkIsInLobby()
-    for _, placeId in ipairs(LOBBY_PLACEIDS) do
-        if game.PlaceId == placeId then return true end
+    local currentPlaceId = game.PlaceId
+    for i = 1, #LOBBY_PLACEIDS do
+        if currentPlaceId == LOBBY_PLACEIDS[i] then return true end
     end
     return false
 end
@@ -579,18 +637,18 @@ local function saveMacroSettings()
 end
 
 local function loadMacros()
-    getgenv().Macros = {}
+    table.clear(getgenv().Macros or {})
+    getgenv().Macros = getgenv().Macros or {}
     if not isfolder(MACRO_FOLDER) then return end
     local files = listfiles(MACRO_FOLDER)
     if not files then return end
-    for _, file in pairs(files) do
+    for i = 1, #files do
+        local file = files[i]
         if file:sub(-5) == ".json" then
             local fileName = file:match("([^/\\]+)%.json$")
             
             if fileName ~= "settings" and fileName ~= "playback_state" then
-                local ok, data = pcall(function() 
-                    return HttpService:JSONDecode(readfile(file)) 
-                end)
+                local ok, data = pcall(HttpService.JSONDecode, HttpService, readfile(file))
                 if ok and type(data) == "table" then
                     local isSettings = (data.playMacroEnabled ~= nil or data.selectedMacro ~= nil or data.macroMaps ~= nil)
                     if not isSettings then
@@ -615,8 +673,10 @@ end
 
 local function getMacroNames()
     local names = {}
+    local count = 0
     for name in pairs(getgenv().Macros) do 
-        table.insert(names, name) 
+        count = count + 1
+        names[count] = name
     end
     table.sort(names)
     return names
@@ -663,28 +723,34 @@ getgenv().UpdateMacroStatus = function()
     end
     getgenv().MacroLastStatusUpdate = now
     
+    local statusLabel = getgenv().MacroStatusLabel
+    local stepLabel = getgenv().MacroStepLabel
+    local actionLabel = getgenv().MacroActionLabel
+    local unitLabel = getgenv().MacroUnitLabel
+    local waitingLabel = getgenv().MacroWaitingLabel
+    
     pcall(function()
-        if getgenv().MacroStatusLabel and getgenv().MacroStatusLabel.SetTitle then
-            getgenv().MacroStatusLabel:SetTitle("Status: " .. (getgenv().MacroStatusText or "Idle"))
+        if statusLabel and statusLabel.SetTitle then
+            statusLabel:SetTitle("Status: " .. (getgenv().MacroStatusText or "Idle"))
         end
         
-        if getgenv().MacroStepLabel and getgenv().MacroStepLabel.SetTitle then
-            getgenv().MacroStepLabel:SetTitle("📝 Step: " .. (getgenv().MacroCurrentStep or 0) .. "/" .. (getgenv().MacroTotalSteps or 0))
+        if stepLabel and stepLabel.SetTitle then
+            stepLabel:SetTitle("📝 Step: " .. (getgenv().MacroCurrentStep or 0) .. "/" .. (getgenv().MacroTotalSteps or 0))
         end
         
-        if getgenv().MacroActionLabel and getgenv().MacroActionLabel.SetTitle then
+        if actionLabel and actionLabel.SetTitle then
             local actionText = (getgenv().MacroActionText and getgenv().MacroActionText ~= "") and getgenv().MacroActionText or "None"
-            getgenv().MacroActionLabel:SetTitle("⚡ Action: " .. actionText)
+            actionLabel:SetTitle("⚡ Action: " .. actionText)
         end
         
-        if getgenv().MacroUnitLabel and getgenv().MacroUnitLabel.SetTitle then
+        if unitLabel and unitLabel.SetTitle then
             local unitText = (getgenv().MacroUnitText and getgenv().MacroUnitText ~= "") and getgenv().MacroUnitText or "None"
-            getgenv().MacroUnitLabel:SetTitle("🗼 Unit: " .. unitText)
+            unitLabel:SetTitle("🗼 Unit: " .. unitText)
         end
         
-        if getgenv().MacroWaitingLabel and getgenv().MacroWaitingLabel.SetTitle then
+        if waitingLabel and waitingLabel.SetTitle then
             local waitingText = (getgenv().MacroWaitingText and getgenv().MacroWaitingText ~= "") and getgenv().MacroWaitingText or "None"
-            getgenv().MacroWaitingLabel:SetTitle("⏳ Waiting: " .. waitingText)
+            waitingLabel:SetTitle("⏳ Waiting: " .. waitingText)
         end
     end)
 end
@@ -739,7 +805,9 @@ end
 getgenv().GetRecentCashDecrease = function(withinSeconds)
     withinSeconds = withinSeconds or 1
     local now = tick()
-    for _, entry in ipairs(getgenv().MacroCashHistory) do
+    local history = getgenv().MacroCashHistory
+    for i = 1, #history do
+        local entry = history[i]
         if (now - entry.time) <= withinSeconds then
             return entry.decrease
         end
@@ -779,11 +847,11 @@ local function cacheTowerInfo()
     
     pcall(function()
         local towerInfoPath = RS:WaitForChild("Modules"):WaitForChild("TowerInfo")
-        for _, mod in pairs(towerInfoPath:GetChildren()) do
+        local children = towerInfoPath:GetChildren()
+        for i = 1, #children do
+            local mod = children[i]
             if mod:IsA("ModuleScript") then
-                local ok, data = pcall(function() 
-                    return require(mod) 
-                end)
+                local ok, data = pcall(require, mod)
                 if ok then 
                     getgenv().MacroTowerInfoCache[mod.Name] = data 
                 end
@@ -795,18 +863,17 @@ end
 local function cacheRemotes()
     if next(getgenv().MacroRemoteCache) then return true end
     
+    local count = 0
     pcall(function()
-        for _, v in pairs(RS:GetDescendants()) do
+        local descendants = RS:GetDescendants()
+        for i = 1, #descendants do
+            local v = descendants[i]
             if v:IsA("RemoteEvent") or v:IsA("RemoteFunction") then
                 getgenv().MacroRemoteCache[v.Name:lower()] = v
+                count = count + 1
             end
         end
     end)
-    
-    local count = 0
-    for _ in pairs(getgenv().MacroRemoteCache) do 
-        count = count + 1 
-    end
     
     return count > 0
 end
@@ -998,10 +1065,10 @@ end
 
 task.spawn(function()
     while true do
-        task.wait(3)
+        task.wait(5)
         local now = tick()
-        for key, _ in pairs(placementMonitor) do
-            if placementMonitor[key] and (now - placementMonitor[key]) > 5 then
+        for key, timestamp in pairs(placementMonitor) do
+            if (now - timestamp) > 5 then
                 placementMonitor[key] = nil
             end
         end
@@ -1011,19 +1078,13 @@ end)
 local towerMonitor = {}
 local lastRecordedUpgrade = {}
 
+local AUTO_UPGRADE_CLONES = {
+    ["NarutoBaryonClone"] = true,
+    ["WukongClone"] = true,
+}
+
 local function isAutoUpgradeClone(towerName)
-    local autoUpgradeClones = {
-        "NarutoBaryonClone",
-        "WukongClone",
-    }
-    
-    for _, cloneName in ipairs(autoUpgradeClones) do
-        if towerName == cloneName then
-            return true
-        end
-    end
-    
-    return false
+    return AUTO_UPGRADE_CLONES[towerName] == true
 end
 
 local monitorConnection
@@ -1031,7 +1092,9 @@ monitorConnection = RunService.Heartbeat:Connect(function()
     if not getgenv().MacroRecording then return end
     
     pcall(function()
-        for _, tower in pairs(workspace.Towers:GetChildren()) do
+        local towers = workspace.Towers:GetChildren()
+        for i = 1, #towers do
+            local tower = towers[i]
             if tower:FindFirstChild("Owner") and tower.Owner.Value == LocalPlayer then
                 local towerName = tower.Name
                 local upgradeLevel = 0
@@ -1117,7 +1180,7 @@ end)
 
 task.spawn(function()
     while true do
-        task.wait(3)
+        task.wait(5)
         local now = tick()
         for key, time in pairs(lastRecordedUpgrade) do
             if (now - time) > 5 then
@@ -1196,9 +1259,20 @@ getgenv().OtherCards = {
     ["Fortune Flow"] = 999, ["Soul Link"] = 999
 }
 getgenv().CardPriority = getgenv().CardPriority or {}
-if getgenv().CandyCards then for n,v in pairs(getgenv().CandyCards) do if getgenv().Config.inputs["Card_"..n] then getgenv().CardPriority[n] = tonumber(getgenv().Config.inputs["Card_"..n]) else getgenv().CardPriority[n] = v end end end
-if getgenv().DevilSacrifice then for n,v in pairs(getgenv().DevilSacrifice) do if getgenv().Config.inputs["Card_"..n] then getgenv().CardPriority[n] = tonumber(getgenv().Config.inputs["Card_"..n]) else getgenv().CardPriority[n] = v end end end
-if getgenv().OtherCards then for n,v in pairs(getgenv().OtherCards) do if getgenv().Config.inputs["Card_"..n] then getgenv().CardPriority[n] = tonumber(getgenv().Config.inputs["Card_"..n]) else getgenv().CardPriority[n] = v end end end
+local configInputs = getgenv().Config.inputs
+local cardPriority = getgenv().CardPriority
+
+local function loadCardPriorities(cardTable)
+    if not cardTable then return end
+    for n, v in pairs(cardTable) do
+        local key = "Card_" .. n
+        cardPriority[n] = configInputs[key] and tonumber(configInputs[key]) or v
+    end
+end
+
+loadCardPriorities(getgenv().CandyCards)
+loadCardPriorities(getgenv().DevilSacrifice)
+loadCardPriorities(getgenv().OtherCards)
 
 getgenv().BossRushGeneral = {
     ["Metal Skin"] = 0,["Raging Power"] = 0,["Demon Takeover"] = 0,["Fortune"] = 0,
@@ -1206,18 +1280,18 @@ getgenv().BossRushGeneral = {
 }
 getgenv().BabyloniaCastle = {}
 getgenv().BossRushCardPriority = getgenv().BossRushCardPriority or {}
-if getgenv().BossRushGeneral then
-    for n,v in pairs(getgenv().BossRushGeneral) do
-        local key = "BossRush_"..n
-        if getgenv().Config.inputs[key] then getgenv().BossRushCardPriority[n] = tonumber(getgenv().Config.inputs[key]) else getgenv().BossRushCardPriority[n] = v end
+local bossRushPriority = getgenv().BossRushCardPriority
+
+local function loadBossRushPriorities(cardTable, prefix)
+    if not cardTable then return end
+    for n, v in pairs(cardTable) do
+        local key = prefix .. n
+        bossRushPriority[n] = configInputs[key] and tonumber(configInputs[key]) or v
     end
 end
-if getgenv().BabyloniaCastle then
-    for n,v in pairs(getgenv().BabyloniaCastle) do
-        local key = "BabyloniaCastle_"..n
-        if getgenv().Config.inputs[key] then getgenv().BossRushCardPriority[n] = tonumber(getgenv().Config.inputs[key]) else getgenv().BossRushCardPriority[n] = v end
-    end
-end
+
+loadBossRushPriorities(getgenv().BossRushGeneral, "BossRush_")
+loadBossRushPriorities(getgenv().BabyloniaCastle, "BabyloniaCastle_")
 
 getgenv().BreachAutoJoin = getgenv().BreachAutoJoin or {}
 getgenv().BreachEnabled = getgenv().Config.toggles.BreachToggle or false
@@ -1245,42 +1319,42 @@ local function getTowerInfo(unitName)
 end
 local function getAllAbilities(unitName)
     if not unitName or unitName == "" then return {} end
-    local towerNameToCheck = unitName
-    if unitName == "TuskSummon_Act4" then towerNameToCheck = "JohnnyGodly" end
+    local towerNameToCheck = unitName == "TuskSummon_Act4" and "JohnnyGodly" or unitName
     local towerInfo = getTowerInfo(towerNameToCheck)
     if not towerInfo then return {} end
     local abilities = {}
-    for level = 0,50 do
-        if towerInfo[level] then
-            if towerInfo[level].Ability then
-                local a = towerInfo[level].Ability
-                local nm = a.Name
-                if not abilities[nm] then
-                    local hasRealAttribute = false
-                    if a.AttributeRequired and type(a.AttributeRequired) == "table" then
-                        if a.AttributeRequired.Name ~= "JUST_TO_DISPLAY_IN_LOBBY" then
-                            hasRealAttribute = true
-                        end
-                    elseif a.AttributeRequired and type(a.AttributeRequired) ~= "table" then
-                        hasRealAttribute = true
-                    end
-                    abilities[nm] = { name = nm, cooldown = a.Cd, requiredLevel = level, isGlobal = a.IsCdGlobal or false, isAttribute = hasRealAttribute }
-                end
+    
+    local function checkAttribute(a)
+        if not a.AttributeRequired then return false end
+        if type(a.AttributeRequired) == "table" then
+            return a.AttributeRequired.Name ~= "JUST_TO_DISPLAY_IN_LOBBY"
+        end
+        return true
+    end
+    
+    local function addAbility(a, level)
+        local nm = a.Name
+        if not abilities[nm] then
+            abilities[nm] = { 
+                name = nm, 
+                cooldown = a.Cd, 
+                requiredLevel = level, 
+                isGlobal = a.IsCdGlobal or false, 
+                isAttribute = checkAttribute(a) 
+            }
+        end
+    end
+    
+    for level = 0, 50 do
+        local levelData = towerInfo[level]
+        if levelData then
+            if levelData.Ability then
+                addAbility(levelData.Ability, level)
             end
-            if towerInfo[level].Abilities then
-                for _, a in pairs(towerInfo[level].Abilities) do
-                    local nm = a.Name
-                    if not abilities[nm] then
-                        local hasRealAttribute = false
-                        if a.AttributeRequired and type(a.AttributeRequired) == "table" then
-                            if a.AttributeRequired.Name ~= "JUST_TO_DISPLAY_IN_LOBBY" then
-                                hasRealAttribute = true
-                            end
-                        elseif a.AttributeRequired and type(a.AttributeRequired) ~= "table" then
-                            hasRealAttribute = true
-                        end
-                        abilities[nm] = { name = nm, cooldown = a.Cd, requiredLevel = level, isGlobal = a.IsCdGlobal or false, isAttribute = hasRealAttribute }
-                    end
+            if levelData.Abilities then
+                local abilityList = levelData.Abilities
+                for i = 1, #abilityList do
+                    addAbility(abilityList[i], level)
                 end
             end
         end
@@ -3023,10 +3097,15 @@ GB.Card_Left:Paragraph({
 GB.Card_Right:Section({ Title = "🍬 Candy Cards", Box = true })
 do
     local candyNames = {}
-    if getgenv().CandyCards and type(getgenv().CandyCards) == "table" then
-        for k in pairs(getgenv().CandyCards) do table.insert(candyNames, k) end
+    local candyCards = getgenv().CandyCards
+    if candyCards and type(candyCards) == "table" then
+        local count = 0
+        for k in pairs(candyCards) do 
+            count = count + 1
+            candyNames[count] = k 
+        end
     end
-    table.sort(candyNames, function(a,b) return (getgenv().CandyCards[a] or 999) < (getgenv().CandyCards[b] or 999) end)
+    table.sort(candyNames, function(a,b) return (candyCards[a] or 999) < (candyCards[b] or 999) end)
     for _, cardName in ipairs(candyNames) do
         local key = "Card_"..cardName
         local defaultValue = getgenv().Config.inputs[key] or tostring(getgenv().CandyCards[cardName])
@@ -3078,8 +3157,13 @@ GB.Card_Right:Space()
 GB.Card_Right:Section({ Title = "📋 Other Cards", Box = true })
 do
     local otherNames = {}
-    if getgenv().OtherCards and type(getgenv().OtherCards) == "table" then
-        for k in pairs(getgenv().OtherCards) do table.insert(otherNames, k) end
+    local otherCards = getgenv().OtherCards
+    if otherCards and type(otherCards) == "table" then
+        local count = 0
+        for k in pairs(otherCards) do 
+            count = count + 1
+            otherNames[count] = k 
+        end
     end
     table.sort(otherNames)
     for _, cardName in ipairs(otherNames) do
@@ -3122,8 +3206,13 @@ GB.Boss_Right:AddDivider()
 GB.Boss_Right:AddLabel("🎯 General Cards")
 do
     local brNames = {}
-    if getgenv().BossRushGeneral and type(getgenv().BossRushGeneral) == "table" then
-        for k in pairs(getgenv().BossRushGeneral) do table.insert(brNames, k) end
+    local bossRushGeneral = getgenv().BossRushGeneral
+    if bossRushGeneral and type(bossRushGeneral) == "table" then
+        local count = 0
+        for k in pairs(bossRushGeneral) do 
+            count = count + 1
+            brNames[count] = k 
+        end
     end
     table.sort(brNames)
     for _, cardName in ipairs(brNames) do
@@ -3697,23 +3786,30 @@ if getgenv().Config.toggles.AutoHideUIToggle then
 end
 
 if getgenv().Config and getgenv().Config.inputs then
-    for inputKey, value in pairs(getgenv().Config.inputs) do
-        if inputKey:match("^Card_") then
-            local cardName = inputKey:gsub("^Card_", "")
-            local num = tonumber(value)
-            if num and getgenv().CardPriority and getgenv().CardPriority[cardName] then getgenv().CardPriority[cardName] = num end
-        elseif inputKey:match("^BossRush_") then
-            local cardName = inputKey:gsub("^BossRush_", "")
-            local num = tonumber(value)
-            if num and getgenv().BossRushCardPriority and getgenv().BossRushCardPriority[cardName] then 
-                getgenv().BossRushCardPriority[cardName] = num 
-            end
-        elseif inputKey:match("^BabyloniaCastle_") then
-            local cardName = inputKey:gsub("^BabyloniaCastle_", "")
-            local num = tonumber(value)
-            if num then
-                if not getgenv().BossRushCardPriority then getgenv().BossRushCardPriority = {} end
-                getgenv().BossRushCardPriority[cardName] = num 
+    local inputs = getgenv().Config.inputs
+    local cardPrio = getgenv().CardPriority
+    local bossRushPrio = getgenv().BossRushCardPriority
+    
+    for inputKey, value in pairs(inputs) do
+        local num = tonumber(value)
+        if num then
+            if inputKey:match("^Card_") then
+                local cardName = inputKey:sub(6)
+                if cardPrio and cardPrio[cardName] then 
+                    cardPrio[cardName] = num 
+                end
+            elseif inputKey:match("^BossRush_") then
+                local cardName = inputKey:sub(10)
+                if bossRushPrio and bossRushPrio[cardName] then 
+                    bossRushPrio[cardName] = num 
+                end
+            elseif inputKey:match("^BabyloniaCastle_") then
+                local cardName = inputKey:sub(17)
+                if not bossRushPrio then 
+                    getgenv().BossRushCardPriority = {} 
+                    bossRushPrio = getgenv().BossRushCardPriority
+                end
+                bossRushPrio[cardName] = num 
             end
         end
     end
@@ -3742,9 +3838,7 @@ end)
 task.spawn(function()
     while true do
         task.wait(30)
-        pcall(function()
-            collectgarbage("collect")
-        end)
+        pcall(collectgarbage, "collect")
     end
 end)
 
@@ -3852,7 +3946,7 @@ task.spawn(function()
                 local mapPath = game.Workspace:FindFirstChild("Map") and game.Workspace.Map:FindFirstChild("Map")
                 if mapPath then for _, ch in ipairs(mapPath:GetChildren()) do if not ch:IsA("Model") then ch:Destroy() end end end
                 
-                collectgarbage("collect")
+                pcall(collectgarbage, "collect")
             end)
         end
     end
@@ -4314,8 +4408,9 @@ task.spawn(function()
                 if getgenv().SeamlessLimiterEnabled and lastWave >= 50 and currentWave < 50 then resetRoundTrackers() end
                 lastWave = currentWave
                 if not Towers then return end
-                if getgenv().UnitAbilities and type(getgenv().UnitAbilities) == "table" then
-                    for unitName, abilitiesConfig in pairs(getgenv().UnitAbilities) do
+                local unitAbilities = getgenv().UnitAbilities
+                if unitAbilities and type(unitAbilities) == "table" then
+                    for unitName, abilitiesConfig in pairs(unitAbilities) do
                     local tower = Towers:FindFirstChild(unitName)
                     if tower then
                         local infoName = getTowerInfoName(tower)
@@ -4387,40 +4482,47 @@ task.spawn(function()
             local prompt = playerGui:FindFirstChild("Prompt") if not prompt then return nil end
             local frame = prompt:FindFirstChild("Frame") if not frame or not frame:FindFirstChild("Frame") then return nil end
             local cards, cardButtons = {}, {}
+            local cardCount = 0
             local descendants = frame:GetDescendants()
+            local cardPriority = getgenv().CardPriority
             for i = 1, #descendants do
                 local d = descendants[i]
                 if d:IsA("TextLabel") and d.Parent and d.Parent:IsA("Frame") then
                     local text = d.Text
-                    if getgenv().CardPriority[text] then
+                    if cardPriority[text] then
                         local button = d.Parent.Parent
                         if button:IsA("GuiButton") or button:IsA("TextButton") or button:IsA("ImageButton") then
-                            table.insert(cardButtons, {text=text, button=button})
+                            cardCount = cardCount + 1
+                            cardButtons[cardCount] = {text=text, button=button}
                         end
                     end
                 end
             end
             table.sort(cardButtons, function(a,b) return a.button.AbsolutePosition.X < b.button.AbsolutePosition.X end)
-            for i, c in ipairs(cardButtons) do cards[i] = { name=c.text, button=c.button } end
-            return #cards > 0 and cards or nil
+            for i = 1, cardCount do 
+                cards[i] = { name=cardButtons[i].text, button=cardButtons[i].button } 
+            end
+            return cardCount > 0 and cards or nil
         end)
         return ok and result or nil
     end
     local function findBestCard(list)
-        local bestIndex, bestPriority = nil, math.huge
-        for i=1,#list do
-            local nm = list[i].name
-            local p = getgenv().CardPriority[nm] or 999
-            if p < bestPriority and p < 999 then
+        local bestIndex, bestPriority = nil, 999
+        local cardPriority = getgenv().CardPriority
+        for i = 1, #list do
+            local p = cardPriority[list[i].name] or 999
+            if p < bestPriority then
                 bestPriority = p
                 bestIndex = i
             end
         end
-        if bestIndex then
+        if bestIndex and bestPriority < 999 then
             return bestIndex, list[bestIndex], bestPriority
         end
         return nil, nil, nil
     end
+    local CONFIRM_EVENTS = {"Activated","MouseButton1Click","MouseButton1Down","MouseButton1Up"}
+    
     local function pressConfirm()
         local ok, confirmButton = pcall(function()
             local prompt = LocalPlayer.PlayerGui:FindFirstChild("Prompt") if not prompt then return nil end
@@ -4432,26 +4534,29 @@ task.spawn(function()
             return nil
         end)
         if ok and confirmButton then
-            local events = {"Activated","MouseButton1Click","MouseButton1Down","MouseButton1Up"}
-            for _, ev in ipairs(events) do pcall(function() for _, conn in ipairs(getconnections(confirmButton[ev])) do conn:Fire() end end) end
+            for i = 1, #CONFIRM_EVENTS do 
+                pcall(function() 
+                    local conns = getconnections(confirmButton[CONFIRM_EVENTS[i]])
+                    for j = 1, #conns do conns[j]:Fire() end
+                end) 
+            end
             return true
         end
         return false
     end
+    local BUTTON_EVENTS = {"Activated","MouseButton1Click","MouseButton1Down","MouseButton1Up"}
+    
     local function selectCard()
         if not getgenv().CardSelectionEnabled then return false end
         local ok = pcall(function()
             local list = getAvailableCards() if not list then return false end
             local _, best, priority = findBestCard(list)
-            if not best or not best.button or not priority then return false end
-            if priority >= 999 then return false end
+            if not best or not best.button or not priority or priority >= 999 then return false end
             local button = best.button
-            local events = {"Activated","MouseButton1Click","MouseButton1Down","MouseButton1Up"}
-            for _, ev in ipairs(events) do
+            for i = 1, #BUTTON_EVENTS do
                 pcall(function()
-                    for _, conn in ipairs(getconnections(button[ev])) do
-                        conn:Fire()
-                    end
+                    local conns = getconnections(button[BUTTON_EVENTS[i]])
+                    for j = 1, #conns do conns[j]:Fire() end
                 end)
                 task.wait(0.05)
             end
