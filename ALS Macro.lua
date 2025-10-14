@@ -87,28 +87,6 @@ local function filteredError(...)
 end
 if logerror then logerror = filteredError end
 
-local LogService = game:GetService("LogService")
-local ScriptContext = game:GetService("ScriptContext")
-
-local messageConnection
-pcall(function()
-    messageConnection = LogService.MessageOut:Connect(function(message, messageType)
-        if shouldFilterMessage(message) then
-            return
-        end
-    end)
-end)
-
-local errorConnection
-pcall(function()
-    errorConnection = ScriptContext.Error:Connect(function(message, stackTrace, script)
-        local fullMsg = message .. " " .. (stackTrace or "")
-        if shouldFilterMessage(fullMsg) then
-            return
-        end
-    end)
-end)
-
 local RS = game:GetService("ReplicatedStorage")
 local HttpService = game:GetService("HttpService")
 local RunService = game:GetService("RunService")
