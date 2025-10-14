@@ -1,5 +1,15 @@
 repeat task.wait() until game:IsLoaded()
 
+if getgenv().MacroSystemKillSwitch then
+    getgenv().MacroSystemKillSwitch = true
+    print("[Macro] Killing previous instance...")
+    task.wait(1)
+end
+
+getgenv().MacroSystemKillSwitch = false
+local instanceId = tick()
+print("[Macro] New instance started: " .. instanceId)
+
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
@@ -52,7 +62,9 @@ local function shouldFilterMessage(msg)
         or msgLower:find("playerscripts")
         or msgLower:find("byorials")
         or msgLower:find("stack begin")
-        or msgLower:find("stack end") then
+        or msgLower:find("stack end")
+        or msgLower:find("runservice")
+        or msgLower:find("firerenderstepearlyfunctions") then
         return true
     end
     
@@ -114,6 +126,10 @@ local recording = false
 local playing = false
 local macroData = {}
 local StepDelay = 0
+
+local function isKilled()
+    return getgenv().MacroSystemKillSwitch == true
+end
 
 local StatusText = "Idle"
 local ActionText = ""
@@ -626,11 +642,15 @@ local playToggle = Tabs.Main:Toggle({
                 end
                 
                 task.spawn(function()
-                    while playing do
+                    while playing and not isKilled() do
                         if hasStartButton() then
                             shouldRestart = true
                         end
                         task.wait()
+                    end
+                    if isKilled() then
+                        playing = false
+                        print("[Macro] Monitor killed by new instance")
                     end
                 end)
                 
@@ -735,7 +755,13 @@ local playToggle = Tabs.Main:Toggle({
                     print("[Macro] Auto-resumed from step " .. step .. " based on game state")
                 end
                 
-                while playing do
+                while playing and not isKilled() do
+                    if isKilled() then
+                        playing = false
+                        print("[Macro] Playback killed by new instance")
+                        break
+                    end
+                    
                     if shouldRestart then
                         StatusText = "Starting Macro/Restart Detected"
                         WaitingText = "Waiting for start..."
@@ -797,6 +823,12 @@ local playToggle = Tabs.Main:Toggle({
                     local actionCost = action.Cost or 0
                     
                     if actionCost > 0 and cash < actionCost then
+                        if isKilled() then
+                            playing = false
+                            print("[Macro] Killed while waiting for cash")
+                            break
+                        end
+                        
                         if not action.waitStartTime then
                             action.waitStartTime = tick()
                         end
