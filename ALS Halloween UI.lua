@@ -300,6 +300,7 @@ local function createObsidianCompat()
             Title = tostring(opts.Title or "ALS"),
             Author = tostring(opts.Footer or ""),
             Folder = "ALS-WindUI",
+            Size = opts.Size or UDim2.fromOffset(700, 460),
             NewElements = true,
             HideSearchBar = false,
             OpenButton = {
@@ -3274,20 +3275,82 @@ task.spawn(function()
     task.wait()
     local PurchaseEvent = RS:WaitForChild("Events"):WaitForChild("Hallowen2025"):WaitForChild("Purchase")
     local OpenCapsuleEvent = RS:WaitForChild("Remotes"):WaitForChild("OpenCapsule")
+    
+    local function clickButton(button)
+        if not button then return false end
+        local events = {"Activated", "MouseButton1Click", "MouseButton1Down", "MouseButton1Up"}
+        for _, ev in ipairs(events) do
+            pcall(function()
+                for _, conn in ipairs(getconnections(button[ev])) do
+                    conn:Fire()
+                end
+            end)
+        end
+        return true
+    end
+    
+    local function clickAllPromptButtons()
+        local success = false
+        pcall(function()
+            local prompt = LocalPlayer.PlayerGui:FindFirstChild("Prompt")
+            if not prompt then return end
+            
+            local frame = prompt:FindFirstChild("Frame")
+            if not frame then return end
+            
+            local textButton = frame:FindFirstChild("TextButton")
+            if textButton then
+                clickButton(textButton)
+                success = true
+            end
+            
+            local folder = frame:FindFirstChild("Folder")
+            if folder then
+                local folderButton = folder:FindFirstChild("TextButton")
+                if folderButton then
+                    clickButton(folderButton)
+                    success = true
+                end
+            end
+        end)
+        return success
+    end
+    
     while true do
         task.wait(0.1)
         if getgenv().CapsuleEnabled then
             local clientData = getClientData()
             if clientData then
                 local candyBasket = clientData.CandyBasket or 0
-                local capsuleAmount = 0
-                if clientData.ItemData and clientData.ItemData.HalloweenCapsule2025 then capsuleAmount = clientData.ItemData.HalloweenCapsule2025.Amount or 0 end
-                if candyBasket >= 100000 then pcall(function() PurchaseEvent:InvokeServer(1, 100) end)
-                elseif candyBasket >= 10000 then pcall(function() PurchaseEvent:InvokeServer(1, 10) end)
-                elseif candyBasket >= 1000 then pcall(function() PurchaseEvent:InvokeServer(1, 1) end) end
-                clientData = getClientData()
-                if clientData and clientData.ItemData and clientData.ItemData.HalloweenCapsule2025 then capsuleAmount = clientData.ItemData.HalloweenCapsule2025.Amount or 0 end
-                if capsuleAmount > 0 then pcall(function() OpenCapsuleEvent:FireServer("HalloweenCapsule2025", capsuleAmount) end) end
+                
+                if candyBasket >= 100000 then
+                    pcall(function() PurchaseEvent:InvokeServer(1, 100) end)
+                elseif candyBasket >= 10000 then
+                    pcall(function() PurchaseEvent:InvokeServer(1, 10) end)
+                elseif candyBasket >= 1000 then
+                    pcall(function() PurchaseEvent:InvokeServer(1, 1) end)
+                end
+                
+                if candyBasket < 1000 then
+                    clientData = getClientData()
+                    local capsuleAmount = 0
+                    if clientData and clientData.ItemData and clientData.ItemData.HalloweenCapsule2025 then
+                        capsuleAmount = clientData.ItemData.HalloweenCapsule2025.Amount or 0
+                    end
+                    
+                    if capsuleAmount > 0 then
+                        pcall(function()
+                            OpenCapsuleEvent:FireServer("HalloweenCapsule2025", capsuleAmount)
+                        end)
+                        
+                        task.wait(0.2)
+                        
+                        while LocalPlayer.PlayerGui:FindFirstChild("Prompt") and getgenv().CapsuleEnabled do
+                            clickAllPromptButtons()
+                            task.wait(0.1)
+                        end
+                    end
+                end
             end
         end
     end
