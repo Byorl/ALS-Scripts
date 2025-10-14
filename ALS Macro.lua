@@ -366,7 +366,7 @@ local SettingsSection = Window:Section({
 })
 
 local Tabs = {
-    Main = MainSection:Tab({ Title = "Controls", Icon = "play" }),
+    Main = MainSection:Tab({ Title = "Macro", Icon = "play" }),
     Maps = MapsSection:Tab({ Title = "Map Assignment", Icon = "map" }),
     Settings = SettingsSection:Tab({ Title = "Settings", Icon = "settings" }),
 }
