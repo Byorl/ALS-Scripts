@@ -288,7 +288,7 @@ local function createObsidianCompat()
                 return function(_, opts)
                     return self._wnd:Section(opts)
                 end
-            else
+            el
                 return self._wnd[k]
             end
         end
@@ -2946,8 +2946,8 @@ task.spawn(function()
                 return
             end
             local function formatStats()
-                local stats = "<:jewel:1217525743408648253> " .. formatNumber(clientData.Jewels or 0)
-                stats = stats .. "\n<:gold:1265957290251522089> "..formatNumber(clientData.Gold or 0)
+                local stats = "<:jewel:1217525743408648253> " .. formatNumber(clientData.Gold or 0)
+                stats = stats .. "\n<:gold:1265957290251522089> " .. formatNumber(clientData.Jewels or 0)
                 stats = stats .. "\n<:emerald:1389165843966984192> " .. formatNumber(clientData.Emeralds or 0)
                 stats = stats .. "\n<:rerollshard:1426315987019501598> " .. formatNumber(clientData.Rerolls or 0)
                 stats = stats .. "\n<:candybasket:1426304615284084827> " .. formatNumber(clientData.CandyBasket or 0)
