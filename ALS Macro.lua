@@ -51,10 +51,13 @@ local RS = game:GetService("ReplicatedStorage")
 local HttpService = game:GetService("HttpService")
 local RunService = game:GetService("RunService")
 
-local MACRO_FOLDER = "ALSMacros"
+local CONFIG_FOLDER = "ALSHalloweenEvent"
+local MACRO_FOLDER = CONFIG_FOLDER .. "/macros"
+if not isfolder(CONFIG_FOLDER) then makefolder(CONFIG_FOLDER) end
 if not isfolder(MACRO_FOLDER) then makefolder(MACRO_FOLDER) end
 
 local STATE_FILE = MACRO_FOLDER .. "/playback_state.json"
+local SETTINGS_FILE = MACRO_FOLDER .. "/settings.json"
 
 local Macros = {}
 local CurrentMacro = nil
@@ -82,6 +85,40 @@ local StatusLabel, StepLabel, ActionLabel, UnitLabel, WaitingLabel
 
 local seamlessMode = false
 local autoReplayOnRestart = false
+
+local function loadSettings()
+    local settings = {
+        playMacroEnabled = false,
+        selectedMacro = nil,
+        macroMaps = {},
+        seamlessMode = false,
+        autoReplayOnRestart = false,
+        stepDelay = 0
+    }
+    pcall(function()
+        if isfile(SETTINGS_FILE) then
+            local data = HttpService:JSONDecode(readfile(SETTINGS_FILE))
+            if type(data) == "table" then
+                settings = data
+            end
+        end
+    end)
+    return settings
+end
+
+local function saveSettings()
+    pcall(function()
+        local settings = {
+            playMacroEnabled = playing,
+            selectedMacro = CurrentMacro,
+            macroMaps = getgenv().MacroMaps or {},
+            seamlessMode = seamlessMode,
+            autoReplayOnRestart = autoReplayOnRestart,
+            stepDelay = StepDelay
+        }
+        writefile(SETTINGS_FILE, HttpService:JSONEncode(settings))
+    end)
+end
 
 local function notify(title, content, duration)
     WindUI:Notify({
@@ -287,7 +324,11 @@ local Tabs = {
 
 loadMacros()
 
-getgenv().MacroMaps = getgenv().MacroMaps or {}
+local savedSettings = loadSettings()
+getgenv().MacroMaps = savedSettings.macroMaps or {}
+seamlessMode = savedSettings.seamlessMode or false
+autoReplayOnRestart = savedSettings.autoReplayOnRestart or false
+StepDelay = savedSettings.stepDelay or 0
 local MapData = nil
 pcall(function()
     local mapDataModule = RS:FindFirstChild("Modules") and RS.Modules:FindFirstChild("MapData")
@@ -314,22 +355,19 @@ local function getMapsByGamemode(gamemode)
     return maps
 end
 
-local statusUpdateDebounce = false
+local lastStatusUpdate = 0
 local updateStatus
 updateStatus = function()
-    if statusUpdateDebounce then return end
-    statusUpdateDebounce = true
+    local now = tick()
+    if now - lastStatusUpdate < 0.03 then return end
+    lastStatusUpdate = now
     
-    task.spawn(function()
-        pcall(function()
-            if StatusLabel then StatusLabel:SetTitle("Status: " .. StatusText) end
-            if StepLabel then StepLabel:SetTitle("📝 Step: " .. CurrentStep .. "/" .. TotalSteps) end
-            if ActionLabel then ActionLabel:SetTitle("⚡ Action: " .. ActionText) end
-            if UnitLabel then UnitLabel:SetTitle("🗼 Unit: " .. UnitText) end
-            if WaitingLabel then WaitingLabel:SetTitle("⏳ Waiting: " .. WaitingText) end
-        end)
-        task.wait(0.05)
-        statusUpdateDebounce = false
+    pcall(function()
+        if StatusLabel then StatusLabel:SetTitle("Status: " .. StatusText) end
+        if StepLabel then StepLabel:SetTitle("📝 Step: " .. CurrentStep .. "/" .. TotalSteps) end
+        if ActionLabel then ActionLabel:SetTitle("⚡ Action: " .. ActionText) end
+        if UnitLabel then UnitLabel:SetTitle("🗼 Unit: " .. UnitText) end
+        if WaitingLabel then WaitingLabel:SetTitle("⏳ Waiting: " .. WaitingText) end
     end)
 end
 
@@ -360,10 +398,24 @@ local macroDropdown = Tabs.Main:Dropdown({
             TotalSteps = #macroData
             notify("Macro Selected", v .. " (" .. #macroData .. " steps)", 3)
             updateStatus()
+            saveSettings()
         end
     end,
     Searchable = true,
 })
+
+if savedSettings.selectedMacro and Macros[savedSettings.selectedMacro] then
+    task.spawn(function()
+        task.wait(0.3)
+        pcall(function()
+            macroDropdown:Select(savedSettings.selectedMacro)
+            CurrentMacro = savedSettings.selectedMacro
+            macroData = Macros[CurrentMacro]
+            TotalSteps = #macroData
+            updateStatus()
+        end)
+    end)
+end
 
 Tabs.Main:Space()
 
@@ -473,13 +525,15 @@ Tabs.Main:Toggle({
 
 Tabs.Main:Space()
 
-Tabs.Main:Toggle({
+local playToggle = Tabs.Main:Toggle({
     Flag = "PlayMacro",
     Title = "▶️ Play Macro",
-    Default = false,
+    Default = savedSettings.playMacroEnabled or false,
     Callback = function(v)
         playing = v
+        saveSettings()
         if v then
+            local mapMacroLoaded = false
             pcall(function()
                 local gamemode = RS:FindFirstChild("Gamemode")
                 local mapName = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("MapName")
@@ -487,11 +541,20 @@ Tabs.Main:Toggle({
                     local gm = gamemode.Value
                     local mn = mapName.Value
                     local key = gm .. "_" .. mn
-                    if getgenv().MacroMaps[key] and getgenv().MacroMaps[key] ~= CurrentMacro and getgenv().MacroMaps[key] ~= "--" then
+                    if getgenv().MacroMaps[key] and getgenv().MacroMaps[key] ~= "--" and Macros[getgenv().MacroMaps[key]] then
                         CurrentMacro = getgenv().MacroMaps[key]
                         macroData = Macros[CurrentMacro] or {}
                         TotalSteps = #macroData
-                        notify("Map Override", "Using " .. CurrentMacro .. " for " .. mn, 3)
+                        mapMacroLoaded = true
+                        
+                        task.spawn(function()
+                            task.wait(0.2)
+                            pcall(function()
+                                macroDropdown:Select(CurrentMacro)
+                            end)
+                        end)
+                        
+                        notify("Map Macro Loaded", "Using " .. CurrentMacro .. " for " .. mn, 3)
                     end
                 end
             end)
@@ -614,7 +677,7 @@ Tabs.Main:Toggle({
                         ActionText = action.ActionType or "Action"
                         UnitText = action.TowerName or "?"
                         updateStatus()
-                        task.wait(0.1)
+                        RunService.Heartbeat:Wait()
                         continue
                     end
                     
@@ -694,17 +757,27 @@ Tabs.Main:Toggle({
                                         remote:FireServer(towerToUpgrade)
                                     end
                                     
-                                    task.wait(0.25)
+                                    local upgradeWaitTime = 0
+                                    local maxUpgradeWait = 2
+                                    local afterLevel = beforeLevel
                                     
-                                    local afterLevel = 0
-                                    if towerToUpgrade:FindFirstChild("Upgrade") then
-                                        afterLevel = towerToUpgrade.Upgrade.Value
+                                    while upgradeWaitTime < maxUpgradeWait do
+                                        task.wait(0.05)
+                                        upgradeWaitTime = upgradeWaitTime + 0.05
+                                        
+                                        if towerToUpgrade:FindFirstChild("Upgrade") then
+                                            afterLevel = towerToUpgrade.Upgrade.Value
+                                        end
+                                        
+                                        if afterLevel > beforeLevel then
+                                            break
+                                        end
                                     end
                                     
                                     if afterLevel > beforeLevel then
                                         actionSuccess = true
                                         print("[Macro] Success: " .. action.TowerName .. " upgraded from " .. beforeLevel .. " to " .. afterLevel)
-                                    elseif afterLevel == beforeLevel and retryCount >= 2 then
+                                    elseif retryCount >= maxRetries - 1 then
                                         print("[Macro] Warning: Upgrade level didn't increase after " .. retryCount .. " retries, moving on...")
                                         actionSuccess = true
                                     else
@@ -726,7 +799,7 @@ Tabs.Main:Toggle({
                                 else
                                     remote:FireServer(unpack(args))
                                 end
-                                task.wait(0.25)
+                                task.wait(0.1)
                                 actionSuccess = true
                                 print("[Macro] Success: Placed " .. (action.TowerName or "Unknown"))
                             end
@@ -736,7 +809,7 @@ Tabs.Main:Toggle({
                             retryCount = retryCount + 1
                             if retryCount < maxRetries then
                                 print("[Macro] Retry " .. retryCount .. "/" .. maxRetries .. " for step " .. step)
-                                task.wait(0.15)
+                                task.wait(0.1)
                             else
                                 print("[Macro] Max retries reached for step " .. step .. ", moving on...")
                                 actionSuccess = true
@@ -754,7 +827,7 @@ Tabs.Main:Toggle({
                     if StepDelay > 0 then
                         task.wait(StepDelay)
                     else
-                        task.wait(0.06)
+                        RunService.Heartbeat:Wait()
                     end
                 end
                 
@@ -792,10 +865,11 @@ Tabs.Main:Space()
 Tabs.Main:Input({
     Flag = "StepDelay",
     Title = "Step Delay (seconds)",
-    Value = "0",
+    Value = tostring(StepDelay),
     Placeholder = "0",
     Callback = function(v)
         StepDelay = tonumber(v) or 0
+        saveSettings()
     end
 })
 
@@ -873,6 +947,7 @@ local function updateMapDisplay()
                     getgenv().MacroMaps[key] = nil
                     notify("Map Assignment", mapName .. " cleared", 3)
                 end
+                saveSettings()
             end,
             Searchable = true,
         })
@@ -910,11 +985,12 @@ task.spawn(function()
             local gm = gamemode.Value
             local mn = mapName.Value
             local key = gm .. "_" .. mn
-            if getgenv().MacroMaps[key] then
+            if getgenv().MacroMaps[key] and getgenv().MacroMaps[key] ~= "--" and Macros[getgenv().MacroMaps[key]] then
                 CurrentMacro = getgenv().MacroMaps[key]
                 macroData = Macros[CurrentMacro] or {}
                 TotalSteps = #macroData
                 
+                task.wait(0.3)
                 if macroDropdown then
                     pcall(function()
                         macroDropdown:Select(CurrentMacro)
@@ -957,6 +1033,44 @@ Tabs.Settings:Button({
     end
 })
 
+Tabs.Settings:Space()
+Tabs.Settings:Divider()
+Tabs.Settings:Space()
+
+Tabs.Settings:Paragraph({
+    Title = "🔄 Seamless Mode",
+    Desc = "Automatically restart macro when round ends"
+})
+
+Tabs.Settings:Space()
+
+Tabs.Settings:Toggle({
+    Flag = "SeamlessMode",
+    Title = "Enable Seamless Mode",
+    Default = seamlessMode,
+    Callback = function(v)
+        seamlessMode = v
+        saveSettings()
+        if v then
+            notify("Seamless Mode", "Enabled - Macro will auto-restart", 3)
+        else
+            notify("Seamless Mode", "Disabled", 3)
+        end
+    end
+})
+
+Tabs.Settings:Toggle({
+    Flag = "AutoReplayOnRestart",
+    Title = "Auto Replay on Restart",
+    Default = autoReplayOnRestart,
+    Callback = function(v)
+        autoReplayOnRestart = v
+        saveSettings()
+    end
+})
+
+Tabs.Settings:Space()
+Tabs.Settings:Divider()
 Tabs.Settings:Space()
 
 Tabs.Settings:Button({
