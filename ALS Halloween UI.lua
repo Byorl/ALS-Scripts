@@ -4122,17 +4122,11 @@ end
 
 local function getCurrentTimeScale()
     local ok, res = pcall(function()
-        local gui = LocalPlayer.PlayerGui:FindFirstChild("HUD")
-        if not gui then return 1 end
-        local frame = gui:FindFirstChild("Frame")
-        if not frame then return 1 end
-        local speed = frame:FindFirstChild("Speed")
-        if not speed then return 1 end
-        local label = speed:FindFirstChild("TextLabel")
-        if not label then return 1 end
-        local text = label.Text
-        local num = tonumber(text:match("%d+"))
-        return num or 1
+        local timeScale = RS:FindFirstChild("TimeScale")
+        if timeScale and timeScale:IsA("NumberValue") then
+            return timeScale.Value or 1
+        end
+        return 1
     end)
     return ok and res or 1
 end
@@ -6600,7 +6594,7 @@ task.spawn(function()
     end
 end)
 
-if getgenv().Config.toggles.AutoHideUIEnabled then
+if getgenv().Config.toggles.AutoHideUI then
     task.spawn(function()
         task.wait(2)
         
