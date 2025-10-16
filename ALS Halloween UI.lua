@@ -6551,6 +6551,10 @@ do
             task.wait(0.1)
             GuiService.SelectedObject = nil
             
+            task.wait(0.3)
+            pressConfirm()
+            task.wait(0.2)
+            
             print("[Smart Card] Selected:", bestCard.name, "Priority:", bestPriority, "Wave:", currentWave)
             return true
         end)
