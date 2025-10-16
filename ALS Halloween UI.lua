@@ -4551,7 +4551,7 @@ task.spawn(function()
     local lastEndGameUIInstance = nil
     local hasProcessedCurrentUI = false
     local endGameUIDetectedTime = 0
-    local lastWaveForRetry = 0
+    local waveWhenEndGameAppeared = 0
     
     while true do
         task.wait(0.5)
@@ -4564,18 +4564,30 @@ task.spawn(function()
             end
         end)
         
-        if lastWaveForRetry > 0 and currentWave > 0 and currentWave < lastWaveForRetry then
-            print("[Auto Retry] Wave decrease detected (", lastWaveForRetry, "->", currentWave, ") - Round restarted, resetting UI flag")
+        if waveWhenEndGameAppeared > 0 and currentWave > 0 and currentWave < waveWhenEndGameAppeared then
+            print("[Auto Retry] Wave decrease detected (", waveWhenEndGameAppeared, "->", currentWave, ") - Round restarted, resetting UI flag")
             hasProcessedCurrentUI = false
             lastEndGameUIInstance = nil
+            waveWhenEndGameAppeared = 0
         end
-        lastWaveForRetry = currentWave
         
         local success, errorMsg = pcall(function()
             if not LocalPlayer or not LocalPlayer.PlayerGui then return end
             
             local endGameUI = LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
-            if not endGameUI then return end
+            if not endGameUI then 
+                return 
+            end
+            
+            if not lastEndGameUIInstance or endGameUI ~= lastEndGameUIInstance then
+                pcall(function()
+                    local wave = RS:FindFirstChild("Wave")
+                    if wave and wave.Value then
+                        waveWhenEndGameAppeared = wave.Value
+                        print("[Auto Retry] EndGameUI appeared at wave", waveWhenEndGameAppeared)
+                    end
+                end)
+            end
             
             local bg = endGameUI:FindFirstChild("BG")
             if not bg then return end
