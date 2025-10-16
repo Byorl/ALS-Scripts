@@ -15,7 +15,7 @@ local isMobile = UserInputService.TouchEnabled and not UserInputService.Keyboard
 local MOBILE_DELAY_MULTIPLIER = isMobile and 1.5 or 1.0
 
 local Window = MacLib:Window({
-    Title = "ALS Macro System",
+    Title = "Byorl Last Stand ",
     Subtitle = "Anime Last Stand Automation",
     Size = UDim2.fromOffset(580, 480),
     DragStyle = 1,
@@ -1928,8 +1928,8 @@ getgenv().PortalConfig = {
 }
 getgenv().Config.portals = getgenv().PortalConfig
 
-Sections.PortalsLeft:Header({ Text = "🌀 Portal Selection" })
-Sections.PortalsLeft:SubLabel({ Text = "Configure automatic portal selection" })
+Sections.PortalsRight:Header({ Text = "🌀 Portal Selection" })
+Sections.PortalsRight:SubLabel({ Text = "Configure automatic portal selection" })
 
 local function getPortalMaps()
     local maps = {}
@@ -1938,8 +1938,13 @@ local function getPortalMaps()
         if mapData and mapData:IsA("ModuleScript") then
             local data = require(mapData)
             for mapName, mapInfo in pairs(data) do
-                if mapInfo.Portal then
-                    table.insert(maps, mapName)
+                if mapInfo.Type and type(mapInfo.Type) == "table" then
+                    for _, mapType in ipairs(mapInfo.Type) do
+                        if mapType == "Portal" then
+                            table.insert(maps, mapName)
+                            break
+                        end
+                    end
                 end
             end
         end
@@ -1960,7 +1965,7 @@ if getgenv().PortalConfig.selectedMap and getgenv().PortalConfig.selectedMap ~= 
 end
 
 createDropdown(
-    Sections.PortalsLeft,
+    Sections.PortalsRight,
     "Select Map",
     "PortalMap",
     portalMaps,
@@ -1973,54 +1978,7 @@ createDropdown(
     portalMapDefault
 )
 
-Sections.PortalsLeft:Divider()
-
-Sections.PortalsLeft:Header({ Text = "🎯 Challenge Priority" })
-Sections.PortalsLeft:SubLabel({ Text = "Set priority order for portal challenges (1 = highest)" })
-
-Sections.PortalsLeft:SubLabel({ Text = "Available: Tower Limit, Immunity, Speedy, No Hit, Flight, Short Range" })
-
-createInput(
-    Sections.PortalsLeft,
-    "Priority 1 (Most Wanted)",
-    "PortalPriority1",
-    "e.g., Speedy",
-    "All",
-    function(value)
-        getgenv().PortalConfig.priorities.priority1 = value
-        getgenv().Config.portals.priorities.priority1 = value
-        saveConfig(getgenv().Config)
-    end,
-    getgenv().PortalConfig.priorities.priority1
-)
-
-createInput(
-    Sections.PortalsLeft,
-    "Priority 2",
-    "PortalPriority2",
-    "e.g., Short Range",
-    "All",
-    function(value)
-        getgenv().PortalConfig.priorities.priority2 = value
-        getgenv().Config.portals.priorities.priority2 = value
-        saveConfig(getgenv().Config)
-    end,
-    getgenv().PortalConfig.priorities.priority2
-)
-
-createInput(
-    Sections.PortalsLeft,
-    "Priority 3",
-    "PortalPriority3",
-    "e.g., Tower Limit",
-    "All",
-    function(value)
-        getgenv().PortalConfig.priorities.priority3 = value
-        getgenv().Config.portals.priorities.priority3 = value
-        saveConfig(getgenv().Config)
-    end,
-    getgenv().PortalConfig.priorities.priority3
-)
+Sections.PortalsRight:Divider()
 
 Sections.PortalsRight:Header({ Text = "⚙️ Portal Options" })
 Sections.PortalsRight:SubLabel({ Text = "Additional portal settings" })
@@ -2078,8 +2036,55 @@ createToggle(
     getgenv().PortalConfig.pickPortal
 )
 
+Sections.PortalsLeft:Header({ Text = "🎯 Challenge Priority" })
+Sections.PortalsLeft:SubLabel({ Text = "Set priority order for portal challenges (1 = highest)" })
+
+Sections.PortalsLeft:SubLabel({ Text = "Available: Tower Limit, Immunity, Speedy, No Hit, Flight, Short Range" })
+
 createInput(
-    Sections.PortalsRight,
+    Sections.PortalsLeft,
+    "Priority 1 (Most Wanted)",
+    "PortalPriority1",
+    "e.g., Speedy",
+    "All",
+    function(value)
+        getgenv().PortalConfig.priorities.priority1 = value
+        getgenv().Config.portals.priorities.priority1 = value
+        saveConfig(getgenv().Config)
+    end,
+    getgenv().PortalConfig.priorities.priority1
+)
+
+createInput(
+    Sections.PortalsLeft,
+    "Priority 2",
+    "PortalPriority2",
+    "e.g., Short Range",
+    "All",
+    function(value)
+        getgenv().PortalConfig.priorities.priority2 = value
+        getgenv().Config.portals.priorities.priority2 = value
+        saveConfig(getgenv().Config)
+    end,
+    getgenv().PortalConfig.priorities.priority2
+)
+
+createInput(
+    Sections.PortalsLeft,
+    "Priority 3",
+    "PortalPriority3",
+    "e.g., Tower Limit",
+    "All",
+    function(value)
+        getgenv().PortalConfig.priorities.priority3 = value
+        getgenv().Config.portals.priorities.priority3 = value
+        saveConfig(getgenv().Config)
+    end,
+    getgenv().PortalConfig.priorities.priority3
+)
+
+createInput(
+    Sections.PortalsLeft,
     "Priority 4",
     "PortalPriority4",
     "e.g., Immunity",
@@ -2093,7 +2098,7 @@ createInput(
 )
 
 createInput(
-    Sections.PortalsRight,
+    Sections.PortalsLeft,
     "Priority 5",
     "PortalPriority5",
     "e.g., No Hit",
@@ -2107,7 +2112,7 @@ createInput(
 )
 
 createInput(
-    Sections.PortalsRight,
+    Sections.PortalsLeft,
     "Priority 6 (Least Wanted)",
     "PortalPriority6",
     "e.g., Flight",
@@ -2424,23 +2429,6 @@ getgenv().AutoJoinDelay = tonumber(getgenv().Config.inputs.AutoJoinDelay) or 0
 getgenv().FinalExpAutoJoinEasyEnabled = getgenv().Config.toggles.FinalExpAutoJoinEasyToggle or false
 getgenv().FinalExpAutoJoinHardEnabled = getgenv().Config.toggles.FinalExpAutoJoinHardToggle or false
 getgenv().FinalExpAutoSkipShopEnabled = getgenv().Config.toggles.FinalExpAutoSkipShopToggle or false
-
-local savedPortalConfig = getgenv().Config.portals or {}
-getgenv().PortalConfig = {
-    selectedMap = savedPortalConfig.selectedMap or "",
-    tier = savedPortalConfig.tier or 1,
-    useBestPortal = savedPortalConfig.useBestPortal or false,
-    pickPortal = savedPortalConfig.pickPortal or false,
-    priorities = savedPortalConfig.priorities or {
-        priority1 = "",
-        priority2 = "",
-        priority3 = "",
-        priority4 = "",
-        priority5 = "",
-        priority6 = ""
-    }
-}
-getgenv().Config.portals = getgenv().PortalConfig
 
 local BLACKLISTED_UNITS = {
     "NarutoBaryonClone"
