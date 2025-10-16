@@ -14,16 +14,32 @@ local VIM = game:GetService("VirtualInputManager")
 local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
 local MOBILE_DELAY_MULTIPLIER = isMobile and 1.5 or 1.0
 
-local Window = MacLib:Window({
-    Title = "Byorl Last Stand ",
-    Subtitle = "Anime Last Stand Automation",
-    Size = UDim2.fromOffset(580, 480),
-    DragStyle = 1,
-    DisabledWindowControls = {},
-    ShowUserInfo = true,
-    Keybind = Enum.KeyCode.LeftControl,
-    AcrylicBlur = true,
-})
+local Window
+
+if isMobile then
+    Window = MacLib:Window({
+        Title = "Byorl Last Stand ",
+        Subtitle = "Anime Last Stand Automation",
+        Size = UDim2.fromOffset(580, 480),
+        DragStyle = 1,
+        DisabledWindowControls = {},
+        ShowUserInfo = true,
+        Keybind = Enum.KeyCode.LeftControl,
+        AcrylicBlur = true,
+    })
+else
+    Window = MacLib:Window({
+        Title = "Byorl Last Stand ",
+        Subtitle = "Anime Last Stand Automation",
+        Size = UDim2.fromOffset(750, 640),
+        DragStyle = 1,
+        DisabledWindowControls = {},
+        ShowUserInfo = true,
+        Keybind = Enum.KeyCode.LeftControl,
+        AcrylicBlur = true,
+    })
+end
+
 
 task.wait(2)
 
