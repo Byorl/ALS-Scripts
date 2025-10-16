@@ -1052,8 +1052,23 @@ local function updateGameState()
             end
         end
         
-        local startUI = LocalPlayer.PlayerGui:FindFirstChild("StartUI")
-        getgenv().MacroGameState.hasStartButton = startUI and startUI.Enabled or false
+        local hasStart = false
+        pcall(function()
+            local bottom = LocalPlayer.PlayerGui:FindFirstChild("Bottom")
+            if bottom and bottom:FindFirstChild("Frame") then
+                local children = bottom.Frame:GetChildren()
+                if children[2] then
+                    local subChildren = children[2]:GetChildren()
+                    if subChildren[6] and subChildren[6]:IsA("TextButton") then
+                        local textLabel = subChildren[6]:FindFirstChild("TextLabel")
+                        if textLabel and textLabel.Text == "Start" then
+                            hasStart = true
+                        end
+                    end
+                end
+            end
+        end)
+        getgenv().MacroGameState.hasStartButton = hasStart
         
         local endGameUI = LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
         getgenv().MacroGameState.hasEndGameUI = endGameUI and endGameUI.Enabled or false
@@ -1144,12 +1159,15 @@ local function setupTowerUpgradeListener(tower)
             towerTracker.lastUpgradeTime[tower] = now
             
             for i = 1, levelsGained do
+                task.wait(0.15)
+                local cost = getgenv().GetRecentCashDecrease and getgenv().GetRecentCashDecrease(0.5) or 0
+                
                 table.insert(getgenv().MacroDataV2, {
                     RemoteName = "Upgrade",
                     Args = {},
                     Time = now - getgenv().MacroRecordingStartTime,
                     IsInvoke = true,
-                    Cost = 0,
+                    Cost = cost,
                     TowerName = towerName,
                     ActionType = "Upgrade",
                     Wave = getgenv().MacroGameState.currentWave
@@ -1257,7 +1275,8 @@ local function processRemoteCall(remoteName, method, args)
             end
             
             if countAfter > countBefore then
-                local cost = getgenv().GetRecentCashDecrease and getgenv().GetRecentCashDecrease(2) or 0
+                task.wait(0.15)
+                local cost = getgenv().GetRecentCashDecrease and getgenv().GetRecentCashDecrease(0.5) or 0
                 if cost == 0 and getgenv().GetPlaceCost then
                     cost = getgenv().GetPlaceCost(towerName)
                 end
@@ -1305,10 +1324,10 @@ local function processRemoteCall(remoteName, method, args)
                     towerTracker.pendingActions[upgradeKey] = true
                     
                     task.spawn(function()
-                        task.wait(0.05)
+                        task.wait(0.15)
                         
                         if towerTracker.pendingActions[upgradeKey] then
-                            local cost = getgenv().GetRecentCashDecrease and getgenv().GetRecentCashDecrease(1) or 0
+                            local cost = getgenv().GetRecentCashDecrease and getgenv().GetRecentCashDecrease(0.5) or 0
                             
                             table.insert(getgenv().MacroDataV2, {
                                 RemoteName = "Upgrade",
@@ -1411,7 +1430,8 @@ local function setupRecordingHook()
                         end
                         
                         if newestTower then
-                            local cost = getgenv().GetRecentCashDecrease and getgenv().GetRecentCashDecrease(2) or 0
+                            task.wait(0.15)
+                            local cost = getgenv().GetRecentCashDecrease and getgenv().GetRecentCashDecrease(0.5) or 0
                             
                             local cframe = newestTower:GetPivot()
                             local savedArgs = {towerName, {cframe:GetComponents()}}
@@ -1618,6 +1638,65 @@ local function executeAction(action)
     return false, "Unknown action type"
 end
 
+local function detectMacroProgress(macroData)
+    -- Detect which step we're on based on current game state
+    local towerStates = {}
+    
+    -- Get current tower states
+    for _, tower in pairs(workspace.Towers:GetChildren()) do
+        if tower:FindFirstChild("Owner") and tower.Owner.Value == LocalPlayer then
+            local towerName = tower.Name
+            local level = tower:FindFirstChild("Upgrade") and tower.Upgrade.Value or 0
+            
+            if not towerStates[towerName] then
+                towerStates[towerName] = {count = 0, maxLevel = 0}
+            end
+            
+            towerStates[towerName].count = towerStates[towerName].count + 1
+            towerStates[towerName].maxLevel = math.max(towerStates[towerName].maxLevel, level)
+        end
+    end
+    
+    -- Find the last completed step
+    local lastCompletedStep = 0
+    local expectedTowers = {}
+    
+    for i, action in ipairs(macroData) do
+        if action.ActionType == "Place" then
+            local towerName = action.TowerName
+            expectedTowers[towerName] = (expectedTowers[towerName] or 0) + 1
+            
+            -- Check if this tower exists
+            if towerStates[towerName] and towerStates[towerName].count >= expectedTowers[towerName] then
+                lastCompletedStep = i
+            else
+                break -- Tower not placed yet, stop here
+            end
+            
+        elseif action.ActionType == "Upgrade" then
+            local towerName = action.TowerName
+            
+            -- Count how many upgrades this tower should have by this step
+            local expectedLevel = 0
+            for j = 1, i do
+                if macroData[j].ActionType == "Upgrade" and macroData[j].TowerName == towerName then
+                    expectedLevel = expectedLevel + 1
+                end
+            end
+            
+            -- Check if tower has this upgrade level
+            if towerStates[towerName] and towerStates[towerName].maxLevel >= expectedLevel then
+                lastCompletedStep = i
+            else
+                break -- Upgrade not done yet, stop here
+            end
+        end
+    end
+    
+    print("[Macro Resume] Detected progress: Step", lastCompletedStep, "/", #macroData)
+    return lastCompletedStep + 1 -- Start from next step
+end
+
 local function playMacroV2()
     if getgenv().MacroPlaybackActive then return end
     if not getgenv().CurrentMacro or not getgenv().Macros[getgenv().CurrentMacro] then
@@ -1628,7 +1707,17 @@ local function playMacroV2()
     
     task.spawn(function()
         local macroData = getgenv().Macros[getgenv().CurrentMacro]
-        local step = 1
+        if not macroData or #macroData == 0 then
+            getgenv().MacroPlaybackActive = false
+            return
+        end
+        
+        -- Detect current progress and resume from there
+        local step = detectMacroProgress(macroData)
+        
+        if step > 1 then
+            print("[Macro Resume] Resuming from step", step)
+        end
         
         while getgenv().MacroGameState.hasStartButton and getgenv().MacroPlayEnabled do
             getgenv().MacroStatusText = "Waiting for Start"
@@ -1659,6 +1748,8 @@ local function playMacroV2()
         getgenv().MacroStatusText = "Playing"
         getgenv().MacroWaitingText = ""
         getgenv().UpdateMacroStatus()
+        
+        local lastCashCheck = 0
         
         while getgenv().MacroPlayEnabled and step <= #macroData do
             if getgenv().IsKilled and getgenv().IsKilled() then
@@ -1723,7 +1814,7 @@ local function playMacroV2()
                 local noIncomeTime = 0
                 
                 while getgenv().MacroPlayEnabled do
-                    task.wait(0.5)
+                    task.wait(0.1)
                     cash = tonumber(getgenv().MacroCurrentCash) or 0
                     
                     if cash >= cost then 
@@ -1733,7 +1824,7 @@ local function playMacroV2()
                     if cash > lastCash then
                         noIncomeTime = 0
                     else
-                        noIncomeTime = noIncomeTime + 0.5
+                        noIncomeTime = noIncomeTime + 0.1
                     end
                     lastCash = cash
                     
