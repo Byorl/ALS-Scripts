@@ -968,8 +968,10 @@ getgenv().MacroGameState = {
     isInGame = false,
     hasStartButton = false,
     hasEndGameUI = false,
+    gameEnded = false,
     lastWaveChange = 0,
-    matchStartTime = 0
+    matchStartTime = 0,
+    lastGameEndedState = false
 }
 
 local function updateGameState()
@@ -989,7 +991,19 @@ local function updateGameState()
         local endGameUI = LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
         getgenv().MacroGameState.hasEndGameUI = endGameUI and endGameUI.Enabled or false
         
-        getgenv().MacroGameState.isInGame = not getgenv().MacroGameState.hasStartButton and not getgenv().MacroGameState.hasEndGameUI
+        local gameEndedValue = RS:FindFirstChild("GameEnded")
+        local currentGameEnded = gameEndedValue and gameEndedValue.Value or false
+        
+        if currentGameEnded and not getgenv().MacroGameState.lastGameEndedState then
+            getgenv().MacroGameState.gameEnded = true
+            
+            getgenv().BulmaWishUsedThisRound = false
+            getgenv().WukongTrackedClones = {}
+            getgenv()._WukongLastSynthesisTime = 0
+        end
+        
+        getgenv().MacroGameState.lastGameEndedState = currentGameEnded
+        getgenv().MacroGameState.isInGame = not getgenv().MacroGameState.hasStartButton and not getgenv().MacroGameState.hasEndGameUI and not currentGameEnded
     end)
 end
 
@@ -1421,6 +1435,21 @@ local function playMacroV2()
         while getgenv().MacroPlayEnabled and step <= #macroData do
             if getgenv().IsKilled and getgenv().IsKilled() then
                 break
+            end
+            
+            if getgenv().MacroGameState.gameEnded then
+                getgenv().MacroStatusText = "Game Ended - Waiting"
+                getgenv().MacroWaitingText = "Waiting for next round..."
+                getgenv().UpdateMacroStatus()
+                
+                while getgenv().MacroGameState.gameEnded and getgenv().MacroPlayEnabled do
+                    task.wait(0.5)
+                end
+                
+                getgenv().MacroGameState.gameEnded = false
+                step = 1
+                task.wait(2)
+                continue
             end
             
             if getgenv().MacroGameState.hasStartButton then
@@ -5944,35 +5973,36 @@ if not isInLobby then
             end
         end)
         
-        LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
-            pcall(function()
-                if child.Name == "EndGameUI" and not hasRun then
-                    local currentTime = tick()
-                    if currentTime - lastEndgameTime < DEBOUNCE_TIME then
-                        return
-                    end
-                    hasRun = true
-                    lastEndgameTime = currentTime
-                    endgameCount = endgameCount + 1
-                    local maxRounds = getgenv().SeamlessRounds or 4
+        task.spawn(function()
+            local lastGameEndedState = false
+            while true do
+                task.wait(0.5)
+                pcall(function()
+                    local gameEndedValue = RS:FindFirstChild("GameEnded")
+                    local currentGameEnded = gameEndedValue and gameEndedValue.Value or false
                     
-                    if endgameCount >= maxRounds and getgenv().SeamlessFixEnabled then
-                        maxRoundsReached = true
-                        task.wait(1)
-                        if getSeamlessValue() then
-                            setSeamlessRetry()
-                            task.wait(2)
+                    if currentGameEnded and not lastGameEndedState and not hasRun then
+                        local currentTime = tick()
+                        if currentTime - lastEndgameTime < DEBOUNCE_TIME then
+                            lastGameEndedState = currentGameEnded
+                            return
                         end
                         
-                        task.spawn(function()
-                            local maxWait = 0
-                            while LocalPlayer.PlayerGui:FindFirstChild("EndGameUI") and maxWait < 30 do
-                                task.wait(0.5)
-                                maxWait = maxWait + 0.5
+                        hasRun = true
+                        lastEndgameTime = currentTime
+                        endgameCount = endgameCount + 1
+                        local maxRounds = getgenv().SeamlessRounds or 4
+                        
+                        if endgameCount >= maxRounds and getgenv().SeamlessFixEnabled then
+                            maxRoundsReached = true
+                            task.wait(1)
+                            if getSeamlessValue() then
+                                setSeamlessRetry()
+                                task.wait(2)
                             end
                             
-                            if not LocalPlayer.PlayerGui:FindFirstChild("EndGameUI") then
-                                task.wait(2) 
+                            task.spawn(function()
+                                task.wait(5)
                                 local success, err = pcall(function()
                                     local remotes = RS:FindFirstChild("Remotes")
                                     local restartEvent = remotes and remotes:FindFirstChild("RestartMatch")
@@ -5984,13 +6014,17 @@ if not isInLobby then
                                         hasRun = false
                                     end
                                 end)
-                            end
-                        end)
-                    else
+                            end)
+                        end
+                    end
+                    
+                    if not currentGameEnded and lastGameEndedState then
                         hasRun = false
                     end
-                end
-            end)
+                    
+                    lastGameEndedState = currentGameEnded
+                end)
+            end
         end)
         
         LocalPlayer.PlayerGui.ChildRemoved:Connect(function(child) 
