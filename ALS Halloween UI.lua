@@ -2501,7 +2501,6 @@ local function buildAutoAbilityUI()
                 table.insert(getgenv()._AbilityUIElements["Left"], specialSection)
                 
                 specialSection:Header({ Text = "🔮 Auto Units" })
-                specialSection:SubLabel({ Text = "Advanced unit automation systems" })
                 specialSection:Divider()
                 
                 if hasBulma then
@@ -2537,8 +2536,6 @@ local function buildAutoAbilityUI()
                         end,
                         getgenv().BulmaWishType or "Power"
                     )
-                    
-                    specialSection:SubLabel({ Text = "Uses wish when 7 dragon balls collected" })
                 end
                 
                 if hasWukong then
@@ -2560,10 +2557,6 @@ local function buildAutoAbilityUI()
                         end,
                         getgenv().WukongEnabled
                     )
-                    
-                    specialSection:SubLabel({
-                        Text = "Summons 4 clones → Upgrades to lvl 8 → Uses Clone Diffusion"
-                    })
                 end
             end
         end
