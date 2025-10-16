@@ -4626,6 +4626,27 @@ task.spawn(function()
     end)
 end)
 
+task.spawn(function()
+    local lastWave = 0
+    while true do
+        task.wait(1)
+        pcall(function()
+            local wave = RS:FindFirstChild("Wave")
+            if wave and wave:IsA("NumberValue") then
+                local currentWave = wave.Value
+                
+                if currentWave < lastWave and currentWave <= 5 then
+                    getgenv().BulmaWishUsedThisRound = false
+                    getgenv().WukongTrackedClones = {}
+                    getgenv()._WukongLastSynthesisTime = 0
+                end
+                
+                lastWave = currentWave
+            end
+        end)
+    end
+end)
+
 
 local function isInLobby()
     local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
