@@ -17,7 +17,7 @@ local MOBILE_DELAY_MULTIPLIER = isMobile and 1.5 or 1.0
 local Window = MacLib:Window({
     Title = "ALS Macro System",
     Subtitle = "Anime Last Stand Automation",
-    Size = isMobile and UDim2.fromOffset(580, 480) or UDim2.fromOffset(760, 560),
+    Size = UDim2.fromOffset(580, 480),
     DragStyle = 1,
     DisabledWindowControls = {},
     ShowUserInfo = true,
@@ -238,6 +238,10 @@ local Tabs = {
         Name = "Abilities", 
         Image = "rbxassetid://10747373176" 
     }),
+    Portals = TabGroup1:Tab({ 
+        Name = "Portals", 
+        Image = "rbxassetid://10723407389" 
+    }),
     
     Event = TabGroup2:Tab({ 
         Name = "Event", 
@@ -306,10 +310,8 @@ local Sections = {
     MacroLeft = Tabs.Macro:Section({ Side = "Left" }),
     MacroRight = Tabs.Macro:Section({ Side = "Right" }),
     
-
-    
-    
-
+    PortalsLeft = Tabs.Portals:Section({ Side = "Left" }),
+    PortalsRight = Tabs.Portals:Section({ Side = "Right" }),
     
     BossRushLeft = Tabs.BossRush:Section({ Side = "Left" }),
     BossRushRight = Tabs.BossRush:Section({ Side = "Right" }),
@@ -1909,6 +1911,214 @@ initializeCardPriorities(getgenv().BabyloniaCastle, getgenv().BossRushCardPriori
 getgenv().CardSelectionEnabled = getgenv().Config.toggles.CardSelectionToggle or false
 getgenv().SlowerCardSelectionEnabled = getgenv().Config.toggles.SlowerCardSelectionToggle or false
 
+local savedPortalConfig = getgenv().Config.portals or {}
+getgenv().PortalConfig = {
+    selectedMap = savedPortalConfig.selectedMap or "",
+    tier = savedPortalConfig.tier or 1,
+    useBestPortal = savedPortalConfig.useBestPortal or false,
+    pickPortal = savedPortalConfig.pickPortal or false,
+    priorities = savedPortalConfig.priorities or {
+        priority1 = "",
+        priority2 = "",
+        priority3 = "",
+        priority4 = "",
+        priority5 = "",
+        priority6 = ""
+    }
+}
+getgenv().Config.portals = getgenv().PortalConfig
+
+Sections.PortalsLeft:Header({ Text = "🌀 Portal Selection" })
+Sections.PortalsLeft:SubLabel({ Text = "Configure automatic portal selection" })
+
+local function getPortalMaps()
+    local maps = {}
+    pcall(function()
+        local mapData = RS:FindFirstChild("Modules") and RS.Modules:FindFirstChild("MapData")
+        if mapData and mapData:IsA("ModuleScript") then
+            local data = require(mapData)
+            for mapName, mapInfo in pairs(data) do
+                if mapInfo.Portal then
+                    table.insert(maps, mapName)
+                end
+            end
+        end
+    end)
+    table.sort(maps)
+    return #maps > 0 and maps or {"No Portal Maps Found"}
+end
+
+local portalMaps = getPortalMaps()
+local portalMapDefault = 1
+if getgenv().PortalConfig.selectedMap and getgenv().PortalConfig.selectedMap ~= "" then
+    for i, mapName in ipairs(portalMaps) do
+        if mapName == getgenv().PortalConfig.selectedMap then
+            portalMapDefault = i
+            break
+        end
+    end
+end
+
+createDropdown(
+    Sections.PortalsLeft,
+    "Select Map",
+    "PortalMap",
+    portalMaps,
+    false,
+    function(value)
+        getgenv().PortalConfig.selectedMap = value
+        getgenv().Config.portals.selectedMap = value
+        saveConfig(getgenv().Config)
+    end,
+    portalMapDefault
+)
+
+Sections.PortalsLeft:Divider()
+
+Sections.PortalsLeft:Header({ Text = "🎯 Challenge Priority" })
+Sections.PortalsLeft:SubLabel({ Text = "Set priority order for portal challenges (1 = highest)" })
+
+Sections.PortalsLeft:SubLabel({ Text = "Available: Tower Limit, Immunity, Speedy, No Hit, Flight, Short Range" })
+
+createInput(
+    Sections.PortalsLeft,
+    "Priority 1 (Most Wanted)",
+    "PortalPriority1",
+    "e.g., Speedy",
+    "All",
+    function(value)
+        getgenv().PortalConfig.priorities.priority1 = value
+        getgenv().Config.portals.priorities.priority1 = value
+        saveConfig(getgenv().Config)
+    end,
+    getgenv().PortalConfig.priorities.priority1
+)
+
+createInput(
+    Sections.PortalsLeft,
+    "Priority 2",
+    "PortalPriority2",
+    "e.g., Short Range",
+    "All",
+    function(value)
+        getgenv().PortalConfig.priorities.priority2 = value
+        getgenv().Config.portals.priorities.priority2 = value
+        saveConfig(getgenv().Config)
+    end,
+    getgenv().PortalConfig.priorities.priority2
+)
+
+createInput(
+    Sections.PortalsLeft,
+    "Priority 3",
+    "PortalPriority3",
+    "e.g., Tower Limit",
+    "All",
+    function(value)
+        getgenv().PortalConfig.priorities.priority3 = value
+        getgenv().Config.portals.priorities.priority3 = value
+        saveConfig(getgenv().Config)
+    end,
+    getgenv().PortalConfig.priorities.priority3
+)
+
+Sections.PortalsRight:Header({ Text = "⚙️ Portal Options" })
+Sections.PortalsRight:SubLabel({ Text = "Additional portal settings" })
+
+local tierOptions = {}
+for i = 1, 10 do
+    table.insert(tierOptions, tostring(i))
+end
+
+createDropdown(
+    Sections.PortalsRight,
+    "Portal Tier",
+    "PortalTier",
+    tierOptions,
+    false,
+    function(value)
+        getgenv().PortalConfig.tier = tonumber(value) or 1
+        getgenv().Config.portals.tier = tonumber(value) or 1
+        saveConfig(getgenv().Config)
+    end,
+    getgenv().PortalConfig.tier
+)
+
+createToggle(
+    Sections.PortalsRight,
+    "Use Best Portal (Highest Tier)",
+    "UseBestPortal",
+    function(value)
+        getgenv().PortalConfig.useBestPortal = value
+        getgenv().Config.portals.useBestPortal = value
+        saveConfig(getgenv().Config)
+        Window:Notify({
+            Title = "Portal System",
+            Description = value and "Will use highest tier portal available" or "Will use selected tier",
+            Lifetime = 3
+        })
+    end,
+    getgenv().PortalConfig.useBestPortal
+)
+
+createToggle(
+    Sections.PortalsRight,
+    "Pick Portal (Manual Selection)",
+    "PickPortal",
+    function(value)
+        getgenv().PortalConfig.pickPortal = value
+        getgenv().Config.portals.pickPortal = value
+        saveConfig(getgenv().Config)
+        Window:Notify({
+            Title = "Portal System",
+            Description = value and "Manual portal selection enabled" or "Automatic selection enabled",
+            Lifetime = 3
+        })
+    end,
+    getgenv().PortalConfig.pickPortal
+)
+
+createInput(
+    Sections.PortalsRight,
+    "Priority 4",
+    "PortalPriority4",
+    "e.g., Immunity",
+    "All",
+    function(value)
+        getgenv().PortalConfig.priorities.priority4 = value
+        getgenv().Config.portals.priorities.priority4 = value
+        saveConfig(getgenv().Config)
+    end,
+    getgenv().PortalConfig.priorities.priority4
+)
+
+createInput(
+    Sections.PortalsRight,
+    "Priority 5",
+    "PortalPriority5",
+    "e.g., No Hit",
+    "All",
+    function(value)
+        getgenv().PortalConfig.priorities.priority5 = value
+        getgenv().Config.portals.priorities.priority5 = value
+        saveConfig(getgenv().Config)
+    end,
+    getgenv().PortalConfig.priorities.priority5
+)
+
+createInput(
+    Sections.PortalsRight,
+    "Priority 6 (Least Wanted)",
+    "PortalPriority6",
+    "e.g., Flight",
+    "All",
+    function(value)
+        getgenv().PortalConfig.priorities.priority6 = value
+        getgenv().Config.portals.priorities.priority6 = value
+        saveConfig(getgenv().Config)
+    end,
+    getgenv().PortalConfig.priorities.priority6
+)
 
 
 Sections.EventLeft:Header({ Text = "🎃 Event Automation" })
@@ -2214,6 +2424,23 @@ getgenv().AutoJoinDelay = tonumber(getgenv().Config.inputs.AutoJoinDelay) or 0
 getgenv().FinalExpAutoJoinEasyEnabled = getgenv().Config.toggles.FinalExpAutoJoinEasyToggle or false
 getgenv().FinalExpAutoJoinHardEnabled = getgenv().Config.toggles.FinalExpAutoJoinHardToggle or false
 getgenv().FinalExpAutoSkipShopEnabled = getgenv().Config.toggles.FinalExpAutoSkipShopToggle or false
+
+local savedPortalConfig = getgenv().Config.portals or {}
+getgenv().PortalConfig = {
+    selectedMap = savedPortalConfig.selectedMap or "",
+    tier = savedPortalConfig.tier or 1,
+    useBestPortal = savedPortalConfig.useBestPortal or false,
+    pickPortal = savedPortalConfig.pickPortal or false,
+    priorities = savedPortalConfig.priorities or {
+        priority1 = "",
+        priority2 = "",
+        priority3 = "",
+        priority4 = "",
+        priority5 = "",
+        priority6 = ""
+    }
+}
+getgenv().Config.portals = getgenv().PortalConfig
 
 local BLACKLISTED_UNITS = {
     "NarutoBaryonClone"
@@ -4386,6 +4613,204 @@ if not isInLobby() then
         end)
     end)
 end
+
+
+local function getClientData()
+    local ok, data = pcall(function()
+        local modulePath = RS:WaitForChild("Modules"):WaitForChild("ClientData")
+        if modulePath and modulePath:IsA("ModuleScript") then
+            return require(modulePath)
+        end
+        return nil
+    end)
+    return ok and data or nil
+end
+
+local function findBestPortal()
+    local clientData = getClientData()
+    if not clientData then return nil end
+    
+    local selectedMap = getgenv().PortalConfig.selectedMap
+    local targetTier = getgenv().PortalConfig.tier
+    local useBestPortal = getgenv().PortalConfig.useBestPortal
+    local priorities = getgenv().PortalConfig.priorities
+    
+    local matchingPortals = {}
+    
+    for portalID, portalInfo in pairs(clientData) do
+        if type(portalInfo) == "table" and portalInfo.PortalData then
+            local portalData = portalInfo.PortalData
+            local mapMatch = (selectedMap == "" or portalData.Map == selectedMap)
+            
+            if mapMatch then
+                table.insert(matchingPortals, {
+                    id = portalID,
+                    tier = portalData.Tier or 0,
+                    challenge = portalData.Challenges or "",
+                    map = portalData.Map or ""
+                })
+            end
+        end
+    end
+    
+    if #matchingPortals == 0 then return nil end
+    
+    if useBestPortal then
+        table.sort(matchingPortals, function(a, b)
+            return a.tier > b.tier
+        end)
+        return matchingPortals[1].id
+    end
+    
+    local tierFiltered = {}
+    for _, portal in ipairs(matchingPortals) do
+        if portal.tier == targetTier then
+            table.insert(tierFiltered, portal)
+        end
+    end
+    
+    if #tierFiltered == 0 then
+        return matchingPortals[1].id
+    end
+    
+    for i = 1, 6 do
+        local priority = priorities["priority" .. i]
+        if priority and priority ~= "" then
+            for _, portal in ipairs(tierFiltered) do
+                if portal.challenge:lower():find(priority:lower()) then
+                    return portal.id
+                end
+            end
+        end
+    end
+    
+    return tierFiltered[1].id
+end
+
+local function activatePortal(portalID)
+    if not portalID then return false end
+    
+    local success = pcall(function()
+        local portalRemote = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("Portals") and RS.Remotes.Portals:FindFirstChild("ActivateEvent")
+        if portalRemote then
+            portalRemote:InvokeServer(portalID)
+            return true
+        end
+    end)
+    
+    return success
+end
+
+if isInLobby() then
+    task.spawn(function()
+        while true do
+            task.wait(2)
+            
+            if getgenv().PortalConfig.pickPortal then
+                pcall(function()
+                    local promptUI = LocalPlayer.PlayerGui:FindFirstChild("Prompt")
+                    if promptUI and promptUI:FindFirstChild("Frame") then
+                        local frame = promptUI.Frame:FindFirstChild("Frame")
+                        if frame then
+                            local children = frame:GetChildren()
+                            for _, child in ipairs(children) do
+                                if child:IsA("Frame") or child:IsA("GuiObject") then
+                                    local textButton = child:FindFirstChildOfClass("TextButton", true)
+                                    if textButton then
+                                        for i, v in pairs(getconnections(textButton.MouseButton1Click)) do
+                                            v:Fire()
+                                        end
+                                        task.wait(0.2)
+                                        
+                                        local confirmButton = promptUI:FindFirstChild("Confirm", true)
+                                        if confirmButton and confirmButton:IsA("TextButton") then
+                                            for i, v in pairs(getconnections(confirmButton.MouseButton1Click)) do
+                                                v:Fire()
+                                            end
+                                        end
+                                        break
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end)
+            else
+                local portalID = findBestPortal()
+                if portalID then
+                    activatePortal(portalID)
+                end
+            end
+        end
+    end)
+end
+
+task.spawn(function()
+    while true do
+        task.wait(1)
+        
+        pcall(function()
+            local gamemode = RS:FindFirstChild("Gamemode")
+            if gamemode and gamemode.Value == "Portal" then
+                if getgenv().AutoNextEnabled or getgenv().AutoSmartEnabled then
+                    local endGameUI = LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
+                    if endGameUI and endGameUI:FindFirstChild("BG") then
+                        local buttons = endGameUI.BG:FindFirstChild("Buttons")
+                        if buttons then
+                            local nextButton = buttons:FindFirstChild("Next")
+                            if nextButton and nextButton:FindFirstChild("Styling") then
+                                local label = nextButton.Styling:FindFirstChild("Label")
+                                if label and label.Text == "View Portals" then
+                                    for i, v in pairs(getconnections(nextButton.MouseButton1Click)) do
+                                        v:Fire()
+                                    end
+                                    
+                                    task.wait(1)
+                                    
+                                    if getgenv().PortalConfig.pickPortal then
+                                        pcall(function()
+                                            local promptUI = LocalPlayer.PlayerGui:FindFirstChild("Prompt")
+                                            if promptUI and promptUI:FindFirstChild("Frame") then
+                                                local frame = promptUI.Frame:FindFirstChild("Frame")
+                                                if frame then
+                                                    local children = frame:GetChildren()
+                                                    for _, child in ipairs(children) do
+                                                        if child:IsA("Frame") or child:IsA("GuiObject") then
+                                                            local textButton = child:FindFirstChildOfClass("TextButton", true)
+                                                            if textButton then
+                                                                for i, v in pairs(getconnections(textButton.MouseButton1Click)) do
+                                                                    v:Fire()
+                                                                end
+                                                                task.wait(0.2)
+                                                                
+                                                                local confirmButton = promptUI:FindFirstChild("Confirm", true)
+                                                                if confirmButton and confirmButton:IsA("TextButton") then
+                                                                    for i, v in pairs(getconnections(confirmButton.MouseButton1Click)) do
+                                                                        v:Fire()
+                                                                    end
+                                                                end
+                                                                break
+                                                            end
+                                                        end
+                                                    end
+                                                end
+                                            end
+                                        end)
+                                    else
+                                        local portalID = findBestPortal()
+                                        if portalID then
+                                            activatePortal(portalID)
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end)
+    end
+end)
 
 
 local function formatNumber(num)
