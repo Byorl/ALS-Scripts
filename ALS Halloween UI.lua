@@ -1750,70 +1750,66 @@ local function playMacroV2()
             return
         end
         
-        local step = detectMacroProgress(macroData)
+        local step = 1
         
-        if step == -1 then
-            print("[Macro Complete] All steps already completed")
-            getgenv().MacroStatusText = "Finished Macro"
-            getgenv().MacroWaitingText = "All steps complete"
-            getgenv().MacroCurrentStep = #macroData
-            getgenv().MacroTotalSteps = #macroData
-            getgenv().UpdateMacroStatus()
-            getgenv().MacroPlaybackActive = false
-            return
+        if not getgenv().MacroGameState.hasStartButton and getgenv().MacroGameState.currentWave > 0 then
+            step = detectMacroProgress(macroData)
+            
+            if step == -1 then
+                print("[Macro Complete] All steps already completed")
+                getgenv().MacroStatusText = "Finished Macro"
+                getgenv().MacroWaitingText = "All steps complete"
+                getgenv().MacroCurrentStep = #macroData
+                getgenv().MacroTotalSteps = #macroData
+                getgenv().UpdateMacroStatus()
+                getgenv().MacroPlaybackActive = false
+                return
+            end
+            
+            if step > 1 then
+                print("[Macro Resume] Resuming from step", step)
+            end
+        else
+            print("[Macro] Starting fresh from step 1 (waiting for game to start)")
         end
         
-        if step > 1 then
-            print("[Macro Resume] Resuming from step", step)
-        end
-        
-        print("[Macro] Waiting for game to start...")
+        print("[Macro] Waiting for round to start...")
         
         local waitStartTime = tick()
+        
         while getgenv().MacroPlayEnabled do
-            local hasButton = getgenv().MacroGameState.hasStartButton
-            local currentWave = getgenv().MacroGameState.currentWave
+            local elapsedTime = 0
+            local currentWave = 0
             
-            if hasButton then
-                getgenv().MacroStatusText = "Waiting for Start"
-                getgenv().MacroWaitingText = "Press Start button..."
-                getgenv().UpdateMacroStatus()
-            elseif currentWave == 0 then
-                getgenv().MacroStatusText = "Waiting for Round Start"
-                getgenv().MacroWaitingText = "Wave 0..."
-                getgenv().UpdateMacroStatus()
-            else
-                print("[Macro] Wave detected:", currentWave, "- Waiting for UI to clear...")
-                getgenv().MacroStatusText = "Loading Game"
-                getgenv().MacroWaitingText = "Waiting for UI..."
-                getgenv().UpdateMacroStatus()
-                
-                local uiClearWait = 0
-                while uiClearWait < 30 and getgenv().MacroPlayEnabled do
-                    task.wait(0.1)
-                    uiClearWait = uiClearWait + 1
-                    
-                    if not getgenv().MacroGameState.hasStartButton and getgenv().MacroGameState.currentWave > 0 then
-                        local checksPassed = 0
-                        for i = 1, 5 do
-                            task.wait(0.1)
-                            if not getgenv().MacroGameState.hasStartButton and getgenv().MacroGameState.currentWave > 0 then
-                                checksPassed = checksPassed + 1
-                            end
-                        end
-                        
-                        if checksPassed >= 5 then
-                            print("[Macro] Game fully started! Wave:", getgenv().MacroGameState.currentWave)
-                            break
-                        end
-                    end
+            pcall(function()
+                local elapsed = RS:FindFirstChild("ElapsedTime")
+                if elapsed and elapsed.Value then
+                    elapsedTime = elapsed.Value
                 end
+                
+                local wave = RS:FindFirstChild("Wave")
+                if wave and wave.Value then
+                    currentWave = wave.Value
+                end
+            end)
+            
+            if elapsedTime > 0 and currentWave > 0 then
+                print("[Macro] Round started! ElapsedTime:", elapsedTime, "Wave:", currentWave)
                 break
             end
             
-            local elapsed = math.floor(tick() - waitStartTime)
+            if elapsedTime == 0 then
+                getgenv().MacroStatusText = "Waiting for Start"
+                getgenv().MacroWaitingText = "Round not started..."
+            else
+                getgenv().MacroStatusText = "Waiting for Round"
+                getgenv().MacroWaitingText = "Wave " .. currentWave .. "..."
+            end
+            getgenv().UpdateMacroStatus()
+            
+            local elapsed = tick() - waitStartTime
             if elapsed > 300 then
-                print("[Macro] Timeout waiting for game start")
+                print("[Macro] Timeout waiting for round start (5 minutes)")
                 getgenv().MacroPlaybackActive = false
                 return
             end
@@ -1826,13 +1822,8 @@ local function playMacroV2()
             return
         end
         
-        print("[Macro] Starting playback in 5 seconds...")
-        for i = 5, 1, -1 do
-            getgenv().MacroStatusText = "Starting Soon"
-            getgenv().MacroWaitingText = i .. " seconds..."
-            getgenv().UpdateMacroStatus()
-            task.wait(1)
-        end
+        print("[Macro] Starting playback NOW")
+        task.wait(0.5)
         
         if not getgenv().MacroPlayEnabled then
             getgenv().MacroPlaybackActive = false
@@ -4439,7 +4430,7 @@ createToggle(
             Lifetime = 3
         })
     end,
-    getgenv().Config.toggles.SeamlessFixToggle or false
+    getgenv().SeamlessFixEnabled
 )
 
 createInput(
