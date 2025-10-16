@@ -814,6 +814,23 @@ getgenv().GetPlaceCost = function(towerName)
     return 0
 end
 
+getgenv().GetUpgradeCost = function(towerName, currentLevel)
+    if not getgenv().MacroTowerInfoCache then
+        return 0
+    end
+    
+    if not getgenv().MacroTowerInfoCache[towerName] then 
+        return 0 
+    end
+    
+    local nextLevel = (currentLevel or 0) + 1
+    if getgenv().MacroTowerInfoCache[towerName][nextLevel] then
+        return getgenv().MacroTowerInfoCache[towerName][nextLevel].Cost or 0
+    end
+    
+    return 0
+end
+
 trackCash()
 
 
@@ -1159,7 +1176,16 @@ local function setupTowerUpgradeListener(tower)
             towerTracker.lastUpgradeTime[tower] = now
             
             for i = 1, levelsGained do
-                local cost = getgenv().GetRecentCashDecrease and getgenv().GetRecentCashDecrease(0.3) or 0
+                local upgradeLevel = oldLevel + i - 1
+                local cost = 0
+                
+                if getgenv().GetUpgradeCost then
+                    cost = getgenv().GetUpgradeCost(towerName, upgradeLevel)
+                end
+                
+                if cost == 0 and getgenv().GetRecentCashDecrease then
+                    cost = getgenv().GetRecentCashDecrease(0.3)
+                end
                 
                 table.insert(getgenv().MacroDataV2, {
                     RemoteName = "Upgrade",
@@ -1323,7 +1349,21 @@ local function processRemoteCall(remoteName, method, args)
                     
                     task.spawn(function()
                         if towerTracker.pendingActions[upgradeKey] then
-                            local cost = getgenv().GetRecentCashDecrease and getgenv().GetRecentCashDecrease(0.3) or 0
+                            local currentLevel = 0
+                            pcall(function()
+                                if tower and tower:FindFirstChild("Upgrade") then
+                                    currentLevel = tower.Upgrade.Value
+                                end
+                            end)
+                            
+                            local cost = 0
+                            if getgenv().GetUpgradeCost then
+                                cost = getgenv().GetUpgradeCost(towerName, currentLevel)
+                            end
+                            
+                            if cost == 0 and getgenv().GetRecentCashDecrease then
+                                cost = getgenv().GetRecentCashDecrease(0.3)
+                            end
                             
                             table.insert(getgenv().MacroDataV2, {
                                 RemoteName = "Upgrade",
@@ -1634,8 +1674,10 @@ local function executeAction(action)
 end
 
 local function detectMacroProgress(macroData)
+    -- Detect which step we're on based on current game state
     local towerStates = {}
     
+    -- Get current tower states
     for _, tower in pairs(workspace.Towers:GetChildren()) do
         if tower:FindFirstChild("Owner") and tower.Owner.Value == LocalPlayer then
             local towerName = tower.Name
@@ -1650,6 +1692,7 @@ local function detectMacroProgress(macroData)
         end
     end
     
+    -- Find the last completed step
     local lastCompletedStep = 0
     local expectedTowers = {}
     
@@ -1658,15 +1701,17 @@ local function detectMacroProgress(macroData)
             local towerName = action.TowerName
             expectedTowers[towerName] = (expectedTowers[towerName] or 0) + 1
             
+            -- Check if this tower exists
             if towerStates[towerName] and towerStates[towerName].count >= expectedTowers[towerName] then
                 lastCompletedStep = i
             else
-                break
+                break -- Tower not placed yet, stop here
             end
             
         elseif action.ActionType == "Upgrade" then
             local towerName = action.TowerName
             
+            -- Count how many upgrades this tower should have by this step
             local expectedLevel = 0
             for j = 1, i do
                 if macroData[j].ActionType == "Upgrade" and macroData[j].TowerName == towerName then
@@ -1674,16 +1719,17 @@ local function detectMacroProgress(macroData)
                 end
             end
             
+            -- Check if tower has this upgrade level
             if towerStates[towerName] and towerStates[towerName].maxLevel >= expectedLevel then
                 lastCompletedStep = i
             else
-                break 
+                break -- Upgrade not done yet, stop here
             end
         end
     end
     
     print("[Macro Resume] Detected progress: Step", lastCompletedStep, "/", #macroData)
-    return lastCompletedStep + 1
+    return lastCompletedStep + 1 -- Start from next step
 end
 
 local function playMacroV2()
@@ -1701,6 +1747,7 @@ local function playMacroV2()
             return
         end
         
+        -- Detect current progress and resume from there
         local step = detectMacroProgress(macroData)
         
         if step > 1 then
@@ -1738,11 +1785,24 @@ local function playMacroV2()
         getgenv().UpdateMacroStatus()
         
         local lastCashCheck = 0
+        local lastWaveCheck = getgenv().MacroGameState.currentWave
         
         while getgenv().MacroPlayEnabled and step <= #macroData do
             if getgenv().IsKilled and getgenv().IsKilled() then
                 break
             end
+            
+            local currentWave = getgenv().MacroGameState.currentWave
+            if lastWaveCheck > 5 and currentWave == 1 then
+                getgenv().MacroStatusText = "Wave Reset - Restarting Macro"
+                getgenv().MacroWaitingText = "Detected wave reset..."
+                getgenv().UpdateMacroStatus()
+                step = 1
+                lastWaveCheck = currentWave
+                task.wait(2)
+                continue
+            end
+            lastWaveCheck = currentWave
             
             if getgenv().MacroGameState.gameEnded then
                 getgenv().MacroStatusText = "Game Ended - Waiting"
@@ -4538,7 +4598,8 @@ task.spawn(function()
     end
 end)
 
-task.spawn(function()
+do
+    task.spawn(function()
     while true do
         task.wait(1)
         if getgenv().AutoReadyEnabled then
@@ -4573,7 +4634,8 @@ task.spawn(function()
             end
         end
     end
-end)
+    end)
+end
 
 
 
@@ -4887,10 +4949,11 @@ end)
 
 
 
-task.spawn(function()
-    while true do
-        task.wait(1)
-        if getgenv().BulmaEnabled then
+do
+    task.spawn(function()
+        while true do
+            task.wait(1)
+            if getgenv().BulmaEnabled then
             local success, err = pcall(function()
                 local towers = workspace:FindFirstChild("Towers")
                 if not towers then return end
@@ -4937,13 +5000,15 @@ task.spawn(function()
             end
         end
     end
-end)
+    end)
+end
 
 
 
-task.spawn(function()
-    
-    local CLONE_UPGRADE_COSTS = {
+do
+    task.spawn(function()
+        
+        local CLONE_UPGRADE_COSTS = {
         [1] = 1750,
         [2] = 3500,
         [3] = 7000,
@@ -5106,20 +5171,24 @@ task.spawn(function()
             end
         end
     end
-end)
+    end)
+end
 
 
-task.spawn(function()
-    LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
+do
+    task.spawn(function()
+        LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
         if child.Name == "EndGameUI" then
             getgenv().BulmaWishUsedThisRound = false
             getgenv().WukongTrackedClones = {}
             getgenv()._WukongLastSynthesisTime = 0
         end
     end)
-end)
+    end)
+end
 
-task.spawn(function()
+do
+    task.spawn(function()
     local lastWave = 0
     while true do
         task.wait(1)
@@ -5403,7 +5472,8 @@ task.spawn(function()
             end
         end)
     end
-end)
+    end)
+end
 
 
 local function formatNumber(num)
@@ -5829,8 +5899,9 @@ end)
 
 
 
-task.spawn(function()
-    local eventsFolder = RS:FindFirstChild("Events")
+do
+    task.spawn(function()
+        local eventsFolder = RS:FindFirstChild("Events")
     local halloweenFolder = eventsFolder and eventsFolder:FindFirstChild("Hallowen2025")
     local enterEvent = halloweenFolder and halloweenFolder:FindFirstChild("Enter")
     local startEvent = halloweenFolder and halloweenFolder:FindFirstChild("Start")
@@ -5849,7 +5920,8 @@ task.spawn(function()
             end)
         end
     end
-end)
+    end)
+end
 
 if isInLobby then
     task.spawn(function()
@@ -5966,16 +6038,17 @@ end
 
 
 
-local LOBBY_PLACEIDS = {12886143095, 18583778121}
-local function checkIsInLobby()
-    for _, placeId in ipairs(LOBBY_PLACEIDS) do
-        if game.PlaceId == placeId then return true end
+do
+    local LOBBY_PLACEIDS = {12886143095, 18583778121}
+    local function checkIsInLobby()
+        for _, placeId in ipairs(LOBBY_PLACEIDS) do
+            if game.PlaceId == placeId then return true end
+        end
+        return false
     end
-    return false
-end
 
-if checkIsInLobby() then
-    task.spawn(function()
+    if checkIsInLobby() then
+        task.spawn(function()
         
         local function getAvailableBreaches()
             local ok, breaches = pcall(function()
@@ -6021,14 +6094,16 @@ if checkIsInLobby() then
             end
         end
     end)
+    end
 end
 
 
 
-task.spawn(function()
-    
-    local VIM = game:GetService("VirtualInputManager")
-    local TweenService = game:GetService("TweenService")
+do
+    task.spawn(function()
+        
+        local VIM = game:GetService("VirtualInputManager")
+        local TweenService = game:GetService("TweenService")
     
     local function teleportToShrine()
         local ok, err = pcall(function()
@@ -6088,12 +6163,14 @@ task.spawn(function()
             end
         end
     end
-end)
+    end)
+end
 
 
 
-task.spawn(function()
-    local VIM = game:GetService("VirtualInputManager")
+do
+    task.spawn(function()
+        local VIM = game:GetService("VirtualInputManager")
     
     local function getAvailableCards()
         local ok, result = pcall(function()
@@ -6247,7 +6324,8 @@ task.spawn(function()
             selectCardSlower()
         end
     end
-end)
+    end)
+end
 
 
 
