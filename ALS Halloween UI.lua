@@ -20,7 +20,7 @@ local isMobile = UserInputService.TouchEnabled and not UserInputService.Keyboard
 local MOBILE_DELAY_MULTIPLIER = isMobile and 1.5 or 1.0
 
 local Window = MacLib:Window({
-    Title = "ALS Macro System",
+    Title = "Byorl Last Stand",
     Subtitle = "Anime Last Stand Automation",
     Size = isMobile and UDim2.fromOffset(580, 480) or UDim2.fromOffset(868, 650),
     DragStyle = 1,
@@ -5222,7 +5222,7 @@ task.spawn(function()
                     { name = "Units", value = (unitsText ~= "" and unitsText or "No units"), inline = false },
                     { name = "Match Result", value = (matchTime or "00:00:00") .. " - Wave " .. tostring(matchWave or "0") .. "\n" .. (mapName or "Unknown Map") .. ((mapDifficulty and mapDifficulty ~= "Unknown") and (" [" .. mapDifficulty .. "]") or "") .. " - " .. (matchResult or "Unknown"), inline = false }
                 },
-                footer = { text = "ALS Macro System" }
+                footer = { text = "ALS Macro System | <https://discord.gg/V3WcdHpd3J>" }
             }
             
             local webhookContent = ""
