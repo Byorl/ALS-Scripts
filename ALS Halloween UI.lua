@@ -91,7 +91,7 @@ if customHeight < 300 or customHeight > 1080 then customHeight = defaultHeight e
 print("[UI Size] Creating window with size:", customWidth, "x", customHeight)
 
 local Window = MacLib:Window({
-    Title = "ALS Macro System",
+    Title = "Byorl Last Stand",
     Subtitle = "Anime Last Stand Automation",
     Size = UDim2.fromOffset(customWidth, customHeight),
     DragStyle = 1,
@@ -2366,6 +2366,8 @@ local autoNextSuccess, autoNextErr = pcall(function()
         "AutoNext",
         function(value)
             getgenv().AutoNextEnabled = value
+            getgenv().Config.toggles.AutoNext = value
+            saveConfig(getgenv().Config)
             Window:Notify({
                 Title = "Auto Next",
                 Description = value and "Enabled" or "Disabled",
@@ -2387,6 +2389,8 @@ local autoRetrySuccess, autoRetryErr = pcall(function()
         "AutoRetry",
         function(value)
             getgenv().AutoFastRetryEnabled = value
+            getgenv().Config.toggles.AutoRetry = value
+            saveConfig(getgenv().Config)
             Window:Notify({
                 Title = "Auto Retry",
                 Description = value and "Enabled" or "Disabled",
@@ -2408,6 +2412,8 @@ local autoLeaveSuccess, autoLeaveErr = pcall(function()
         "AutoLeave",
         function(value)
             getgenv().AutoLeaveEnabled = value
+            getgenv().Config.toggles.AutoLeave = value
+            saveConfig(getgenv().Config)
             Window:Notify({
                 Title = "Auto Leave",
                 Description = value and "Enabled" or "Disabled",
@@ -2429,6 +2435,8 @@ local autoSmartSuccess, autoSmartErr = pcall(function()
         "AutoSmart",
         function(value)
             getgenv().AutoSmartEnabled = value
+            getgenv().Config.toggles.AutoSmart = value
+            saveConfig(getgenv().Config)
             Window:Notify({
                 Title = "Auto Next/Replay/Leave",
                 Description = value and "Enabled" or "Disabled",
@@ -2838,7 +2846,9 @@ if not eventHeaderSuccess then
     error("[FATAL] Cannot continue - Event tab header failed: " .. tostring(eventHeaderErr))
 end
 
-local fastModeToggle, slowerModeToggle
+local fastModeToggle, slowerModeToggle, smartModeToggle
+
+getgenv().SmartCardSelectionEnabled = getgenv().Config.toggles.SmartCardSelectionToggle or false
 
 local fastSuccess, fastErr = pcall(function()
     fastModeToggle = createToggle(
@@ -2847,13 +2857,18 @@ local fastSuccess, fastErr = pcall(function()
         "CardSelectionToggle",
         function(value)
             getgenv().CardSelectionEnabled = value
-            if value and slowerModeToggle then
-                getgenv().SlowerCardSelectionEnabled = false
-                getgenv().Config.toggles.SlowerCardSelectionToggle = false
+            if value then
+                if slowerModeToggle then
+                    getgenv().SlowerCardSelectionEnabled = false
+                    getgenv().Config.toggles.SlowerCardSelectionToggle = false
+                    pcall(function() slowerModeToggle:UpdateState(false) end)
+                end
+                if smartModeToggle then
+                    getgenv().SmartCardSelectionEnabled = false
+                    getgenv().Config.toggles.SmartCardSelectionToggle = false
+                    pcall(function() smartModeToggle:UpdateState(false) end)
+                end
                 getgenv().SaveConfig(getgenv().Config)
-                pcall(function()
-                    slowerModeToggle:UpdateState(false)
-                end)
             end
             Window:Notify({
                 Title = "Card Selection",
@@ -2861,12 +2876,11 @@ local fastSuccess, fastErr = pcall(function()
                 Lifetime = 3
             })
         end,
-        false
+        getgenv().CardSelectionEnabled
     )
 end)
 if not fastSuccess then
     warn("[UI ERROR] Fast Mode toggle failed:", fastErr)
-    error("[FATAL] Cannot continue - Fast Mode toggle failed: " .. tostring(fastErr))
 end
 
 local slowerSuccess, slowerErr = pcall(function()
@@ -2876,13 +2890,18 @@ local slowerSuccess, slowerErr = pcall(function()
         "SlowerCardSelectionToggle",
         function(value)
             getgenv().SlowerCardSelectionEnabled = value
-            if value and fastModeToggle then
-                getgenv().CardSelectionEnabled = false
-                getgenv().Config.toggles.CardSelectionToggle = false
+            if value then
+                if fastModeToggle then
+                    getgenv().CardSelectionEnabled = false
+                    getgenv().Config.toggles.CardSelectionToggle = false
+                    pcall(function() fastModeToggle:UpdateState(false) end)
+                end
+                if smartModeToggle then
+                    getgenv().SmartCardSelectionEnabled = false
+                    getgenv().Config.toggles.SmartCardSelectionToggle = false
+                    pcall(function() smartModeToggle:UpdateState(false) end)
+                end
                 getgenv().SaveConfig(getgenv().Config)
-                pcall(function()
-                    fastModeToggle:UpdateState(false)
-                end)
             end
             Window:Notify({
                 Title = "Card Selection",
@@ -2890,12 +2909,44 @@ local slowerSuccess, slowerErr = pcall(function()
                 Lifetime = 3
             })
         end,
-        false
+        getgenv().SlowerCardSelectionEnabled
     )
 end)
 if not slowerSuccess then
     warn("[UI ERROR] Slower Mode toggle failed:", slowerErr)
-    error("[FATAL] Cannot continue - Slower Mode toggle failed: " .. tostring(slowerErr))
+end
+
+local smartSuccess, smartErr = pcall(function()
+    smartModeToggle = createToggle(
+        Sections.EventLeft,
+        "🧠 Smart Mode (Wave-Based)",
+        "SmartCardSelectionToggle",
+        function(value)
+            getgenv().SmartCardSelectionEnabled = value
+            if value then
+                if fastModeToggle then
+                    getgenv().CardSelectionEnabled = false
+                    getgenv().Config.toggles.CardSelectionToggle = false
+                    pcall(function() fastModeToggle:UpdateState(false) end)
+                end
+                if slowerModeToggle then
+                    getgenv().SlowerCardSelectionEnabled = false
+                    getgenv().Config.toggles.SlowerCardSelectionToggle = false
+                    pcall(function() slowerModeToggle:UpdateState(false) end)
+                end
+                getgenv().SaveConfig(getgenv().Config)
+            end
+            Window:Notify({
+                Title = "Card Selection",
+                Description = value and "Smart Mode Enabled - Maximizes candy based on wave" or "Disabled",
+                Lifetime = 3
+            })
+        end,
+        getgenv().SmartCardSelectionEnabled
+    )
+end)
+if not smartSuccess then
+    warn("[UI ERROR] Smart Mode toggle failed:", smartErr)
 end
 
 local paraSuccess, paraErr = pcall(function()
@@ -5926,7 +5977,7 @@ task.spawn(function()
                     { name = "Units", value = (unitsText ~= "" and unitsText or "No units"), inline = false },
                     { name = "Match Result", value = (matchTime or "00:00:00") .. " - Wave " .. tostring(matchWave or "0") .. "\n" .. (mapName or "Unknown Map") .. ((mapDifficulty and mapDifficulty ~= "Unknown") and (" [" .. mapDifficulty .. "]") or "") .. " - " .. (matchResult or "Unknown"), inline = false }
                 },
-                footer = { text = "ALS Macro System | https://discord.gg/V3WcdHpd3J" }
+                footer = { text = "Byorl Last Stand | https://discord.gg/V3WcdHpd3J" }
             }
             
             local webhookContent = ""
@@ -6436,12 +6487,84 @@ do
         return ok
     end
     
+    local function getSmartCardPriority(cardName, currentWave)
+        local priorities = {
+            ["Critical Denial"] = (currentWave >= 40) and 1 or 999,
+            ["Lingering Fear II"] = (currentWave >= 30) and 2 or 999,
+            ["Hellish Gravity"] = (currentWave >= 25) and 3 or 999,
+            ["Weakened Resolve III"] = (currentWave >= 20) and 4 or 999,
+            ["Fog of War III"] = (currentWave >= 20) and 5 or 999,
+            ["Lingering Fear I"] = (currentWave >= 15 and currentWave < 30) and 6 or 999,
+            ["Deadly Striker"] = (currentWave >= 10 and currentWave < 25) and 7 or 999,
+            ["Greedy Vampire's"] = (currentWave >= 15) and 8 or 999,
+            ["Power Reversal II"] = (currentWave >= 10) and 9 or 999,
+            ["Fog of War II"] = (currentWave >= 10 and currentWave < 20) and 10 or 999,
+            ["Weakened Resolve II"] = (currentWave >= 10 and currentWave < 20) and 11 or 999,
+            ["Fog of War I"] = (currentWave < 10) and 12 or 999,
+            ["Weakened Resolve I"] = (currentWave < 10) and 13 or 999,
+            ["Power Reversal I"] = (currentWave < 10) and 14 or 999,
+            ["Trick or Treat Coin Flip"] = 999,
+        }
+        return priorities[cardName] or 999
+    end
+    
+    local function selectCardSmart()
+        if not getgenv().SmartCardSelectionEnabled then return false end
+        local ok = pcall(function()
+            local currentWave = 0
+            pcall(function()
+                local wave = RS:FindFirstChild("Wave")
+                if wave and wave.Value then
+                    currentWave = wave.Value
+                end
+            end)
+            
+            local list = getAvailableCards()
+            if not list then return false end
+            
+            local bestCard = nil
+            local bestPriority = 999
+            
+            for i=1,#list do
+                local nm = list[i].name
+                local p = getSmartCardPriority(nm, currentWave)
+                if p < bestPriority and p < 999 then
+                    bestPriority = p
+                    bestCard = list[i]
+                end
+            end
+            
+            if not bestCard or not bestCard.button or bestPriority >= 999 then return false end
+            
+            local GuiService = game:GetService("GuiService")
+            local function press(key)
+                VIM:SendKeyEvent(true, key, false, game)
+                task.wait(0.05)
+                VIM:SendKeyEvent(false, key, false, game)
+            end
+            
+            GuiService.SelectedObject = nil
+            task.wait(0.1)
+            GuiService.SelectedObject = bestCard.button
+            task.wait(0.2)
+            press(Enum.KeyCode.Return)
+            task.wait(0.1)
+            GuiService.SelectedObject = nil
+            
+            print("[Smart Card] Selected:", bestCard.name, "Priority:", bestPriority, "Wave:", currentWave)
+            return true
+        end)
+        return ok
+    end
+    
     while true do
         task.wait(1.5)
         if getgenv().CardSelectionEnabled then
             selectCard()
         elseif getgenv().SlowerCardSelectionEnabled then
             selectCardSlower()
+        elseif getgenv().SmartCardSelectionEnabled then
+            selectCardSmart()
         end
     end
     end)
