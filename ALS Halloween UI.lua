@@ -4088,7 +4088,7 @@ end
 
 Sections.SettingsLeft:Divider()
 
-Sections.SettingsLeft:Header({ Text = "� UI fSize (Restart Required)" })
+Sections.SettingsLeft:Header({ Text = "🖥️ UI Size (Restart Required)" })
 Sections.SettingsLeft:SubLabel({ Text = "Custom window size - changes apply on next script load" })
 
 createInput(
