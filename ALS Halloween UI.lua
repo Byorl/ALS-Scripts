@@ -8,11 +8,7 @@ local MOBILE_DELAY_MULTIPLIER = isMobile and 1.5 or 1.0
 local Window = MacLib:Window({
     Title = "ALS Macro System",
     Subtitle = "Anime Last Stand Automation",
-    if isMobile then
-        Size = UDim2.fromOffset(580, 480),
-    else
-        Size = UDim2.fromOffset(760, 560),
-    end
+    Size = isMobile and UDim2.fromOffset(580, 480) or UDim2.fromOffset(760, 560),
     DragStyle = 1,
     DisabledWindowControls = {},
     ShowUserInfo = true,
