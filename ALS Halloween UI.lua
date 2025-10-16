@@ -1257,10 +1257,14 @@ end
 getgenv().MacroPlaybackActive = false
 
 local function executeAction(action)
-    if not action.RemoteName then return end
+    if not action.RemoteName then 
+        return false, "No remote name"
+    end
     
     local remote = getgenv().MacroRemoteCache[action.RemoteName:lower()]
-    if not remote then return end
+    if not remote then 
+        return false, "Remote not found: " .. action.RemoteName
+    end
     
     if action.ActionType == "Upgrade" then
         local tower = nil
@@ -1281,7 +1285,13 @@ local function executeAction(action)
                 else
                     remote:FireServer(tower)
                 end
+                task.wait(0.3)
+                return true, "Upgraded"
+            else
+                return true, "Already max level"
             end
+        else
+            return false, "Tower not found: " .. action.TowerName
         end
         
     elseif action.ActionType == "Sell" then
@@ -1299,6 +1309,10 @@ local function executeAction(action)
             else
                 remote:FireServer(tower)
             end
+            task.wait(0.3)
+            return true, "Sold"
+        else
+            return false, "Tower not found for sell"
         end
         
     elseif action.ActionType == "Place" then
@@ -1312,9 +1326,11 @@ local function executeAction(action)
         else
             remote:FireServer(unpack(args))
         end
+        task.wait(0.3)
+        return true, "Placed"
     end
     
-    task.wait(0.3)
+    return false, "Unknown action type"
 end
 
 local function playMacroV2()
@@ -1341,6 +1357,20 @@ local function playMacroV2()
             return
         end
         
+        task.wait(2)
+        
+        while getgenv().MacroGameState.currentWave == 0 and getgenv().MacroPlayEnabled do
+            getgenv().MacroStatusText = "Waiting for Round Start"
+            getgenv().MacroWaitingText = "Wave 0..."
+            getgenv().UpdateMacroStatus()
+            task.wait(0.5)
+        end
+        
+        if not getgenv().MacroPlayEnabled then
+            getgenv().MacroPlaybackActive = false
+            return
+        end
+        
         getgenv().MacroStatusText = "Playing"
         getgenv().MacroWaitingText = ""
         getgenv().UpdateMacroStatus()
@@ -1352,15 +1382,16 @@ local function playMacroV2()
             
             if getgenv().MacroGameState.hasStartButton then
                 getgenv().MacroStatusText = "Restart Detected"
-                getgenv().MacroWaitingText = "Waiting..."
+                getgenv().MacroWaitingText = "Waiting for game start..."
                 getgenv().UpdateMacroStatus()
                 
                 while getgenv().MacroGameState.hasStartButton and getgenv().MacroPlayEnabled do
                     task.wait(0.5)
                 end
                 
+                task.wait(2)
+                
                 step = 1
-                task.wait(1)
                 continue
             end
             
@@ -1384,9 +1415,23 @@ local function playMacroV2()
                 getgenv().MacroWaitingText = "$" .. cost
                 getgenv().UpdateMacroStatus()
                 
+                local cashWaitStart = tick()
+                local maxCashWait = 1200
+                
                 while getgenv().MacroPlayEnabled do
                     cash = tonumber(getgenv().MacroCurrentCash) or 0
                     if cash >= cost then break end
+                    
+                    local waitTime = tick() - cashWaitStart
+                    if waitTime > maxCashWait then
+                        getgenv().MacroStatusText = "Timeout - Skipping Step"
+                        getgenv().MacroWaitingText = "Waited " .. math.floor(waitTime) .. "s"
+                        getgenv().UpdateMacroStatus()
+                        task.wait(2)
+                        step = step + 1
+                        continue
+                    end
+                    
                     RunService.Heartbeat:Wait()
                 end
                 
@@ -1397,9 +1442,34 @@ local function playMacroV2()
             getgenv().MacroWaitingText = ""
             getgenv().UpdateMacroStatus()
             
-            pcall(function()
-                executeAction(action)
-            end)
+            local actionSuccess = false
+            local actionMessage = ""
+            local actionAttempts = 0
+            local maxAttempts = 3
+            
+            while actionAttempts < maxAttempts and not actionSuccess do
+                actionAttempts = actionAttempts + 1
+                
+                local pcallSuccess, result, msg = pcall(function()
+                    return executeAction(action)
+                end)
+                
+                if pcallSuccess and result then
+                    actionSuccess = true
+                    actionMessage = msg or "Success"
+                elseif actionAttempts < maxAttempts then
+                    task.wait(0.5)
+                else
+                    actionMessage = msg or "Failed after " .. maxAttempts .. " attempts"
+                end
+            end
+            
+            if not actionSuccess then
+                getgenv().MacroStatusText = "Step Failed - Skipping"
+                getgenv().MacroWaitingText = actionMessage
+                getgenv().UpdateMacroStatus()
+                task.wait(1)
+            end
             
             step = step + 1
             
@@ -5746,7 +5816,6 @@ if not isInLobby then
                         if getSeamlessValue() then
                             setSeamlessRetry()
                             task.wait(2)
-                        else
                         end
                         
                         task.spawn(function()
@@ -5766,17 +5835,13 @@ if not isInLobby then
                                         task.wait(3)
                                         endgameCount = 0
                                         maxRoundsReached = false
-                                    else
-                                        warn("[Seamless Fix] RestartMatch not found")
+                                        hasRun = false
                                     end
                                 end)
-                                if not success then
-                                    warn("[Seamless Fix] Failed to fire RestartMatch: " .. tostring(err))
-                                end
-                            else
-                                warn("[Seamless Fix] EndGameUI did not close in time, skipping restart")
                             end
                         end)
+                    else
+                        hasRun = false
                     end
                 end
             end)
