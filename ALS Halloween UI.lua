@@ -1073,13 +1073,17 @@ local function updateGameState()
         pcall(function()
             local bottom = LocalPlayer.PlayerGui:FindFirstChild("Bottom")
             if bottom and bottom:FindFirstChild("Frame") then
-                local children = bottom.Frame:GetChildren()
-                if children[2] then
-                    local subChildren = children[2]:GetChildren()
-                    if subChildren[6] and subChildren[6]:IsA("TextButton") then
-                        local textLabel = subChildren[6]:FindFirstChild("TextLabel")
-                        if textLabel and textLabel.Text == "Start" then
-                            hasStart = true
+                for _, child in ipairs(bottom.Frame:GetChildren()) do
+                    if child:IsA("Frame") then
+                        for _, subChild in ipairs(child:GetChildren()) do
+                            if subChild:IsA("TextButton") and subChild.Visible then
+                                for _, element in ipairs(subChild:GetChildren()) do
+                                    if element:IsA("TextLabel") and element.Text == "Start" then
+                                        hasStart = true
+                                        return
+                                    end
+                                end
+                            end
                         end
                     end
                 end
@@ -1674,10 +1678,8 @@ local function executeAction(action)
 end
 
 local function detectMacroProgress(macroData)
-    -- Detect which step we're on based on current game state
     local towerStates = {}
     
-    -- Get current tower states
     for _, tower in pairs(workspace.Towers:GetChildren()) do
         if tower:FindFirstChild("Owner") and tower.Owner.Value == LocalPlayer then
             local towerName = tower.Name
@@ -1692,7 +1694,6 @@ local function detectMacroProgress(macroData)
         end
     end
     
-    -- Find the last completed step
     local lastCompletedStep = 0
     local expectedTowers = {}
     
@@ -1701,17 +1702,15 @@ local function detectMacroProgress(macroData)
             local towerName = action.TowerName
             expectedTowers[towerName] = (expectedTowers[towerName] or 0) + 1
             
-            -- Check if this tower exists
             if towerStates[towerName] and towerStates[towerName].count >= expectedTowers[towerName] then
                 lastCompletedStep = i
             else
-                break -- Tower not placed yet, stop here
+                break
             end
             
         elseif action.ActionType == "Upgrade" then
             local towerName = action.TowerName
             
-            -- Count how many upgrades this tower should have by this step
             local expectedLevel = 0
             for j = 1, i do
                 if macroData[j].ActionType == "Upgrade" and macroData[j].TowerName == towerName then
@@ -1719,17 +1718,21 @@ local function detectMacroProgress(macroData)
                 end
             end
             
-            -- Check if tower has this upgrade level
             if towerStates[towerName] and towerStates[towerName].maxLevel >= expectedLevel then
                 lastCompletedStep = i
             else
-                break -- Upgrade not done yet, stop here
+                break
             end
         end
     end
     
     print("[Macro Resume] Detected progress: Step", lastCompletedStep, "/", #macroData)
-    return lastCompletedStep + 1 -- Start from next step
+    
+    if lastCompletedStep >= #macroData then
+        return -1
+    end
+    
+    return lastCompletedStep + 1
 end
 
 local function playMacroV2()
@@ -1747,18 +1750,75 @@ local function playMacroV2()
             return
         end
         
-        -- Detect current progress and resume from there
         local step = detectMacroProgress(macroData)
+        
+        if step == -1 then
+            print("[Macro Complete] All steps already completed")
+            getgenv().MacroStatusText = "Finished Macro"
+            getgenv().MacroWaitingText = "All steps complete"
+            getgenv().MacroCurrentStep = #macroData
+            getgenv().MacroTotalSteps = #macroData
+            getgenv().UpdateMacroStatus()
+            getgenv().MacroPlaybackActive = false
+            return
+        end
         
         if step > 1 then
             print("[Macro Resume] Resuming from step", step)
         end
         
-        while getgenv().MacroGameState.hasStartButton and getgenv().MacroPlayEnabled do
-            getgenv().MacroStatusText = "Waiting for Start"
-            getgenv().MacroWaitingText = "Press Start..."
-            getgenv().UpdateMacroStatus()
-            task.wait(0.5)
+        print("[Macro] Waiting for game to start...")
+        
+        local waitStartTime = tick()
+        while getgenv().MacroPlayEnabled do
+            local hasButton = getgenv().MacroGameState.hasStartButton
+            local currentWave = getgenv().MacroGameState.currentWave
+            
+            if hasButton then
+                getgenv().MacroStatusText = "Waiting for Start"
+                getgenv().MacroWaitingText = "Press Start button..."
+                getgenv().UpdateMacroStatus()
+            elseif currentWave == 0 then
+                getgenv().MacroStatusText = "Waiting for Round Start"
+                getgenv().MacroWaitingText = "Wave 0..."
+                getgenv().UpdateMacroStatus()
+            else
+                print("[Macro] Wave detected:", currentWave, "- Waiting for UI to clear...")
+                getgenv().MacroStatusText = "Loading Game"
+                getgenv().MacroWaitingText = "Waiting for UI..."
+                getgenv().UpdateMacroStatus()
+                
+                local uiClearWait = 0
+                while uiClearWait < 30 and getgenv().MacroPlayEnabled do
+                    task.wait(0.1)
+                    uiClearWait = uiClearWait + 1
+                    
+                    if not getgenv().MacroGameState.hasStartButton and getgenv().MacroGameState.currentWave > 0 then
+                        local checksPassed = 0
+                        for i = 1, 5 do
+                            task.wait(0.1)
+                            if not getgenv().MacroGameState.hasStartButton and getgenv().MacroGameState.currentWave > 0 then
+                                checksPassed = checksPassed + 1
+                            end
+                        end
+                        
+                        if checksPassed >= 5 then
+                            print("[Macro] Game fully started! Wave:", getgenv().MacroGameState.currentWave)
+                            break
+                        end
+                    end
+                end
+                break
+            end
+            
+            local elapsed = math.floor(tick() - waitStartTime)
+            if elapsed > 300 then
+                print("[Macro] Timeout waiting for game start")
+                getgenv().MacroPlaybackActive = false
+                return
+            end
+            
+            task.wait(0.1)
         end
         
         if not getgenv().MacroPlayEnabled then
@@ -1766,14 +1826,11 @@ local function playMacroV2()
             return
         end
         
-        task.wait(2)
-        
-        while getgenv().MacroGameState.currentWave == 0 and getgenv().MacroPlayEnabled do
-            getgenv().MacroStatusText = "Waiting for Round Start"
-            getgenv().MacroWaitingText = "Wave 0..."
-            getgenv().UpdateMacroStatus()
-            task.wait(0.5)
-        end
+        print("[Macro] Starting playback in 3 seconds...")
+        getgenv().MacroStatusText = "Starting Soon"
+        getgenv().MacroWaitingText = "3 seconds..."
+        getgenv().UpdateMacroStatus()
+        task.wait(3)
         
         if not getgenv().MacroPlayEnabled then
             getgenv().MacroPlaybackActive = false
@@ -1819,15 +1876,20 @@ local function playMacroV2()
                 continue
             end
             
-            if getgenv().MacroGameState.hasStartButton then
+            if getgenv().MacroGameState.hasStartButton or getgenv().MacroGameState.currentWave == 0 then
                 getgenv().MacroStatusText = "Restart Detected"
                 getgenv().MacroWaitingText = "Waiting for game start..."
                 getgenv().UpdateMacroStatus()
                 
-                while getgenv().MacroGameState.hasStartButton and getgenv().MacroPlayEnabled do
-                    task.wait(0.5)
+                while (getgenv().MacroGameState.hasStartButton or getgenv().MacroGameState.currentWave == 0) and getgenv().MacroPlayEnabled do
+                    task.wait(0.1)
                 end
                 
+                if not getgenv().MacroPlayEnabled then
+                    break
+                end
+                
+                print("[Macro] Game restarted, waiting 2 seconds...")
                 task.wait(2)
                 
                 step = 1
@@ -1941,11 +2003,20 @@ local function playMacroV2()
             end
         end
         
-        getgenv().MacroStatusText = "Idle"
-        getgenv().MacroCurrentStep = 0
-        getgenv().MacroActionText = ""
-        getgenv().MacroUnitText = ""
-        getgenv().MacroWaitingText = ""
+        if step > #macroData then
+            getgenv().MacroStatusText = "Finished Macro"
+            getgenv().MacroWaitingText = "All steps complete"
+            getgenv().MacroCurrentStep = #macroData
+            getgenv().MacroTotalSteps = #macroData
+            getgenv().MacroActionText = "Complete"
+            getgenv().MacroUnitText = ""
+        else
+            getgenv().MacroStatusText = "Idle"
+            getgenv().MacroCurrentStep = 0
+            getgenv().MacroActionText = ""
+            getgenv().MacroUnitText = ""
+            getgenv().MacroWaitingText = ""
+        end
         getgenv().UpdateMacroStatus()
         
         getgenv().MacroPlaybackActive = false
