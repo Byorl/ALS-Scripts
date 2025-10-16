@@ -1,5 +1,11 @@
 repeat task.wait() until game:IsLoaded()
 
+if getgenv().ALSScriptLoaded then
+    warn("[ALS] Script already running! Please restart Roblox to reload.")
+    return
+end
+getgenv().ALSScriptLoaded = true
+
 local MacLib = loadstring(game:HttpGet("https://github.com/biggaboy212/Maclib/releases/latest/download/maclib.txt"))()
 
 if not MacLib then
@@ -21,13 +27,11 @@ local MOBILE_DELAY_MULTIPLIER = isMobile and 1.5 or 1.0
 
 local defaultWidth = 580
 local defaultHeight = 480
-local customWidth = tonumber(getgenv().Config and getgenv().Config.inputs and getgenv().Config.inputs.UIWidth) or defaultWidth
-local customHeight = tonumber(getgenv().Config and getgenv().Config.inputs and getgenv().Config.inputs.UIHeight) or defaultHeight
 
 local Window = MacLib:Window({
     Title = "ALS Macro System",
     Subtitle = "Anime Last Stand Automation",
-    Size = UDim2.fromOffset(customWidth, customHeight),
+    Size = UDim2.fromOffset(defaultWidth, defaultHeight),
     DragStyle = 1,
     DisabledWindowControls = {},
     ShowUserInfo = true,
@@ -39,6 +43,13 @@ if not Window then
     error("[ALS] Failed to create Window")
     return
 end
+
+Window.onUnloaded(function()
+    getgenv().ALSScriptLoaded = false
+    getgenv().MacroPlayEnabled = false
+    getgenv().MacroRecordingV2 = false
+    getgenv().AutoAbilitiesEnabled = false
+end)
 
 task.wait(2)
 
@@ -231,6 +242,17 @@ getgenv().SaveConfig = saveConfig
 getgenv().LoadConfig = loadConfig
 
 MacLib:SetFolder("ALSHalloweenEvent")
+
+local customWidth = tonumber(getgenv().Config.inputs.UIWidth)
+local customHeight = tonumber(getgenv().Config.inputs.UIHeight)
+if customWidth and customHeight and customWidth >= 400 and customWidth <= 1920 and customHeight >= 300 and customHeight <= 1080 then
+    task.spawn(function()
+        task.wait(0.1)
+        if Window and Window.Root then
+            Window.Root.Size = UDim2.fromOffset(customWidth, customHeight)
+        end
+    end)
+end
 
 
 
@@ -912,6 +934,19 @@ getgenv().CapsuleEnabled = getgenv().Config.toggles.CapsuleToggle or false
 getgenv().SeamlessFixEnabled = getgenv().Config.toggles.SeamlessFixToggle or false
 getgenv().SeamlessRounds = tonumber(getgenv().Config.inputs.SeamlessRounds) or 4
 getgenv().AutoExecuteTeleportEnabled = getgenv().Config.toggles.AutoExecuteTeleport or false
+
+if getgenv().SeamlessFixEnabled then
+    task.spawn(function()
+        task.wait(2)
+        pcall(function()
+            local remotes = RS:FindFirstChild("Remotes")
+            local setSettings = remotes and remotes:FindFirstChild("SetSettings")
+            if setSettings then 
+                setSettings:InvokeServer("SeamlessRetry")
+            end
+        end)
+    end)
+end
 
 getgenv().WebhookEnabled = getgenv().Config.toggles.WebhookToggle or false
 getgenv().WebhookProcessing = false
@@ -3944,6 +3979,17 @@ createToggle(
     "SeamlessFixToggle",
     function(value)
         getgenv().SeamlessFixEnabled = value
+        
+        task.spawn(function()
+            pcall(function()
+                local remotes = RS:FindFirstChild("Remotes")
+                local setSettings = remotes and remotes:FindFirstChild("SetSettings")
+                if setSettings then 
+                    setSettings:InvokeServer("SeamlessRetry")
+                end
+            end)
+        end)
+        
         Window:Notify({
             Title = "Seamless Fix",
             Description = value and "Enabled - Script will persist through teleports" or "Disabled",
@@ -4136,51 +4182,32 @@ task.spawn(function()
                     
                     hasProcessedCurrentUI = true
                     
-                    local clickAttempts = 0
-                    local maxAttempts = 5
                     local clicked = false
                     
-                    while clickAttempts < maxAttempts and not clicked do
-                        clickAttempts = clickAttempts + 1
-                        
-                        pcall(function()
-                            local isValidDescendant = buttonToPress:IsDescendantOf(LocalPlayer.PlayerGui)
-                            if isValidDescendant then
-                                GuiService.SelectedObject = buttonToPress
-                                task.wait(0.2)
-                                press(Enum.KeyCode.Return)
-                                task.wait(0.3)
+                    pcall(function()
+                        if buttonToPress and buttonToPress:IsDescendantOf(LocalPlayer.PlayerGui) then
+                            for _, connection in pairs(getconnections(buttonToPress.MouseButton1Click)) do
+                                connection:Fire()
                             end
-                            
-                            if buttonToPress:IsDescendantOf(LocalPlayer.PlayerGui) then
+                            clicked = true
+                        end
+                    end)
+                    
+                    if not clicked then
+                        pcall(function()
+                            if buttonToPress and buttonToPress:IsDescendantOf(LocalPlayer.PlayerGui) then
                                 for _, connection in pairs(getconnections(buttonToPress.Activated)) do
                                     connection:Fire()
                                 end
-                                for _, connection in pairs(getconnections(buttonToPress.MouseButton1Click)) do
-                                    connection:Fire()
-                                end
+                                clicked = true
                             end
                         end)
-                        
-                        task.wait(0.5)
-                        
-                        if not LocalPlayer.PlayerGui:FindFirstChild("EndGameUI") then
-                            clicked = true
-                        end
                     end
                     
-                    if not clicked then
-                        warn("[Auto Retry] Failed to click button after " .. maxAttempts .. " attempts")
+                    if clicked then
+                        task.wait(1)
                     end
-                    
-                    pcall(function() GuiService.SelectedObject = nil end)
                 end
-                
-                pcall(function()
-                    if GuiService.SelectedObject ~= nil then
-                        GuiService.SelectedObject = nil
-                    end
-                end)
             end
         end)
         
@@ -5934,12 +5961,20 @@ if not isInLobby then
             return ok and result or false
         end
         
+        local lastSeamlessCall = 0
         local function setSeamlessRetry()
+            local now = tick()
+            if now - lastSeamlessCall < 2 then
+                return
+            end
+            lastSeamlessCall = now
+            
             pcall(function()
                 local remotes = RS:FindFirstChild("Remotes")
                 local setSettings = remotes and remotes:FindFirstChild("SetSettings")
                 if setSettings then 
                     setSettings:InvokeServer("SeamlessRetry")
+                    task.wait(0.5)
                 end
             end)
         end
@@ -5948,25 +5983,22 @@ if not isInLobby then
             if not getgenv().SeamlessFixEnabled then return end
             local maxRounds = getgenv().SeamlessRounds or 4
             
-            if endgameCount < maxRounds then
-                if not getSeamlessValue() then
-                    setSeamlessRetry()
-                    task.wait(1)
-                end
-            elseif endgameCount >= maxRounds then
-                if getSeamlessValue() then
-                    setSeamlessRetry()
-                    task.wait(1)
-                end
+            local currentSeamless = getSeamlessValue()
+            local shouldBeEnabled = endgameCount < maxRounds
+            
+            if shouldBeEnabled and not currentSeamless then
+                setSeamlessRetry()
+            elseif not shouldBeEnabled and currentSeamless then
+                setSeamlessRetry()
             end
         end
         
-        task.wait(2)
+        task.wait(3)
         enableSeamlessIfNeeded()
         
         task.spawn(function()
             while true do
-                task.wait(5)
+                task.wait(10)
                 if getgenv().SeamlessFixEnabled then
                     enableSeamlessIfNeeded()
                 end
