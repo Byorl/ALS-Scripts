@@ -1918,12 +1918,12 @@ getgenv().PortalConfig = {
     useBestPortal = savedPortalConfig.useBestPortal or false,
     pickPortal = savedPortalConfig.pickPortal or false,
     priorities = savedPortalConfig.priorities or {
-        priority1 = "",
-        priority2 = "",
-        priority3 = "",
-        priority4 = "",
-        priority5 = "",
-        priority6 = ""
+        ["Tower Limit"] = 0,
+        ["Immunity"] = 0,
+        ["Speedy"] = 0,
+        ["No Hit"] = 0,
+        ["Flight"] = 0,
+        ["Short Range"] = 0
     }
 }
 getgenv().Config.portals = getgenv().PortalConfig
@@ -2037,92 +2037,96 @@ createToggle(
 )
 
 Sections.PortalsLeft:Header({ Text = "🎯 Challenge Priority" })
-Sections.PortalsLeft:SubLabel({ Text = "Set priority order for portal challenges (1 = highest)" })
-
-Sections.PortalsLeft:SubLabel({ Text = "Available: Tower Limit, Immunity, Speedy, No Hit, Flight, Short Range" })
+Sections.PortalsLeft:SubLabel({ Text = "Assign priority (1-6) to each challenge. 1 = highest priority, 0 = ignore" })
 
 createInput(
     Sections.PortalsLeft,
-    "Priority 1 (Most Wanted)",
-    "PortalPriority1",
-    "e.g., Speedy",
-    "All",
+    "Tower Limit",
+    "PortalPriority_TowerLimit",
+    "1-6 or 0 to ignore",
+    "Numeric",
     function(value)
-        getgenv().PortalConfig.priorities.priority1 = value
-        getgenv().Config.portals.priorities.priority1 = value
+        local num = tonumber(value) or 0
+        getgenv().PortalConfig.priorities["Tower Limit"] = num
+        getgenv().Config.portals.priorities["Tower Limit"] = num
         saveConfig(getgenv().Config)
     end,
-    getgenv().PortalConfig.priorities.priority1
+    tostring(getgenv().PortalConfig.priorities["Tower Limit"])
 )
 
 createInput(
     Sections.PortalsLeft,
-    "Priority 2",
-    "PortalPriority2",
-    "e.g., Short Range",
-    "All",
+    "Immunity",
+    "PortalPriority_Immunity",
+    "1-6 or 0 to ignore",
+    "Numeric",
     function(value)
-        getgenv().PortalConfig.priorities.priority2 = value
-        getgenv().Config.portals.priorities.priority2 = value
+        local num = tonumber(value) or 0
+        getgenv().PortalConfig.priorities["Immunity"] = num
+        getgenv().Config.portals.priorities["Immunity"] = num
         saveConfig(getgenv().Config)
     end,
-    getgenv().PortalConfig.priorities.priority2
+    tostring(getgenv().PortalConfig.priorities["Immunity"])
 )
 
 createInput(
     Sections.PortalsLeft,
-    "Priority 3",
-    "PortalPriority3",
-    "e.g., Tower Limit",
-    "All",
+    "Speedy",
+    "PortalPriority_Speedy",
+    "1-6 or 0 to ignore",
+    "Numeric",
     function(value)
-        getgenv().PortalConfig.priorities.priority3 = value
-        getgenv().Config.portals.priorities.priority3 = value
+        local num = tonumber(value) or 0
+        getgenv().PortalConfig.priorities["Speedy"] = num
+        getgenv().Config.portals.priorities["Speedy"] = num
         saveConfig(getgenv().Config)
     end,
-    getgenv().PortalConfig.priorities.priority3
+    tostring(getgenv().PortalConfig.priorities["Speedy"])
 )
 
 createInput(
     Sections.PortalsLeft,
-    "Priority 4",
-    "PortalPriority4",
-    "e.g., Immunity",
-    "All",
+    "No Hit",
+    "PortalPriority_NoHit",
+    "1-6 or 0 to ignore",
+    "Numeric",
     function(value)
-        getgenv().PortalConfig.priorities.priority4 = value
-        getgenv().Config.portals.priorities.priority4 = value
+        local num = tonumber(value) or 0
+        getgenv().PortalConfig.priorities["No Hit"] = num
+        getgenv().Config.portals.priorities["No Hit"] = num
         saveConfig(getgenv().Config)
     end,
-    getgenv().PortalConfig.priorities.priority4
+    tostring(getgenv().PortalConfig.priorities["No Hit"])
 )
 
 createInput(
     Sections.PortalsLeft,
-    "Priority 5",
-    "PortalPriority5",
-    "e.g., No Hit",
-    "All",
+    "Flight",
+    "PortalPriority_Flight",
+    "1-6 or 0 to ignore",
+    "Numeric",
     function(value)
-        getgenv().PortalConfig.priorities.priority5 = value
-        getgenv().Config.portals.priorities.priority5 = value
+        local num = tonumber(value) or 0
+        getgenv().PortalConfig.priorities["Flight"] = num
+        getgenv().Config.portals.priorities["Flight"] = num
         saveConfig(getgenv().Config)
     end,
-    getgenv().PortalConfig.priorities.priority5
+    tostring(getgenv().PortalConfig.priorities["Flight"])
 )
 
 createInput(
     Sections.PortalsLeft,
-    "Priority 6 (Least Wanted)",
-    "PortalPriority6",
-    "e.g., Flight",
-    "All",
+    "Short Range",
+    "PortalPriority_ShortRange",
+    "1-6 or 0 to ignore",
+    "Numeric",
     function(value)
-        getgenv().PortalConfig.priorities.priority6 = value
-        getgenv().Config.portals.priorities.priority6 = value
+        local num = tonumber(value) or 0
+        getgenv().PortalConfig.priorities["Short Range"] = num
+        getgenv().Config.portals.priorities["Short Range"] = num
         saveConfig(getgenv().Config)
     end,
-    getgenv().PortalConfig.priorities.priority6
+    tostring(getgenv().PortalConfig.priorities["Short Range"])
 )
 
 
@@ -4661,12 +4665,20 @@ local function findBestPortal()
         return matchingPortals[1].id
     end
     
-    for i = 1, 6 do
-        local priority = priorities["priority" .. i]
-        if priority and priority ~= "" then
-            for _, portal in ipairs(tierFiltered) do
-                if portal.challenge:lower():find(priority:lower()) then
-                    return portal.id
+    local challengePriorityMap = {}
+    for challengeName, priorityNum in pairs(priorities) do
+        if priorityNum > 0 and priorityNum <= 6 then
+            challengePriorityMap[challengeName] = priorityNum
+        end
+    end
+    
+    for priority = 1, 6 do
+        for challengeName, priorityNum in pairs(challengePriorityMap) do
+            if priorityNum == priority then
+                for _, portal in ipairs(tierFiltered) do
+                    if portal.challenge:lower():find(challengeName:lower()) then
+                        return portal.id
+                    end
                 end
             end
         end
