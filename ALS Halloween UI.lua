@@ -1,5 +1,11 @@
 repeat task.wait() until game:IsLoaded()
 
+if getgenv().ALSScriptLoaded then
+    warn("[ALS] Script already running! Please restart Roblox to reload.")
+    return
+end
+getgenv().ALSScriptLoaded = true
+
 local MacLib = loadstring(game:HttpGet("https://github.com/biggaboy212/Maclib/releases/latest/download/maclib.txt"))()
 
 if not MacLib then
@@ -19,10 +25,75 @@ local VIM = game:GetService("VirtualInputManager")
 local isMobile = UserInputService.TouchEnabled
 local MOBILE_DELAY_MULTIPLIER = isMobile and 1.5 or 1.0
 
+local CONFIG_FOLDER = "ALSHalloweenEvent"
+local CONFIG_FILE = "config.json"
+local USER_ID = tostring(LocalPlayer.UserId)
+
+local function getConfigPath()
+    return CONFIG_FOLDER .. "/" .. USER_ID .. "/" .. CONFIG_FILE
+end
+
+local function getUserFolder()
+    return CONFIG_FOLDER .. "/" .. USER_ID
+end
+
+local function loadConfig()
+    if not isfolder(CONFIG_FOLDER) then makefolder(CONFIG_FOLDER) end
+    local userFolder = getUserFolder()
+    if not isfolder(userFolder) then makefolder(userFolder) end
+    local configPath = getConfigPath()
+    if isfile(configPath) then
+        local ok, data = pcall(function()
+            return HttpService:JSONDecode(readfile(configPath))
+        end)
+        if ok and type(data) == "table" then
+            data.toggles = data.toggles or {}
+            data.inputs = data.inputs or {}
+            data.dropdowns = data.dropdowns or {}
+            data.abilities = data.abilities or {}
+            data.autoJoin = data.autoJoin or {}
+            return data
+        end
+    end
+    return { toggles = {}, inputs = {}, dropdowns = {}, abilities = {}, autoJoin = {} }
+end
+
+local function saveConfig(config)
+    local userFolder = getUserFolder()
+    if not isfolder(CONFIG_FOLDER) then makefolder(CONFIG_FOLDER) end
+    if not isfolder(userFolder) then makefolder(userFolder) end
+    local ok, err = pcall(function()
+        local json = HttpService:JSONEncode(config)
+        writefile(getConfigPath(), json)
+    end)
+    if not ok then warn("[Config] Save failed: " .. tostring(err)) end
+    return ok
+end
+
+getgenv().Config = loadConfig()
+getgenv().Config.toggles = getgenv().Config.toggles or {}
+getgenv().Config.inputs = getgenv().Config.inputs or {}
+getgenv().Config.dropdowns = getgenv().Config.dropdowns or {}
+getgenv().Config.abilities = getgenv().Config.abilities or {}
+getgenv().Config.autoJoin = getgenv().Config.autoJoin or {}
+
+getgenv().SaveConfig = saveConfig
+getgenv().LoadConfig = loadConfig
+
+local defaultWidth = 580
+local defaultHeight = 480
+local customWidth = tonumber(getgenv().Config.inputs.UIWidth) or defaultWidth
+local customHeight = tonumber(getgenv().Config.inputs.UIHeight) or defaultHeight
+
+if customWidth < 400 or customWidth > 1920 then customWidth = defaultWidth end
+if customHeight < 300 or customHeight > 1080 then customHeight = defaultHeight end
+
+print("[UI Size] Creating window with size:", customWidth, "x", customHeight)
+
 local Window = MacLib:Window({
-    Title = "Byorl Last Stand",
+    Title = "ALS Macro System",
     Subtitle = "Anime Last Stand Automation",
-    Size = isMobile and UDim2.fromOffset(580, 480) or UDim2.fromOffset(868, 650),
+    Size = UDim2.fromOffset(customWidth, customHeight),
     DragStyle = 1,
     DisabledWindowControls = {},
     ShowUserInfo = true,
@@ -34,6 +105,13 @@ if not Window then
     error("[ALS] Failed to create Window")
     return
 end
+
+Window.onUnloaded(function()
+    getgenv().ALSScriptLoaded = false
+    getgenv().MacroPlayEnabled = false
+    getgenv().MacroRecordingV2 = false
+    getgenv().AutoAbilitiesEnabled = false
+end)
 
 task.wait(2)
 
@@ -168,62 +246,6 @@ end
 
 getgenv().CleanupBeforeTeleport = cleanupBeforeTeleport
 
-
-
-local CONFIG_FOLDER = "ALSHalloweenEvent"
-local CONFIG_FILE = "config.json"
-local USER_ID = tostring(LocalPlayer.UserId)
-
-local function getConfigPath()
-    return CONFIG_FOLDER .. "/" .. USER_ID .. "/" .. CONFIG_FILE
-end
-
-local function getUserFolder()
-    return CONFIG_FOLDER .. "/" .. USER_ID
-end
-
-local function loadConfig()
-    if not isfolder(CONFIG_FOLDER) then makefolder(CONFIG_FOLDER) end
-    local userFolder = getUserFolder()
-    if not isfolder(userFolder) then makefolder(userFolder) end
-    local configPath = getConfigPath()
-    if isfile(configPath) then
-        local ok, data = pcall(function()
-            return HttpService:JSONDecode(readfile(configPath))
-        end)
-        if ok and type(data) == "table" then
-            data.toggles = data.toggles or {}
-            data.inputs = data.inputs or {}
-            data.dropdowns = data.dropdowns or {}
-            data.abilities = data.abilities or {}
-            data.autoJoin = data.autoJoin or {}
-            return data
-        end
-    end
-    return { toggles = {}, inputs = {}, dropdowns = {}, abilities = {}, autoJoin = {} }
-end
-
-local function saveConfig(config)
-    local userFolder = getUserFolder()
-    if not isfolder(CONFIG_FOLDER) then makefolder(CONFIG_FOLDER) end
-    if not isfolder(userFolder) then makefolder(userFolder) end
-    local ok, err = pcall(function()
-        local json = HttpService:JSONEncode(config)
-        writefile(getConfigPath(), json)
-    end)
-    if not ok then warn("[Config] Save failed: " .. tostring(err)) end
-    return ok
-end
-
-getgenv().Config = loadConfig()
-getgenv().Config.toggles = getgenv().Config.toggles or {}
-getgenv().Config.inputs = getgenv().Config.inputs or {}
-getgenv().Config.dropdowns = getgenv().Config.dropdowns or {}
-getgenv().Config.abilities = getgenv().Config.abilities or {}
-getgenv().Config.autoJoin = getgenv().Config.autoJoin or {}
-
-getgenv().SaveConfig = saveConfig
-getgenv().LoadConfig = loadConfig
 
 MacLib:SetFolder("ALSHalloweenEvent")
 
@@ -363,6 +385,21 @@ local function createToggle(section, name, flag, callback, default)
         Callback = function(value)
             getgenv().Config.toggles[flag] = value
             saveConfig(getgenv().Config)
+            if callback then 
+                callback(value) 
+            end
+        end,
+    }, flag)
+end
+
+local function createToggleNoSave(section, name, flag, callback, default)
+    name = tostring(name or "Toggle")
+    default = default or false
+    
+    return section:Toggle({
+        Name = name,
+        Default = default,
+        Callback = function(value)
             if callback then 
                 callback(value) 
             end
@@ -904,9 +941,44 @@ getgenv().AutoEventEnabled = getgenv().Config.toggles.AutoEventToggle or false
 getgenv().BingoEnabled = getgenv().Config.toggles.BingoToggle or false
 getgenv().CapsuleEnabled = getgenv().Config.toggles.CapsuleToggle or false
 
+getgenv().RemoveEnemiesEnabled = getgenv().Config.toggles.RemoveEnemiesToggle or false
+getgenv().AntiAFKEnabled = getgenv().Config.toggles.AntiAFKToggle or false
+getgenv().BlackScreenEnabled = getgenv().Config.toggles.BlackScreenToggle or false
+getgenv().FPSBoostEnabled = getgenv().Config.toggles.FPSBoostToggle or false
+
 getgenv().SeamlessFixEnabled = getgenv().Config.toggles.SeamlessFixToggle or false
 getgenv().SeamlessRounds = tonumber(getgenv().Config.inputs.SeamlessRounds) or 4
 getgenv().AutoExecuteTeleportEnabled = getgenv().Config.toggles.AutoExecuteTeleport or false
+getgenv().AutoExecuteEnabled = getgenv().Config.toggles.AutoExecuteToggle or false
+
+local queueteleport = queue_on_teleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport)
+
+if getgenv().AutoExecuteEnabled and queueteleport then
+    local TeleportCheck = false
+    LocalPlayer.OnTeleport:Connect(function(State)
+        if getgenv().AutoExecuteEnabled and (not TeleportCheck) and queueteleport then
+            TeleportCheck = true
+            queueteleport('loadstring(game:HttpGet("https://raw.githubusercontent.com/Byorl/ALS-Scripts/refs/heads/main/Maclib.lua"))()')
+            print("[ALS] Auto Execute queued for next game")
+        end
+    end)
+    print("[ALS] Auto Execute on Teleport enabled")
+elseif getgenv().AutoExecuteEnabled and not queueteleport then
+    warn("[ALS] Auto Execute enabled but queue_on_teleport function not found in your executor")
+end
+
+if getgenv().SeamlessFixEnabled then
+    task.spawn(function()
+        task.wait(2)
+        pcall(function()
+            local remotes = RS:FindFirstChild("Remotes")
+            local setSettings = remotes and remotes:FindFirstChild("SetSettings")
+            if setSettings then 
+                setSettings:InvokeServer("SeamlessRetry")
+            end
+        end)
+    end)
+end
 
 getgenv().WebhookEnabled = getgenv().Config.toggles.WebhookToggle or false
 getgenv().WebhookProcessing = false
@@ -963,8 +1035,10 @@ getgenv().MacroGameState = {
     isInGame = false,
     hasStartButton = false,
     hasEndGameUI = false,
+    gameEnded = false,
     lastWaveChange = 0,
-    matchStartTime = 0
+    matchStartTime = 0,
+    lastGameEndedState = false
 }
 
 local function updateGameState()
@@ -984,7 +1058,19 @@ local function updateGameState()
         local endGameUI = LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
         getgenv().MacroGameState.hasEndGameUI = endGameUI and endGameUI.Enabled or false
         
-        getgenv().MacroGameState.isInGame = not getgenv().MacroGameState.hasStartButton and not getgenv().MacroGameState.hasEndGameUI
+        local gameEndedValue = RS:FindFirstChild("GameEnded")
+        local currentGameEnded = gameEndedValue and gameEndedValue.Value or false
+        
+        if currentGameEnded and not getgenv().MacroGameState.lastGameEndedState then
+            getgenv().MacroGameState.gameEnded = true
+            
+            getgenv().BulmaWishUsedThisRound = false
+            getgenv().WukongTrackedClones = {}
+            getgenv()._WukongLastSynthesisTime = 0
+        end
+        
+        getgenv().MacroGameState.lastGameEndedState = currentGameEnded
+        getgenv().MacroGameState.isInGame = not getgenv().MacroGameState.hasStartButton and not getgenv().MacroGameState.hasEndGameUI and not currentGameEnded
     end)
 end
 
@@ -1004,8 +1090,144 @@ local towerTracker = {
     upgradeLevels = {},
     lastPlaceTime = {},
     lastUpgradeTime = {},
-    pendingActions = {}
+    pendingActions = {},
+    upgradeConnections = {}
 }
+
+local function setupTowerUpgradeListener(tower)
+    print("[Macro Debug] setupTowerUpgradeListener called for:", tower.Name)
+    
+    if not tower:FindFirstChild("Upgrade") then 
+        print("[Macro Debug] ✗ Tower has no Upgrade child:", tower.Name)
+        return 
+    end
+    
+    if towerTracker.upgradeConnections[tower] then 
+        print("[Macro Debug] ✗ Listener already exists for:", tower.Name)
+        return 
+    end
+    
+    local currentLevel = tower.Upgrade.Value
+    towerTracker.upgradeLevels[tower] = currentLevel
+    print("[Macro Debug] ✓ Setting up upgrade listener for:", tower.Name, "Initial level:", currentLevel)
+    
+    local connection = tower.Upgrade:GetPropertyChangedSignal("Value"):Connect(function()
+        if not getgenv().MacroRecordingV2 then return end
+        
+        local success, err = pcall(function()
+            if not tower or not tower.Parent or not tower:FindFirstChild("Upgrade") then 
+                print("[Macro Debug] Tower or Upgrade missing")
+                return 
+            end
+            
+            local towerName = tower.Name
+            local currentLevel = tower.Upgrade.Value
+            local now = tick()
+            
+            print("[Macro Debug] Upgrade detected:", towerName, "Level:", currentLevel)
+            
+            if towerName == "NarutoBaryonClone" or towerName == "WukongClone" then
+                print("[Macro Debug] Skipping clone upgrade")
+                return
+            end
+            
+            local oldLevel = towerTracker.upgradeLevels[tower] or 0
+            if currentLevel <= oldLevel then
+                print("[Macro Debug] Level not increased (Old:", oldLevel, "New:", currentLevel, "), skipping")
+                return
+            end
+            
+            local levelsGained = currentLevel - oldLevel
+            print("[Macro Debug] Levels gained:", levelsGained, "Old:", oldLevel, "New:", currentLevel)
+            
+            towerTracker.upgradeLevels[tower] = currentLevel
+            towerTracker.lastUpgradeTime[tower] = now
+            
+            for i = 1, levelsGained do
+                table.insert(getgenv().MacroDataV2, {
+                    RemoteName = "Upgrade",
+                    Args = {},
+                    Time = now - getgenv().MacroRecordingStartTime,
+                    IsInvoke = true,
+                    Cost = 0,
+                    TowerName = towerName,
+                    ActionType = "Upgrade",
+                    Wave = getgenv().MacroGameState.currentWave
+                })
+            end
+            
+            getgenv().MacroStatusText = "Recording"
+            getgenv().MacroCurrentStep = #getgenv().MacroDataV2
+            getgenv().MacroTotalSteps = #getgenv().MacroDataV2
+            getgenv().MacroActionText = "Upgrade"
+            getgenv().MacroUnitText = towerName
+            
+            task.spawn(function()
+                if getgenv().UpdateMacroStatus then
+                    getgenv().UpdateMacroStatus()
+                end
+            end)
+            
+            print("[Macro Debug] ✓ Recorded", levelsGained, "upgrade(s) for", towerName, "- Total steps:", #getgenv().MacroDataV2)
+        end)
+        
+        if not success then
+            warn("[Macro Debug] Error in upgrade listener:", err)
+        end
+    end)
+    
+    towerTracker.upgradeConnections[tower] = connection
+    
+    tower.AncestryChanged:Connect(function()
+        if not tower:IsDescendantOf(game) then
+            if towerTracker.upgradeConnections[tower] then
+                towerTracker.upgradeConnections[tower]:Disconnect()
+                towerTracker.upgradeConnections[tower] = nil
+            end
+        end
+    end)
+end
+
+task.spawn(function()
+    print("[Macro Debug] Starting tower monitoring for upgrade listeners")
+    
+    workspace.Towers.ChildAdded:Connect(function(tower)
+        print("[Macro Debug] Tower added to workspace:", tower.Name)
+        
+        task.spawn(function()
+            local maxAttempts = 10
+            for attempt = 1, maxAttempts do
+                task.wait(0.1)
+                
+                if tower:FindFirstChild("Owner") then
+                    if tower.Owner.Value == LocalPlayer then
+                        print("[Macro Debug] ✓ New tower added:", tower.Name, "(attempt", attempt .. ")")
+                        setupTowerUpgradeListener(tower)
+                        return
+                    else
+                        print("[Macro Debug] Tower not owned by player:", tower.Name)
+                        return
+                    end
+                end
+                
+                if attempt == maxAttempts then
+                    print("[Macro Debug] ✗ Timeout waiting for Owner on:", tower.Name)
+                end
+            end
+        end)
+    end)
+    
+    task.wait(0.5)
+    for _, tower in pairs(workspace.Towers:GetChildren()) do
+        if tower:FindFirstChild("Owner") and tower.Owner.Value == LocalPlayer then
+            print("[Macro Debug] Found existing tower:", tower.Name)
+            setupTowerUpgradeListener(tower)
+        else
+            print("[Macro Debug] Skipping tower (not owned):", tower.Name)
+        end
+    end
+    print("[Macro Debug] Finished setting up listeners for existing towers")
+end)
 
 local originalNamecall
 local namecallHook
@@ -1072,6 +1294,53 @@ local function processRemoteCall(remoteName, method, args)
         end
     end
     
+    if remoteNameLower:find("upgrade") then
+        if args[1] and typeof(args[1]) == "Instance" then
+            local tower = args[1]
+            local towerName = tower.Name
+            
+            if towerName ~= "NarutoBaryonClone" and towerName ~= "WukongClone" then
+                local upgradeKey = tower .. "_" .. now
+                if not towerTracker.pendingActions[upgradeKey] then
+                    towerTracker.pendingActions[upgradeKey] = true
+                    
+                    task.spawn(function()
+                        task.wait(0.05)
+                        
+                        if towerTracker.pendingActions[upgradeKey] then
+                            local cost = getgenv().GetRecentCashDecrease and getgenv().GetRecentCashDecrease(1) or 0
+                            
+                            table.insert(getgenv().MacroDataV2, {
+                                RemoteName = "Upgrade",
+                                Args = {nil},
+                                Time = now - getgenv().MacroRecordingStartTime,
+                                IsInvoke = (method == "InvokeServer"),
+                                Cost = cost,
+                                TowerName = towerName,
+                                ActionType = "Upgrade",
+                                Wave = getgenv().MacroGameState.currentWave
+                            })
+                            
+                            getgenv().MacroStatusText = "Recording"
+                            getgenv().MacroCurrentStep = #getgenv().MacroDataV2
+                            getgenv().MacroTotalSteps = #getgenv().MacroDataV2
+                            getgenv().MacroActionText = "Upgrade"
+                            getgenv().MacroUnitText = towerName
+                            
+                            if getgenv().UpdateMacroStatus then
+                                getgenv().UpdateMacroStatus()
+                            end
+                            
+                            print("[Macro Debug] Upgrade recorded via remote hook (backup):", towerName)
+                        end
+                        
+                        towerTracker.pendingActions[upgradeKey] = nil
+                    end)
+                end
+            end
+        end
+    end
+    
     if remoteNameLower:find("sell") then
         if args[1] and typeof(args[1]) == "Instance" then
             local tower = args[1]
@@ -1105,112 +1374,84 @@ end
 local function setupRecordingHook()
     if namecallHook then return end
     
-    local mt = getrawmetatable(game)
-    originalNamecall = mt.__namecall
-    setreadonly(mt, false)
-    
-    namecallHook = function(self, ...)
-        local method = getnamecallmethod()
-        local args = {...}
-        
-        local result = originalNamecall(self, ...)
-        
-        if not getgenv().MacroRecordingV2 then
-            return result
-        end
-        
-        if method ~= "FireServer" and method ~= "InvokeServer" then
-            return result
-        end
-        
-        local remoteName = tostring(self.Name or "")
-        if remoteName:lower():find("camera") or 
-           remoteName:lower():find("zoom") or
-           remoteName:lower():find("popper") or
-           self:IsDescendantOf(LocalPlayer.PlayerScripts or game:GetService("StarterPlayer").StarterPlayerScripts) then
-            return result
-        end
-        
-        task.spawn(function()
-            pcall(function()
-                processRemoteCall(remoteName, method, args)
-            end)
-        end)
-        
-        return result
-    end
-    
-    mt.__namecall = namecallHook
-    setreadonly(mt, true)
-end
-
-local function startUpgradeMonitoring()
     task.spawn(function()
+        local lastTowerCount = {}
+        
         while true do
-            RunService.Heartbeat:Wait()
+            task.wait(0.1)
             
             if not getgenv().MacroRecordingV2 then
-                task.wait(1)
+                task.wait(0.5)
                 continue
             end
             
             pcall(function()
+                local currentCounts = {}
+                
                 for _, tower in pairs(workspace.Towers:GetChildren()) do
                     if tower:FindFirstChild("Owner") and tower.Owner.Value == LocalPlayer then
                         local towerName = tower.Name
-                        local currentLevel = tower:FindFirstChild("Upgrade") and tower.Upgrade.Value or 0
+                        currentCounts[towerName] = (currentCounts[towerName] or 0) + 1
+                    end
+                end
+                
+                for towerName, count in pairs(currentCounts) do
+                    local lastCount = lastTowerCount[towerName] or 0
+                    
+                    if count > lastCount then
+                        local now = tick()
                         
-                        if not towerTracker.upgradeLevels[tower] then
-                            towerTracker.upgradeLevels[tower] = currentLevel
+                        local newestTower = nil
+                        for _, tower in pairs(workspace.Towers:GetChildren()) do
+                            if tower.Name == towerName and tower:FindFirstChild("Owner") and tower.Owner.Value == LocalPlayer then
+                                if not newestTower or (tower:FindFirstChild("Upgrade") and tower.Upgrade.Value == 0) then
+                                    newestTower = tower
+                                end
+                            end
                         end
                         
-                        if currentLevel > towerTracker.upgradeLevels[tower] then
-                            local now = tick()
-                            
-                            if towerName == "NarutoBaryonClone" or towerName == "WukongClone" then
-                                towerTracker.upgradeLevels[tower] = currentLevel
-                                continue
-                            end
-                            
-                            if towerTracker.lastUpgradeTime[tower] and (now - towerTracker.lastUpgradeTime[tower]) < 0.3 then
-                                towerTracker.upgradeLevels[tower] = currentLevel
-                                continue
-                            end
-                            
-                            towerTracker.lastUpgradeTime[tower] = now
-                            
-                            task.wait(0.1)
+                        if newestTower then
                             local cost = getgenv().GetRecentCashDecrease and getgenv().GetRecentCashDecrease(2) or 0
                             
+                            local cframe = newestTower:GetPivot()
+                            local savedArgs = {towerName, {cframe:GetComponents()}}
+                            
                             table.insert(getgenv().MacroDataV2, {
-                                RemoteName = "Upgrade",
-                                Args = {nil},
+                                RemoteName = "PlaceTower",
+                                Args = savedArgs,
                                 Time = now - getgenv().MacroRecordingStartTime,
-                                IsInvoke = true,
+                                IsInvoke = false,
                                 Cost = cost,
                                 TowerName = towerName,
-                                ActionType = "Upgrade",
+                                ActionType = "Place",
                                 Wave = getgenv().MacroGameState.currentWave
                             })
-                            
-                            towerTracker.upgradeLevels[tower] = currentLevel
                             
                             getgenv().MacroStatusText = "Recording"
                             getgenv().MacroCurrentStep = #getgenv().MacroDataV2
                             getgenv().MacroTotalSteps = #getgenv().MacroDataV2
-                            getgenv().MacroActionText = "Upgrade"
+                            getgenv().MacroActionText = "Place"
                             getgenv().MacroUnitText = towerName
                             
                             if getgenv().UpdateMacroStatus then
                                 getgenv().UpdateMacroStatus()
                             end
                             
+                            print("[Macro Debug] Recorded placement:", towerName)
                         end
                     end
                 end
+                
+                lastTowerCount = currentCounts
             end)
         end
     end)
+    
+    namecallHook = true
+end
+
+local function startUpgradeMonitoring()
+    -- This function kept for compatibility but does nothing
 end
 
 local function monitorEndGameUI()
@@ -1220,6 +1461,12 @@ local function monitorEndGameUI()
             
             if getgenv().MacroRecordingV2 and getgenv().MacroGameState.hasEndGameUI then
                 getgenv().MacroRecordingV2 = false
+                
+                pcall(function()
+                    if macroRecordToggle then
+                        macroRecordToggle:UpdateState(false)
+                    end
+                end)
                 
                 if #getgenv().MacroDataV2 > 0 and getgenv().CurrentMacro then
                     local success = getgenv().SaveMacro(getgenv().CurrentMacro, getgenv().MacroDataV2)
@@ -1277,31 +1524,59 @@ local function executeAction(action)
     end
     
     if action.ActionType == "Upgrade" then
-        local tower = nil
+        local towers = {}
         for _, t in pairs(workspace.Towers:GetChildren()) do
             if t.Name == action.TowerName and t:FindFirstChild("Owner") and t.Owner.Value == LocalPlayer then
-                tower = t
-                break
+                local currentLevel = t:FindFirstChild("Upgrade") and t.Upgrade.Value or 0
+                local maxLevel = t:FindFirstChild("MaxUpgrade") and t.MaxUpgrade.Value or 999
+                if currentLevel < maxLevel then
+                    table.insert(towers, {tower = t, level = currentLevel})
+                end
             end
         end
         
-        if tower then
-            local currentLevel = tower:FindFirstChild("Upgrade") and tower.Upgrade.Value or 0
-            local maxLevel = tower:FindFirstChild("MaxUpgrade") and tower.MaxUpgrade.Value or 999
-            
-            if currentLevel < maxLevel then
-                if remote:IsA("RemoteFunction") then
-                    remote:InvokeServer(tower)
-                else
-                    remote:FireServer(tower)
+        if #towers == 0 then
+            local allTowers = {}
+            for _, t in pairs(workspace.Towers:GetChildren()) do
+                if t.Name == action.TowerName and t:FindFirstChild("Owner") and t.Owner.Value == LocalPlayer then
+                    table.insert(allTowers, t)
                 end
-                task.wait(0.3)
-                return true, "Upgraded"
-            else
-                return true, "Already max level"
             end
+            
+            if #allTowers == 0 then
+                return false, "No " .. action.TowerName .. " found"
+            else
+                return true, "All " .. action.TowerName .. " already max level"
+            end
+        end
+        
+        table.sort(towers, function(a, b)
+            return a.level < b.level
+        end)
+        
+        local towerData = towers[1]
+        local tower = towerData.tower
+        
+        local cash = tonumber(getgenv().MacroCurrentCash) or 0
+        local cost = tonumber(action.Cost) or 0
+        
+        if cost > 0 and cash < cost then
+            return false, "Not enough cash: need $" .. cost .. ", have $" .. cash
+        end
+        
+        if remote:IsA("RemoteFunction") then
+            remote:InvokeServer(tower)
         else
-            return false, "Tower not found: " .. action.TowerName
+            remote:FireServer(tower)
+        end
+        
+        task.wait(0.5)
+        
+        local newLevel = tower:FindFirstChild("Upgrade") and tower.Upgrade.Value or towerData.level
+        if newLevel > towerData.level then
+            return true, "Upgraded to level " .. newLevel
+        else
+            return false, "Upgrade may have failed"
         end
         
     elseif action.ActionType == "Sell" then
@@ -1390,6 +1665,21 @@ local function playMacroV2()
                 break
             end
             
+            if getgenv().MacroGameState.gameEnded then
+                getgenv().MacroStatusText = "Game Ended - Waiting"
+                getgenv().MacroWaitingText = "Waiting for next round..."
+                getgenv().UpdateMacroStatus()
+                
+                while getgenv().MacroGameState.gameEnded and getgenv().MacroPlayEnabled do
+                    task.wait(0.5)
+                end
+                
+                getgenv().MacroGameState.gameEnded = false
+                step = 1
+                task.wait(2)
+                continue
+            end
+            
             if getgenv().MacroGameState.hasStartButton then
                 getgenv().MacroStatusText = "Restart Detected"
                 getgenv().MacroWaitingText = "Waiting for game start..."
@@ -1420,32 +1710,59 @@ local function playMacroV2()
             local cash = tonumber(getgenv().MacroCurrentCash) or 0
             local cost = tonumber(action.Cost) or 0
             
+            local shouldSkipStep = false
+            
             if cost > 0 and cash < cost then
                 getgenv().MacroStatusText = "Waiting Cash"
-                getgenv().MacroWaitingText = "$" .. cost
+                getgenv().MacroWaitingText = "$" .. cost .. " (have $" .. cash .. ")"
                 getgenv().UpdateMacroStatus()
                 
                 local cashWaitStart = tick()
-                local maxCashWait = 1200
+                local maxCashWait = 300
+                local lastCash = cash
+                local noIncomeTime = 0
                 
                 while getgenv().MacroPlayEnabled do
+                    task.wait(0.5)
                     cash = tonumber(getgenv().MacroCurrentCash) or 0
-                    if cash >= cost then break end
                     
-                    local waitTime = tick() - cashWaitStart
-                    if waitTime > maxCashWait then
-                        getgenv().MacroStatusText = "Timeout - Skipping Step"
-                        getgenv().MacroWaitingText = "Waited " .. math.floor(waitTime) .. "s"
-                        getgenv().UpdateMacroStatus()
-                        task.wait(2)
-                        step = step + 1
-                        continue
+                    if cash >= cost then 
+                        break 
                     end
                     
-                    RunService.Heartbeat:Wait()
+                    if cash > lastCash then
+                        noIncomeTime = 0
+                    else
+                        noIncomeTime = noIncomeTime + 0.5
+                    end
+                    lastCash = cash
+                    
+                    local waitTime = tick() - cashWaitStart
+                    
+                    if waitTime > maxCashWait then
+                        shouldSkipStep = true
+                        break
+                    end
+                    
+                    if noIncomeTime > 60 and waitTime > 30 then
+                        shouldSkipStep = true
+                        break
+                    end
+                    
+                    getgenv().MacroWaitingText = "$" .. cost .. " (have $" .. cash .. ") - " .. math.floor(waitTime) .. "s"
+                    getgenv().UpdateMacroStatus()
                 end
                 
                 if not getgenv().MacroPlayEnabled then break end
+            end
+            
+            if shouldSkipStep then
+                getgenv().MacroStatusText = "Skipping - Not Enough Cash"
+                getgenv().MacroWaitingText = "Needed $" .. cost .. ", have $" .. cash
+                getgenv().UpdateMacroStatus()
+                task.wait(2)
+                step = step + 1
+                continue
             end
             
             getgenv().MacroStatusText = "Playing"
@@ -1454,34 +1771,28 @@ local function playMacroV2()
             
             local actionSuccess = false
             local actionMessage = ""
-            local actionAttempts = 0
-            local maxAttempts = 3
             
-            while actionAttempts < maxAttempts and not actionSuccess do
-                actionAttempts = actionAttempts + 1
-                
-                local pcallSuccess, result, msg = pcall(function()
-                    return executeAction(action)
-                end)
-                
-                if pcallSuccess and result then
-                    actionSuccess = true
-                    actionMessage = msg or "Success"
-                elseif actionAttempts < maxAttempts then
-                    task.wait(0.5)
-                else
-                    actionMessage = msg or "Failed after " .. maxAttempts .. " attempts"
-                end
+            local success, result, msg = pcall(function()
+                return executeAction(action)
+            end)
+            
+            if success and result then
+                actionSuccess = true
+                actionMessage = msg or "Success"
+            else
+                actionMessage = msg or "Action failed"
             end
             
             if not actionSuccess then
-                getgenv().MacroStatusText = "Step Failed - Skipping"
+                getgenv().MacroStatusText = "Step Failed - Continuing"
                 getgenv().MacroWaitingText = actionMessage
                 getgenv().UpdateMacroStatus()
-                task.wait(1)
+                task.wait(0.5)
             end
             
             step = step + 1
+            
+            task.wait(0.3)
             
             local stepDelay = getgenv().MacroStepDelay or 0
             if stepDelay > 0 then
@@ -3012,7 +3323,7 @@ Sections.MacroLeft:Divider()
 Sections.MacroLeft:Header({ Text = "🎬 Recording & Playback" })
 Sections.MacroLeft:SubLabel({ Text = "Record new macros or play existing ones" })
 
-local macroRecordToggle = createToggle(
+local macroRecordToggle = createToggleNoSave(
     Sections.MacroLeft,
     "Record Macro",
     "MacroRecordToggle",
@@ -3036,6 +3347,13 @@ local macroRecordToggle = createToggle(
             getgenv().MacroStatusText = "Recording"
             getgenv().MacroCurrentStep = 0
             getgenv().MacroTotalSteps = 0
+            
+            print("[Macro Recording] Started recording for:", getgenv().CurrentMacro)
+            print("[Macro Recording] MacroRecordingV2 =", getgenv().MacroRecordingV2)
+            
+            if getgenv().UpdateMacroStatus then
+                getgenv().UpdateMacroStatus()
+            end
             
             Window:Notify({
                 Title = "Macro Recording",
@@ -3394,7 +3712,7 @@ if not isInLobby then
     createToggle(
         Sections.MiscLeft,
         "FPS Boost",
-        "FPSBoost",
+        "FPSBoostToggle",
         function(value)
             getgenv().FPSBoostEnabled = value
             Window:Notify({
@@ -3403,7 +3721,7 @@ if not isInLobby then
                 Lifetime = 3
             })
         end,
-        false
+        getgenv().FPSBoostEnabled
     )
 else
     getgenv().FPSBoostEnabled = false
@@ -3412,7 +3730,7 @@ end
 createToggle(
     Sections.MiscLeft,
     "Remove Enemies & Units",
-    "RemoveEnemies",
+    "RemoveEnemiesToggle",
     function(value)
         getgenv().RemoveEnemiesEnabled = value
         Window:Notify({
@@ -3421,13 +3739,13 @@ createToggle(
             Lifetime = 3
         })
     end,
-    false
+    getgenv().RemoveEnemiesEnabled
 )
 
 createToggle(
     Sections.MiscLeft,
     "Black Screen Mode",
-    "BlackScreen",
+    "BlackScreenToggle",
     function(value)
         getgenv().BlackScreenEnabled = value
         Window:Notify({
@@ -3452,7 +3770,7 @@ createToggle(
             end
         end)
     end,
-    false
+    getgenv().BlackScreenEnabled
 )
 
 Sections.MiscLeft:Divider()
@@ -3463,7 +3781,7 @@ Sections.MiscLeft:SubLabel({ Text = "Stay safe and avoid detection" })
 createToggle(
     Sections.MiscLeft,
     "Anti-AFK",
-    "AntiAFK",
+    "AntiAFKToggle",
     function(value)
         getgenv().AntiAFKEnabled = value
         Window:Notify({
@@ -3472,7 +3790,7 @@ createToggle(
             Lifetime = 3
         })
     end,
-    false
+    getgenv().AntiAFKEnabled
 )
 
 createToggle(
@@ -3493,16 +3811,25 @@ createToggle(
 createToggle(
     Sections.MiscLeft,
     "Auto Execute on Teleport",
-    "AutoExecute",
+    "AutoExecuteToggle",
     function(value)
         getgenv().AutoExecuteEnabled = value
+        
+        local queueteleport = queue_on_teleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport)
+        
+        if value and queueteleport then
+            print("[ALS] Auto Execute on Teleport enabled")
+        elseif value and not queueteleport then
+            warn("[ALS] Auto Execute enabled but queue_on_teleport not supported by your executor")
+        end
+        
         Window:Notify({
             Title = "Auto Execute",
             Description = value and "Enabled - Script will auto-load on teleport" or "Disabled",
             Lifetime = 3
         })
     end,
-    false
+    getgenv().AutoExecuteEnabled
 )
 
 
@@ -3542,6 +3869,53 @@ if getgenv().Config.inputs["MenuKeybind"] then
         Window:SetKeybind(Enum.KeyCode[getgenv().Config.inputs["MenuKeybind"]])
     end)
 end
+
+Sections.SettingsLeft:Divider()
+
+Sections.SettingsLeft:Header({ Text = "� UI fSize (Restart Required)" })
+Sections.SettingsLeft:SubLabel({ Text = "Custom window size - changes apply on next script load" })
+
+createInput(
+    Sections.SettingsLeft,
+    "Width",
+    "UIWidth",
+    "Default: 580 (mobile) or 868 (desktop)",
+    "Numeric",
+    function(value)
+        local width = tonumber(value)
+        if width and width >= 400 and width <= 1920 then
+            getgenv().Config.inputs.UIWidth = width
+            saveConfig(getgenv().Config)
+            Window:Notify({
+                Title = "UI Width",
+                Description = "Set to " .. width .. " (restart to apply)",
+                Lifetime = 3
+            })
+        end
+    end,
+    tostring(getgenv().Config.inputs.UIWidth or (isMobile and 580 or 868))
+)
+
+createInput(
+    Sections.SettingsLeft,
+    "Height",
+    "UIHeight",
+    "Default: 480 (mobile) or 650 (desktop)",
+    "Numeric",
+    function(value)
+        local height = tonumber(value)
+        if height and height >= 300 and height <= 1080 then
+            getgenv().Config.inputs.UIHeight = height
+            saveConfig(getgenv().Config)
+            Window:Notify({
+                Title = "UI Height",
+                Description = "Set to " .. height .. " (restart to apply)",
+                Lifetime = 3
+            })
+        end
+    end,
+    tostring(getgenv().Config.inputs.UIHeight or (isMobile and 480 or 650))
+)
 
 Sections.SettingsLeft:Divider()
 
@@ -3814,6 +4188,17 @@ createToggle(
     "SeamlessFixToggle",
     function(value)
         getgenv().SeamlessFixEnabled = value
+        
+        task.spawn(function()
+            pcall(function()
+                local remotes = RS:FindFirstChild("Remotes")
+                local setSettings = remotes and remotes:FindFirstChild("SetSettings")
+                if setSettings then 
+                    setSettings:InvokeServer("SeamlessRetry")
+                end
+            end)
+        end)
+        
         Window:Notify({
             Title = "Seamless Fix",
             Description = value and "Enabled - Script will persist through teleports" or "Disabled",
@@ -3936,106 +4321,135 @@ task.spawn(function()
     while true do
         task.wait(0.5)
         local success, errorMsg = pcall(function()
+            if not LocalPlayer or not LocalPlayer.PlayerGui then return end
+            
             local endGameUI = LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
-            if endGameUI and endGameUI:FindFirstChild("BG") and endGameUI.BG:FindFirstChild("Buttons") then
-                if lastEndGameUIInstance and endGameUI ~= lastEndGameUIInstance then
-                    hasProcessedCurrentUI = false
-                    lastEndGameUIInstance = endGameUI
-                    endGameUIDetectedTime = tick()
-                end
-                
-                if hasProcessedCurrentUI then
-                    return
-                end
-                
-                local buttons = endGameUI.BG.Buttons
-                local nextButton = buttons:FindFirstChild("Next")
-                local retryButton = buttons:FindFirstChild("Retry")
-                local leaveButton = buttons:FindFirstChild("Leave")
-                
-                local buttonToPress, actionName = nil, ""
-                
-                if getgenv().AutoSmartEnabled then
-                    if nextButton and nextButton.Visible then
-                        buttonToPress = nextButton
-                        actionName = "Next"
-                    elseif retryButton and retryButton.Visible then
-                        buttonToPress = retryButton
-                        actionName = "Replay"
-                    elseif leaveButton then
-                        buttonToPress = leaveButton
-                        actionName = "Leave"
+            if not endGameUI then return end
+            
+            local bg = endGameUI:FindFirstChild("BG")
+            if not bg then return end
+            
+            local buttons = bg:FindFirstChild("Buttons")
+            if not buttons then return end
+            
+            if lastEndGameUIInstance and endGameUI ~= lastEndGameUIInstance then
+                hasProcessedCurrentUI = false
+                lastEndGameUIInstance = endGameUI
+                endGameUIDetectedTime = tick()
+            end
+            
+            if hasProcessedCurrentUI then
+                return
+            end
+            
+            local nextButton = buttons:FindFirstChild("Next")
+            local retryButton = buttons:FindFirstChild("Retry")
+            local leaveButton = buttons:FindFirstChild("Leave")
+            
+            local function getButtonText(button)
+                if not button then return "" end
+                local styling = button:FindFirstChild("Styling")
+                if styling then
+                    local label = styling:FindFirstChild("Label")
+                    if label and label.Text then
+                        return label.Text:lower()
                     end
-                elseif getgenv().AutoNextEnabled and nextButton and nextButton.Visible then
+                end
+                return ""
+            end
+            
+            local nextText = getButtonText(nextButton)
+            local retryText = getButtonText(retryButton)
+            
+            local buttonToPress, actionName = nil, ""
+            
+            if getgenv().AutoFastRetryEnabled or getgenv().AutoSmartEnabled then
+                print("[Auto Retry Debug] Retry button exists:", retryButton ~= nil)
+                if retryButton then
+                    print("[Auto Retry Debug] Retry visible:", retryButton.Visible)
+                    print("[Auto Retry Debug] Retry text:", retryText)
+                end
+            end
+            
+            if getgenv().AutoSmartEnabled then
+                if nextButton and nextButton.Visible and (nextText:find("next") or nextText:find("continue")) then
                     buttonToPress = nextButton
                     actionName = "Next"
-                elseif getgenv().AutoFastRetryEnabled and retryButton and retryButton.Visible then
+                elseif retryButton and retryButton.Visible and (retryText:find("replay") or retryText:find("retry")) then
                     buttonToPress = retryButton
                     actionName = "Replay"
-                elseif getgenv().AutoLeaveEnabled and leaveButton then
+                elseif leaveButton and leaveButton.Visible then
                     buttonToPress = leaveButton
                     actionName = "Leave"
                 end
+            elseif getgenv().AutoNextEnabled and nextButton and nextButton.Visible and (nextText:find("next") or nextText:find("continue")) then
+                buttonToPress = nextButton
+                actionName = "Next"
+            elseif getgenv().AutoFastRetryEnabled and retryButton and retryButton.Visible and (retryText:find("replay") or retryText:find("retry")) then
+                buttonToPress = retryButton
+                actionName = "Replay"
+                print("[Auto Retry Debug] Selected Retry button for clicking")
+            elseif getgenv().AutoLeaveEnabled and leaveButton and leaveButton.Visible then
+                buttonToPress = leaveButton
+                actionName = "Leave"
+            end
+            
+            if not buttonToPress and (getgenv().AutoFastRetryEnabled or getgenv().AutoSmartEnabled) then
+                print("[Auto Retry Debug] No button selected - AutoFastRetryEnabled:", getgenv().AutoFastRetryEnabled)
+            end
+            
+            if buttonToPress then
+                print("[Auto Retry] Button to press:", buttonToPress:GetFullName())
                 
-                if buttonToPress then
-                    
-                    if getgenv().WebhookEnabled then
-                        task.wait(4)
-                        local maxWait = 0
-                        while getgenv().WebhookProcessing and maxWait < 15 do
-                            task.wait(0.5)
-                            maxWait = maxWait + 0.5
-                        end
-                        task.wait(2)
-                    end
-                    
-                    hasProcessedCurrentUI = true
-                    
-                    local clickAttempts = 0
-                    local maxAttempts = 5
-                    local clicked = false
-                    
-                    while clickAttempts < maxAttempts and not clicked do
-                        clickAttempts = clickAttempts + 1
-                        
-                        pcall(function()
-                            local isValidDescendant = buttonToPress:IsDescendantOf(LocalPlayer.PlayerGui)
-                            if isValidDescendant then
-                                GuiService.SelectedObject = buttonToPress
-                                task.wait(0.2)
-                                press(Enum.KeyCode.Return)
-                                task.wait(0.3)
-                            end
-                            
-                            if buttonToPress:IsDescendantOf(LocalPlayer.PlayerGui) then
-                                for _, connection in pairs(getconnections(buttonToPress.Activated)) do
-                                    connection:Fire()
-                                end
-                                for _, connection in pairs(getconnections(buttonToPress.MouseButton1Click)) do
-                                    connection:Fire()
-                                end
-                            end
-                        end)
-                        
+                if getgenv().WebhookEnabled then
+                    task.wait(4)
+                    local maxWait = 0
+                    while getgenv().WebhookProcessing and maxWait < 15 do
                         task.wait(0.5)
-                        
-                        if not LocalPlayer.PlayerGui:FindFirstChild("EndGameUI") then
-                            clicked = true
-                        end
+                        maxWait = maxWait + 0.5
                     end
-                    
-                    if not clicked then
-                        warn("[Auto Retry] Failed to click button after " .. maxAttempts .. " attempts")
-                    end
-                    
-                    pcall(function() GuiService.SelectedObject = nil end)
+                    task.wait(2)
                 end
                 
-                pcall(function()
-                    if GuiService.SelectedObject ~= nil then
+                task.wait(1)
+                hasProcessedCurrentUI = true
+                
+                local success = pcall(function()
+                    local GuiService = game:GetService("GuiService")
+                    
+                    GuiService.SelectedObject = nil
+                    task.wait(0.2)
+                    
+                    GuiService.SelectedObject = buttonToPress
+                    task.wait(0.5)
+                    
+                    if GuiService.SelectedObject == buttonToPress then
+                        print("[Auto Retry] Selected button:", buttonToPress.Name)
+                        
+                        VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
+                        task.wait(0.1)
+                        VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
+                        task.wait(0.5)
+                        
                         GuiService.SelectedObject = nil
+                        
+                        print("[Auto Retry] Pressed Enter on", actionName, "button")
+                    else
+                        warn("[Auto Retry] Failed to select the correct button")
                     end
                 end)
+                
+                if not success then
+                    warn("[Auto Retry] UI navigation failed")
+                end
+                
+                task.wait(1)
+                
+                if LocalPlayer.PlayerGui:FindFirstChild("EndGameUI") then
+                    warn("[Auto Retry] EndGameUI still present - button may require server validation")
+                else
+                    print("[Auto Retry] Successfully clicked " .. actionName .. " button - EndGameUI closed")
+                end
             end
         end)
         
@@ -5243,7 +5657,7 @@ task.spawn(function()
                     { name = "Units", value = (unitsText ~= "" and unitsText or "No units"), inline = false },
                     { name = "Match Result", value = (matchTime or "00:00:00") .. " - Wave " .. tostring(matchWave or "0") .. "\n" .. (mapName or "Unknown Map") .. ((mapDifficulty and mapDifficulty ~= "Unknown") and (" [" .. mapDifficulty .. "]") or "") .. " - " .. (matchResult or "Unknown"), inline = false }
                 },
-                footer = { text = "ALS Macro System | <https://discord.gg/V3WcdHpd3J>" }
+                footer = { text = "ALS Macro System | https://discord.gg/V3WcdHpd3J" }
             }
             
             local webhookContent = ""
@@ -5766,12 +6180,19 @@ if not isInLobby then
         local lastEndgameTime = 0
         local DEBOUNCE_TIME = 3
         
+        print("[Seamless Fix] Waiting for Settings GUI...")
         local maxWait = 0
         repeat 
             task.wait(0.5) 
             maxWait = maxWait + 0.5 
         until LocalPlayer.PlayerGui:FindFirstChild("Settings") or maxWait > 30
         
+        if not LocalPlayer.PlayerGui:FindFirstChild("Settings") then
+            warn("[Seamless Fix] Settings GUI not found after 30s, seamless fix may not work")
+            return
+        end
+        
+        print("[Seamless Fix] Settings GUI found!")
         
         local function getSeamlessValue()
             local ok, result = pcall(function()
@@ -5780,9 +6201,7 @@ if not isInLobby then
                     local seamless = settings:FindFirstChild("SeamlessRetry")
                     if seamless then 
                         return seamless.Value 
-                    else
                     end
-                else
                 end
                 return false
             end)
@@ -5795,6 +6214,7 @@ if not isInLobby then
                 local setSettings = remotes and remotes:FindFirstChild("SetSettings")
                 if setSettings then 
                     setSettings:InvokeServer("SeamlessRetry")
+                    print("[Seamless Fix] Toggled SeamlessRetry")
                 end
             end)
         end
@@ -5806,22 +6226,25 @@ if not isInLobby then
             if endgameCount < maxRounds then
                 if not getSeamlessValue() then
                     setSeamlessRetry()
-                    task.wait(1)
+                    print("[Seamless Fix] Enabled Seamless Retry (" .. endgameCount .. "/" .. maxRounds .. ")")
+                    task.wait(0.5)
                 end
             elseif endgameCount >= maxRounds then
                 if getSeamlessValue() then
                     setSeamlessRetry()
-                    task.wait(1)
+                    print("[Seamless Fix] Disabled Seamless Retry - Max rounds reached (" .. endgameCount .. "/" .. maxRounds .. ")")
+                    task.wait(0.5)
                 end
             end
         end
         
-        task.wait(2)
+        print("[Seamless Fix] Checking initial seamless state...")
         enableSeamlessIfNeeded()
         
-        task.spawn(function()
+        local seamlessToggleConnection
+        seamlessToggleConnection = task.spawn(function()
             while true do
-                task.wait(5)
+                task.wait(1)
                 if getgenv().SeamlessFixEnabled then
                     enableSeamlessIfNeeded()
                 end
@@ -5833,45 +6256,57 @@ if not isInLobby then
                 if child.Name == "EndGameUI" and not hasRun then
                     local currentTime = tick()
                     if currentTime - lastEndgameTime < DEBOUNCE_TIME then
+                        print("[Seamless Fix] Debounced duplicate EndGameUI trigger")
                         return
                     end
                     hasRun = true
                     lastEndgameTime = currentTime
                     endgameCount = endgameCount + 1
                     local maxRounds = getgenv().SeamlessRounds or 4
+                    print("[Seamless Fix] Endgame detected. Current seamless rounds: " .. endgameCount .. "/" .. maxRounds)
                     
                     if endgameCount >= maxRounds and getgenv().SeamlessFixEnabled then
                         maxRoundsReached = true
-                        task.wait(1)
+                        print("[Seamless Fix] Max rounds reached, disabling seamless retry to restart match...")
+                        task.wait(0.5)
                         if getSeamlessValue() then
                             setSeamlessRetry()
-                            task.wait(2)
+                            print("[Seamless Fix] Disabled Seamless Retry")
+                            task.wait(0.5)
+                        else
+                            print("[Seamless Fix] Seamless already disabled")
                         end
                         
                         task.spawn(function()
+                            print("[Seamless Fix] Waiting for EndGameUI to close...")
                             local maxWait = 0
                             while LocalPlayer.PlayerGui:FindFirstChild("EndGameUI") and maxWait < 30 do
                                 task.wait(0.5)
                                 maxWait = maxWait + 0.5
                             end
                             
-                            if not LocalPlayer.PlayerGui:FindFirstChild("EndGameUI") then
-                                task.wait(2) 
-                                local success, err = pcall(function()
-                                    local remotes = RS:FindFirstChild("Remotes")
-                                    local restartEvent = remotes and remotes:FindFirstChild("RestartMatch")
-                                    if restartEvent then
-                                        restartEvent:FireServer()
-                                        task.wait(3)
-                                        endgameCount = 0
-                                        maxRoundsReached = false
-                                        hasRun = false
-                                    end
-                                end)
+                            print("[Seamless Fix] EndGameUI closed, attempting restart...")
+                            task.wait(2)
+                            
+                            local success, err = pcall(function()
+                                local remotes = RS:FindFirstChild("Remotes")
+                                local restartEvent = remotes and remotes:FindFirstChild("RestartMatch")
+                                if restartEvent then
+                                    restartEvent:FireServer()
+                                    print("[Seamless Fix] Restart signal sent")
+                                    task.wait(3)
+                                    endgameCount = 0
+                                    maxRoundsReached = false
+                                    hasRun = false
+                                else
+                                    warn("[Seamless Fix] RestartMatch remote not found")
+                                end
+                            end)
+                            
+                            if not success then
+                                warn("[Seamless Fix] Restart failed:", err)
                             end
                         end)
-                    else
-                        hasRun = false
                     end
                 end
             end)
@@ -5886,6 +6321,7 @@ if not isInLobby then
         
         LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
             if child.Name == "TeleportUI" and maxRoundsReached then
+                print("[Seamless Fix] Teleport detected after max rounds, resetting counter...")
                 endgameCount = 0
                 maxRoundsReached = false
                 task.wait(2)
@@ -5895,623 +6331,6 @@ if not isInLobby then
     end)
     
 end
-
-
-getgenv().MacroRecording = false
-getgenv().MacroData = getgenv().MacroData or {}
-getgenv().TowerPlaceCounts = {}
-getgenv().MacroCurrentStep = 0
-getgenv().MacroTotalSteps = 0
-local placementMonitor = {}
-
-local mt = getrawmetatable(game)
-local old = mt.__namecall
-setreadonly(mt, false)
-
-mt.__namecall = function(self, ...)
-    local method, args = getnamecallmethod(), {...}
-    local remoteName = tostring(self.Name or "")
-    
-    local result = old(self, ...)
-    
-    if getgenv().MacroRecording and (method == "FireServer" or method == "InvokeServer") then
-        if remoteName:lower():find("place") or remoteName:lower():find("tower") then
-            if args[1] then
-                task.spawn(function()
-                    pcall(function()
-                        local towerName = tostring(args[1])
-                        local now = tick()
-                        local actionKey = towerName .. "_" .. now
-                        
-                        if placementMonitor[actionKey] then return end
-                        placementMonitor[actionKey] = true
-                        
-                        getgenv().TowerPlaceCounts = getgenv().TowerPlaceCounts or {}
-                        local countBefore = getgenv().TowerPlaceCounts[towerName] or 0
-                        
-                        local placementLimit = 999
-                        pcall(function()
-                            local existingTower = workspace.Towers:FindFirstChild(towerName)
-                            if existingTower and existingTower:FindFirstChild("PlacementLimit") then
-                                placementLimit = existingTower.PlacementLimit.Value
-                            end
-                        end)
-                        
-                        if countBefore >= placementLimit then
-                            placementMonitor[actionKey] = nil
-                            return
-                        end
-                        
-                        task.wait(0.65)
-                        
-                        local countAfter = 0
-                        pcall(function()
-                            for _, t in pairs(workspace.Towers:GetChildren()) do
-                                if t.Name == towerName and t:FindFirstChild("Owner") and t.Owner.Value == LocalPlayer then
-                                    countAfter = countAfter + 1
-                                end
-                            end
-                        end)
-                        
-                        if countAfter > countBefore and countAfter <= placementLimit then
-                            task.wait(0.12)
-                            
-                            local cost = 0
-                            if getgenv().GetRecentCashDecrease then
-                                cost = getgenv().GetRecentCashDecrease(2.5)
-                            end
-                            
-                            local savedArgs = {}
-                            savedArgs[1] = args[1]
-                            if args[2] and typeof(args[2]) == "CFrame" then
-                                savedArgs[2] = {args[2]:GetComponents()}
-                            end
-                            
-                            getgenv().TowerPlaceCounts[towerName] = countAfter
-                            
-                            table.insert(getgenv().MacroData, {
-                                RemoteName = remoteName,
-                                Args = savedArgs,
-                                Time = now,
-                                IsInvoke = (method == "InvokeServer"),
-                                Cost = cost,
-                                TowerName = towerName,
-                                ActionType = "Place"
-                            })
-                            
-                            getgenv().MacroCurrentStep = #getgenv().MacroData
-                            getgenv().MacroTotalSteps = #getgenv().MacroData
-                            
-                            if getgenv().UpdateMacroStatus then
-                                getgenv().UpdateMacroStatus()
-                            end
-                        end
-                        
-                        placementMonitor[actionKey] = nil
-                    end)
-                end)
-            end
-        end
-        
-        if remoteName:lower():find("upgrade") then
-            task.spawn(function()
-                pcall(function()
-                    local towerModel = args[1]
-                    if not towerModel or not towerModel:IsA("Model") then return end
-                    
-                    local towerName = towerModel.Name
-                    local now = tick()
-                    
-                    task.wait(0.3)
-                    
-                    local cost = 0
-                    if getgenv().GetRecentCashDecrease then
-                        cost = getgenv().GetRecentCashDecrease(1.5)
-                    end
-                    
-                    table.insert(getgenv().MacroData, {
-                        RemoteName = "Upgrade",
-                        Args = {nil},
-                        Time = now,
-                        IsInvoke = false,
-                        Cost = cost,
-                        TowerName = towerName,
-                        ActionType = "Upgrade"
-                    })
-                    
-                    getgenv().MacroCurrentStep = #getgenv().MacroData
-                    getgenv().MacroTotalSteps = #getgenv().MacroData
-                    
-                    if getgenv().UpdateMacroStatus then
-                        getgenv().UpdateMacroStatus()
-                    end
-                end)
-            end)
-        end
-    end
-    
-    return result
-end
-
-setreadonly(mt, true)
-
-
-
-local function hasStartButton()
-    local hasStart = false
-    pcall(function()
-        local b = LocalPlayer.PlayerGui:FindFirstChild("Bottom")
-        if b and b.Frame and b.Frame:GetChildren()[2] then
-            local sub = b.Frame:GetChildren()[2]:GetChildren()[6]
-            if sub and sub.TextButton and sub.TextButton.TextLabel then
-                hasStart = sub.TextButton.TextLabel.Text == "Start"
-            end
-        end
-    end)
-    return hasStart
-end
-
-local function isKilled()
-    return getgenv().MacroSystemKillSwitch == true
-end
-
-local function detectMacroProgress()
-    local lastCompletedStep = 0
-    
-    pcall(function()
-        if not getgenv().CurrentMacro or not getgenv().Macros[getgenv().CurrentMacro] then
-            return
-        end
-        
-        local macroData = getgenv().Macros[getgenv().CurrentMacro]
-        if not macroData or #macroData == 0 then return end
-        
-        local towerStates = {}
-        local playerTowers = workspace:FindFirstChild("Towers")
-        if not playerTowers then return end
-        
-        for _, tower in pairs(playerTowers:GetChildren()) do
-            pcall(function()
-                local ownerValue = tower:FindFirstChild("Owner")
-                if ownerValue and ownerValue.Value == LocalPlayer then
-                    local towerName = tower.Name
-                    
-                    if not towerStates[towerName] then
-                        towerStates[towerName] = {
-                            count = 0,
-                            levels = {}
-                        }
-                    end
-                    
-                    towerStates[towerName].count = towerStates[towerName].count + 1
-                    
-                    local levelValue = tower:FindFirstChild("Level")
-                    if levelValue then
-                        table.insert(towerStates[towerName].levels, levelValue.Value)
-                    end
-                end
-            end)
-        end
-        
-        local expectedCounts = {}
-        local expectedLevels = {}
-        
-        for i, action in ipairs(macroData) do
-            local towerName = action.TowerName
-            if towerName then
-                if action.ActionType == "Place" then
-                    expectedCounts[towerName] = (expectedCounts[towerName] or 0) + 1
-                    
-                    local actualCount = (towerStates[towerName] and towerStates[towerName].count) or 0
-                    if actualCount < expectedCounts[towerName] then
-                        lastCompletedStep = i - 1
-                        return
-                    end
-                    
-                    if not expectedLevels[towerName] then
-                        expectedLevels[towerName] = {}
-                    end
-                    table.insert(expectedLevels[towerName], 0)
-                    
-                    lastCompletedStep = i
-                    
-                elseif action.ActionType == "Upgrade" then
-                    if not expectedLevels[towerName] then
-                        expectedLevels[towerName] = {}
-                    end
-                    
-                    local instanceIndex = #expectedLevels[towerName]
-                    if instanceIndex > 0 then
-                        local currentExpectedLevel = expectedLevels[towerName][instanceIndex]
-                        local newExpectedLevel = currentExpectedLevel + 1
-                        expectedLevels[towerName][instanceIndex] = newExpectedLevel
-                        
-                        local actualLevels = (towerStates[towerName] and towerStates[towerName].levels) or {}
-                        local actualLevel = actualLevels[instanceIndex] or 0
-                        
-                        if actualLevel < newExpectedLevel then
-                            lastCompletedStep = i - 1
-                            return
-                        end
-                        
-                        lastCompletedStep = i
-                    end
-                end
-            end
-        end
-    end)
-    
-    return lastCompletedStep
-end
-
-getgenv().HasStartButton = hasStartButton
-getgenv().DetectMacroProgress = detectMacroProgress
-
-task.spawn(function()
-    while true do
-        task.wait(0.1)
-        
-        if getgenv().MacroPlayEnabled and not isKilled() then
-            pcall(function()
-                if not getgenv().CurrentMacro or getgenv().CurrentMacro == "" then
-                    getgenv().MacroPlayEnabled = false
-                    getgenv().MacroStatusText = "Idle"
-                    getgenv().UpdateMacroStatus()
-                    return
-                end
-                
-                if not getgenv().Macros[getgenv().CurrentMacro] then
-                    getgenv().MacroPlayEnabled = false
-                    getgenv().MacroStatusText = "Idle"
-                    getgenv().UpdateMacroStatus()
-                    return
-                end
-                
-                getgenv().MacroStatusText = "Initializing"
-                getgenv().MacroCurrentStep = 0
-                getgenv().MacroTotalSteps = #getgenv().Macros[getgenv().CurrentMacro]
-                getgenv().UpdateMacroStatus()
-                
-                ensureCachesReady()
-                
-                getgenv().MacroStatusText = "Waiting for Start"
-                getgenv().UpdateMacroStatus()
-                
-                local waitStartTime = tick()
-                while hasStartButton() and getgenv().MacroPlayEnabled and not isKilled() do
-                    task.wait(0.1)
-                    local elapsed = math.floor(tick() - waitStartTime)
-                    if getgenv().MacroWaitingLabel then
-                        getgenv().MacroWaitingLabel:UpdateName("⏳ Waiting: " .. elapsed .. "s")
-                    end
-                end
-                
-                if isKilled() or not getgenv().MacroPlayEnabled then
-                    getgenv().MacroStatusText = "Idle"
-                    getgenv().UpdateMacroStatus()
-                    return
-                end
-                
-                getgenv().MacroStatusText = "Detecting Progress"
-                getgenv().UpdateMacroStatus()
-                
-                local resumeStep = detectMacroProgress()
-                
-                if resumeStep > 0 then
-                    getgenv().MacroCurrentStep = resumeStep + 1
-                    Window:Notify({
-                        Title = "Auto-Resume",
-                        Description = "Resuming from step " .. (resumeStep + 1),
-                        Lifetime = 5
-                    })
-                else
-                    getgenv().MacroCurrentStep = 1
-                end
-                
-                getgenv().MacroStatusText = "Playing"
-                getgenv().UpdateMacroStatus()
-                
-                local step = getgenv().MacroCurrentStep or 1
-                local macroData = getgenv().Macros[getgenv().CurrentMacro]
-                local shouldRestart = false
-                local lastWave = 0
-                
-                pcall(function()
-                    lastWave = RS.Wave.Value
-                end)
-                
-                task.spawn(function()
-                    while getgenv().MacroPlayEnabled and not isKilled() do
-                        if hasStartButton() then
-                            shouldRestart = true
-                        end
-                        task.wait()
-                    end
-                    if isKilled() then
-                        getgenv().MacroPlayEnabled = false
-                    end
-                end)
-                
-                while getgenv().MacroPlayEnabled and not isKilled() do
-                    if isKilled() then
-                        getgenv().MacroPlayEnabled = false
-                        break
-                    end
-                    
-                    if shouldRestart then
-                        getgenv().MacroStatusText = "Restart Detected"
-                        if getgenv().MacroStatusLabel then
-                            getgenv().MacroStatusLabel:UpdateName("Status: Restart Detected")
-                        end
-                        if getgenv().MacroWaitingLabel then
-                            getgenv().MacroWaitingLabel:UpdateName("⏳ Waiting: For start...")
-                        end
-                        
-                        repeat 
-                            task.wait() 
-                        until not hasStartButton() or not getgenv().MacroPlayEnabled or isKilled()
-                        
-                        if not getgenv().MacroPlayEnabled or isKilled() then break end
-                        
-                        shouldRestart = false
-                        step = 1
-                        task.wait(0.5)
-                        Window:Notify({
-                            Title = "Game Restarted",
-                            Description = "Macro restarting from step 1",
-                            Lifetime = 3
-                        })
-                        continue
-                    end
-                    
-                    if step > #macroData then
-                        getgenv().MacroStatusText = "Waiting Next Round"
-                        if getgenv().MacroStatusLabel then
-                            getgenv().MacroStatusLabel:UpdateName("Status: Waiting Next Round")
-                        end
-                        
-                        local currentWave = 0
-                        repeat
-                            task.wait(0.1)
-                            
-                            if isKilled() then
-                                getgenv().MacroPlayEnabled = false
-                                break
-                            end
-                            
-                            pcall(function() 
-                                currentWave = RS.Wave.Value 
-                            end)
-                            
-                            if currentWave < lastWave and not hasStartButton() then
-                                lastWave = currentWave
-                                step = 1
-                                task.wait(0.5)
-                                Window:Notify({
-                                    Title = "Seamless Retry",
-                                    Description = "Restarting macro...",
-                                    Lifetime = 2
-                                })
-                                break
-                            end
-                            
-                            lastWave = currentWave
-                        until not getgenv().MacroPlayEnabled or isKilled()
-                        
-                        if not getgenv().MacroPlayEnabled or isKilled() then break end
-                        continue
-                    end
-                    
-                    local action = macroData[step]
-                    
-                    if not action then
-                        step = step + 1
-                        continue
-                    end
-                    
-                    getgenv().MacroCurrentStep = step
-                    getgenv().MacroTotalSteps = #macroData
-                    
-                    if getgenv().MacroStepLabel then
-                        getgenv().MacroStepLabel:UpdateName("📝 Step: " .. step .. "/" .. #macroData)
-                    end
-                    
-                    local cash = tonumber(getgenv().MacroCurrentCash) or 0
-                    local actionCost = tonumber(action.Cost) or 0
-                    
-                    if actionCost > 0 and cash < actionCost then
-                        if isKilled() then
-                            getgenv().MacroPlayEnabled = false
-                            break
-                        end
-                        
-                        if not action.waitStartTime then
-                            action.waitStartTime = tick()
-                        end
-                        
-                        local waitTime = tick() - action.waitStartTime
-                        
-                        getgenv().MacroStatusText = "Waiting Cash"
-                        if getgenv().MacroStatusLabel then
-                            getgenv().MacroStatusLabel:UpdateName("Status: Waiting Cash")
-                        end
-                        if getgenv().MacroWaitingLabel then
-                            getgenv().MacroWaitingLabel:UpdateName("⏳ Waiting: $" .. actionCost .. " (" .. math.floor(waitTime) .. "s)")
-                        end
-                        if getgenv().MacroActionLabel then
-                            getgenv().MacroActionLabel:UpdateName("⚡ Action: " .. (action.ActionType or "Action"))
-                        end
-                        if getgenv().MacroUnitLabel then
-                            getgenv().MacroUnitLabel:UpdateName("🗼 Unit: " .. (action.TowerName or "?"))
-                        end
-                        
-                        RunService.Heartbeat:Wait()
-                        continue
-                    end
-                    
-                    action.waitStartTime = nil
-                    
-                    getgenv().MacroStatusText = "Playing"
-                    if getgenv().MacroStatusLabel then
-                        getgenv().MacroStatusLabel:UpdateName("Status: Playing")
-                    end
-                    if getgenv().MacroWaitingLabel then
-                        getgenv().MacroWaitingLabel:UpdateName("⏳ Waiting: None")
-                    end
-                    if getgenv().MacroActionLabel then
-                        getgenv().MacroActionLabel:UpdateName("⚡ Action: " .. (action.ActionType or "Action"))
-                    end
-                    if getgenv().MacroUnitLabel then
-                        getgenv().MacroUnitLabel:UpdateName("🗼 Unit: " .. (action.TowerName or "?"))
-                    end
-                    
-                    local function isAutoUpgradeClone(towerName)
-                        return towerName == "NarutoBaryonClone" or towerName == "WukongClone"
-                    end
-                    
-                    if action.TowerName and action.ActionType == "Upgrade" and isAutoUpgradeClone(action.TowerName) then
-                        step = step + 1
-                        continue
-                    end
-                    
-                    pcall(function()
-                        if not action.RemoteName then
-                            return
-                        end
-                        
-                        local remote = getgenv().MacroRemoteCache[action.RemoteName:lower()]
-                        if not remote then 
-                            return 
-                        end
-                        
-                        if action.RemoteName:lower():find("upgrade") then
-                            local towerToUpgrade = nil
-                            
-                            for _, t in pairs(workspace.Towers:GetChildren()) do
-                                if t:FindFirstChild("Owner") and t.Owner.Value == LocalPlayer and t.Name == action.TowerName then
-                                    towerToUpgrade = t
-                                    break
-                                end
-                            end
-                            
-                            if not towerToUpgrade then
-                                return
-                            end
-                            
-                            local beforeLevel = towerToUpgrade:FindFirstChild("Upgrade") and towerToUpgrade.Upgrade.Value or 0
-                            local maxLevel = towerToUpgrade:FindFirstChild("MaxUpgrade") and towerToUpgrade.MaxUpgrade.Value or 999
-                            
-                            if beforeLevel >= maxLevel then
-                                return
-                            end
-                            
-                            if remote:IsA("RemoteFunction") then
-                                remote:InvokeServer(towerToUpgrade)
-                            else
-                                remote:FireServer(towerToUpgrade)
-                            end
-                            
-                            task.wait(0.3)
-                            
-                        else
-                            local args = {action.Args[1]}
-                            if action.Args[2] and type(action.Args[2]) == "table" then
-                                args[2] = CFrame.new(unpack(action.Args[2]))
-                            else
-                                args[2] = action.Args[2]
-                            end
-                            
-                            if remote:IsA("RemoteFunction") then
-                                remote:InvokeServer(unpack(args))
-                            else
-                                remote:FireServer(unpack(args))
-                            end
-                            
-                            task.wait(0.3)
-                        end
-                    end)
-                    
-                    step = step + 1
-                    
-                    local stepDelay = getgenv().MacroStepDelay or 0
-                    if stepDelay > 0 then
-                        task.wait(stepDelay)
-                    else
-                        task.wait(0.15)
-                    end
-                end
-                
-                getgenv().MacroCurrentStep = 0
-                getgenv().MacroStatusText = "Idle"
-                if getgenv().MacroStatusLabel then
-                    getgenv().MacroStatusLabel:UpdateName("Status: Idle")
-                end
-                if getgenv().MacroActionLabel then
-                    getgenv().MacroActionLabel:UpdateName("⚡ Action: None")
-                end
-                if getgenv().MacroUnitLabel then
-                    getgenv().MacroUnitLabel:UpdateName("🗼 Unit: None")
-                end
-                if getgenv().MacroWaitingLabel then
-                    getgenv().MacroWaitingLabel:UpdateName("⏳ Waiting: None")
-                end
-                if getgenv().MacroStepLabel then
-                    getgenv().MacroStepLabel:UpdateName("📝 Step: 0/0")
-                end
-            end)
-        end
-    end
-end)
-
-
-
-task.spawn(function()
-    local lastMapKey = nil
-    
-    while true do
-        task.wait(2)
-        
-        pcall(function()
-            local mapNameValue = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("MapName")
-            local gamemodeValue = RS:FindFirstChild("Gamemode")
-            
-            if not mapNameValue or not gamemodeValue then return end
-            
-            local mapName = mapNameValue.Value
-            local gamemode = gamemodeValue.Value
-            
-            if not mapName or not gamemode then return end
-            
-            local key = gamemode .. "_" .. mapName
-            
-            if key ~= lastMapKey then
-                lastMapKey = key
-                
-                if getgenv().MacroMaps[key] and getgenv().MacroMaps[key] ~= "None" and getgenv().Macros[getgenv().MacroMaps[key]] then
-                    getgenv().CurrentMacro = getgenv().MacroMaps[key]
-                    getgenv().MacroData = getgenv().Macros[getgenv().CurrentMacro]
-                    getgenv().MacroTotalSteps = #getgenv().MacroData
-                    
-                    if macroDropdown and macroDropdown.UpdateSelection then
-                        pcall(function()
-                            macroDropdown:UpdateSelection(getgenv().CurrentMacro)
-                        end)
-                    end
-                    
-                    getgenv().UpdateMacroStatus()
-                    saveMacroSettings()
-                    
-                    Window:Notify({
-                        Title = "Macro Auto-Load",
-                        Description = "Loaded: " .. getgenv().CurrentMacro .. " for " .. mapName,
-                        Lifetime = 5
-                    })
-                end
-            end
-        end)
-    end
-end)
-
 
 
 task.spawn(function()
