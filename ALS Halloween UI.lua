@@ -4564,8 +4564,8 @@ task.spawn(function()
             end
         end)
         
-        if lastWaveForRetry > 10 and currentWave == 1 then
-            print("[Auto Retry] Wave reset detected (", lastWaveForRetry, "->", currentWave, ") - Resetting UI processing flag")
+        if lastWaveForRetry > 0 and currentWave > 0 and currentWave < lastWaveForRetry then
+            print("[Auto Retry] Wave decrease detected (", lastWaveForRetry, "->", currentWave, ") - Round restarted, resetting UI flag")
             hasProcessedCurrentUI = false
             lastEndGameUIInstance = nil
         end
