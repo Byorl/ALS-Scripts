@@ -2,6 +2,15 @@ repeat task.wait() until game:IsLoaded()
 
 local MacLib = loadstring(game:HttpGet("https://github.com/biggaboy212/Maclib/releases/latest/download/maclib.txt"))()
 
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local HttpService = game:GetService("HttpService")
+local RS = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local TeleportService = game:GetService("TeleportService")
+local VIM = game:GetService("VirtualInputManager")
+
 local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
 local MOBILE_DELAY_MULTIPLIER = isMobile and 1.5 or 1.0
 
@@ -15,15 +24,6 @@ local Window = MacLib:Window({
     Keybind = Enum.KeyCode.LeftControl,
     AcrylicBlur = true,
 })
-
-local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer
-local HttpService = game:GetService("HttpService")
-local RS = game:GetService("ReplicatedStorage")
-local UserInputService = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
-local TeleportService = game:GetService("TeleportService")
-local VIM = game:GetService("VirtualInputManager")
 
 task.wait(2)
 
