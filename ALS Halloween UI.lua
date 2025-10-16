@@ -1826,11 +1826,13 @@ local function playMacroV2()
             return
         end
         
-        print("[Macro] Starting playback in 3 seconds...")
-        getgenv().MacroStatusText = "Starting Soon"
-        getgenv().MacroWaitingText = "3 seconds..."
-        getgenv().UpdateMacroStatus()
-        task.wait(3)
+        print("[Macro] Starting playback in 5 seconds...")
+        for i = 5, 1, -1 do
+            getgenv().MacroStatusText = "Starting Soon"
+            getgenv().MacroWaitingText = i .. " seconds..."
+            getgenv().UpdateMacroStatus()
+            task.wait(1)
+        end
         
         if not getgenv().MacroPlayEnabled then
             getgenv().MacroPlaybackActive = false
@@ -1970,6 +1972,8 @@ local function playMacroV2()
             getgenv().MacroWaitingText = ""
             getgenv().UpdateMacroStatus()
             
+            print("[Macro] Executing step", step, "-", action.ActionType, action.TowerName or "?", "Cost:", action.Cost or 0)
+            
             local actionSuccess = false
             local actionMessage = ""
             
@@ -1980,8 +1984,10 @@ local function playMacroV2()
             if success and result then
                 actionSuccess = true
                 actionMessage = msg or "Success"
+                print("[Macro] Step", step, "SUCCESS")
             else
                 actionMessage = msg or "Action failed"
+                print("[Macro] Step", step, "FAILED:", actionMessage)
             end
             
             if not actionSuccess then
