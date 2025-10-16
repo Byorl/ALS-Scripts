@@ -2010,20 +2010,38 @@ local function playMacroV2()
         end
         
         if step > #macroData then
-            getgenv().MacroStatusText = "Finished Macro"
-            getgenv().MacroWaitingText = "All steps complete"
+            print("[Macro] Finished all steps, waiting for next round...")
+            getgenv().MacroStatusText = "Waiting for Next Round"
+            getgenv().MacroWaitingText = "Macro complete"
             getgenv().MacroCurrentStep = #macroData
             getgenv().MacroTotalSteps = #macroData
             getgenv().MacroActionText = "Complete"
             getgenv().MacroUnitText = ""
+            getgenv().UpdateMacroStatus()
+            
+            while getgenv().MacroPlayEnabled do
+                task.wait(1)
+                
+                if getgenv().MacroGameState.hasStartButton or getgenv().MacroGameState.currentWave == 0 then
+                    print("[Macro] New round detected, will restart macro...")
+                    getgenv().MacroPlaybackActive = false
+                    return
+                end
+                
+                if getgenv().MacroGameState.gameEnded then
+                    print("[Macro] Game ended, will restart macro...")
+                    getgenv().MacroPlaybackActive = false
+                    return
+                end
+            end
         else
             getgenv().MacroStatusText = "Idle"
             getgenv().MacroCurrentStep = 0
             getgenv().MacroActionText = ""
             getgenv().MacroUnitText = ""
             getgenv().MacroWaitingText = ""
+            getgenv().UpdateMacroStatus()
         end
-        getgenv().UpdateMacroStatus()
         
         getgenv().MacroPlaybackActive = false
     end)
@@ -4533,9 +4551,26 @@ task.spawn(function()
     local lastEndGameUIInstance = nil
     local hasProcessedCurrentUI = false
     local endGameUIDetectedTime = 0
+    local lastWaveForRetry = 0
     
     while true do
         task.wait(0.5)
+        
+        local currentWave = 0
+        pcall(function()
+            local wave = RS:FindFirstChild("Wave")
+            if wave and wave.Value then
+                currentWave = wave.Value
+            end
+        end)
+        
+        if lastWaveForRetry > 10 and currentWave == 1 then
+            print("[Auto Retry] Wave reset detected (", lastWaveForRetry, "->", currentWave, ") - Resetting UI processing flag")
+            hasProcessedCurrentUI = false
+            lastEndGameUIInstance = nil
+        end
+        lastWaveForRetry = currentWave
+        
         local success, errorMsg = pcall(function()
             if not LocalPlayer or not LocalPlayer.PlayerGui then return end
             
@@ -4550,6 +4585,11 @@ task.spawn(function()
             
             if lastEndGameUIInstance and endGameUI ~= lastEndGameUIInstance then
                 hasProcessedCurrentUI = false
+                lastEndGameUIInstance = endGameUI
+                endGameUIDetectedTime = tick()
+            end
+            
+            if not lastEndGameUIInstance then
                 lastEndGameUIInstance = endGameUI
                 endGameUIDetectedTime = tick()
             end
