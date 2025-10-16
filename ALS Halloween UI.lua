@@ -2,10 +2,17 @@ repeat task.wait() until game:IsLoaded()
 
 local MacLib = loadstring(game:HttpGet("https://github.com/biggaboy212/Maclib/releases/latest/download/maclib.txt"))()
 
+local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+local MOBILE_DELAY_MULTIPLIER = isMobile and 1.5 or 1.0
+
 local Window = MacLib:Window({
     Title = "ALS Macro System",
     Subtitle = "Anime Last Stand Automation",
-    Size = UDim2.fromOffset(650, 500),
+    if isMobile then
+        Size = UDim2.fromOffset(580, 480),
+    else
+        Size = UDim2.fromOffset(760, 560),
+    end
     DragStyle = 1,
     DisabledWindowControls = {},
     ShowUserInfo = true,
@@ -21,10 +28,6 @@ local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local TeleportService = game:GetService("TeleportService")
 local VIM = game:GetService("VirtualInputManager")
-
-
-local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
-local MOBILE_DELAY_MULTIPLIER = isMobile and 1.5 or 1.0
 
 task.wait(2)
 
@@ -2212,6 +2215,10 @@ getgenv().WukongTrackedClones = {}
 getgenv().EventJoinDelay = tonumber(getgenv().Config.inputs.EventJoinDelay) or 0
 getgenv().AutoJoinDelay = tonumber(getgenv().Config.inputs.AutoJoinDelay) or 0
 
+getgenv().FinalExpAutoJoinEasyEnabled = getgenv().Config.toggles.FinalExpAutoJoinEasyToggle or false
+getgenv().FinalExpAutoJoinHardEnabled = getgenv().Config.toggles.FinalExpAutoJoinHardToggle or false
+getgenv().FinalExpAutoSkipShopEnabled = getgenv().Config.toggles.FinalExpAutoSkipShopToggle or false
+
 local BLACKLISTED_UNITS = {
     "NarutoBaryonClone"
 }
@@ -3409,13 +3416,85 @@ Sections.BreachRight:SubLabel({
 })
 
 
-Sections.FinalExpeditionLeft:Header({ Text = "🏔️ Expedition Settings" })
-Sections.FinalExpeditionLeft:SubLabel({ Text = "Final Expedition automation (Coming Soon)" })
+Sections.FinalExpeditionLeft:Header({ Text = "🏔️ Auto Join" })
+Sections.FinalExpeditionLeft:SubLabel({ Text = "Automatically join Final Expedition with your preferred difficulty" })
 
-Sections.FinalExpeditionLeft:Divider()
+createToggle(
+    Sections.FinalExpeditionLeft,
+    "Auto Join Easy",
+    "FinalExpAutoJoinEasyToggle",
+    function(value)
+        getgenv().FinalExpAutoJoinEasyEnabled = value
+        if value and getgenv().FinalExpAutoJoinHardEnabled then
+            getgenv().FinalExpAutoJoinHardEnabled = false
+            getgenv().Config.toggles.FinalExpAutoJoinHardToggle = false
+            saveConfig(getgenv().Config)
+            pcall(function()
+                if getgenv().FinalExpAutoJoinHardToggle then
+                    getgenv().FinalExpAutoJoinHardToggle:UpdateState(false)
+                end
+            end)
+        end
+        Window:Notify({
+            Title = "Final Expedition",
+            Description = value and "Auto Join Easy Enabled" or "Auto Join Easy Disabled",
+            Lifetime = 3
+        })
+    end,
+    getgenv().FinalExpAutoJoinEasyEnabled
+)
+
+local finalExpHardToggle = createToggle(
+    Sections.FinalExpeditionLeft,
+    "Auto Join Hard",
+    "FinalExpAutoJoinHardToggle",
+    function(value)
+        getgenv().FinalExpAutoJoinHardEnabled = value
+        if value and getgenv().FinalExpAutoJoinEasyEnabled then
+            getgenv().FinalExpAutoJoinEasyEnabled = false
+            getgenv().Config.toggles.FinalExpAutoJoinEasyToggle = false
+            saveConfig(getgenv().Config)
+            pcall(function()
+                if getgenv().FinalExpAutoJoinEasyToggle then
+                    getgenv().FinalExpAutoJoinEasyToggle:UpdateState(false)
+                end
+            end)
+        end
+        Window:Notify({
+            Title = "Final Expedition",
+            Description = value and "Auto Join Hard Enabled" or "Auto Join Hard Disabled",
+            Lifetime = 3
+        })
+    end,
+    getgenv().FinalExpAutoJoinHardEnabled
+)
+
+getgenv().FinalExpAutoJoinHardToggle = finalExpHardToggle
 
 Sections.FinalExpeditionLeft:SubLabel({
-    Text = "Final Expedition automation features will be added in a future update. This will include automatic progression and reward collection."
+    Text = "⚠️ Only enable ONE auto join option at a time"
+})
+
+Sections.FinalExpeditionRight:Header({ Text = "⚙️ Automation" })
+Sections.FinalExpeditionRight:SubLabel({ Text = "Additional automation options" })
+
+createToggle(
+    Sections.FinalExpeditionRight,
+    "Auto Skip Shop",
+    "FinalExpAutoSkipShopToggle",
+    function(value)
+        getgenv().FinalExpAutoSkipShopEnabled = value
+        Window:Notify({
+            Title = "Final Expedition",
+            Description = value and "Auto Skip Shop Enabled" or "Auto Skip Shop Disabled",
+            Lifetime = 3
+        })
+    end,
+    getgenv().FinalExpAutoSkipShopEnabled
+)
+
+Sections.FinalExpeditionRight:SubLabel({
+    Text = "Automatically skips the shop selection when available"
 })
 
 
@@ -4252,6 +4331,65 @@ task.spawn(function()
         end
     end)
 end)
+
+
+local function isInLobby()
+    local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+    if not playerGui then return false end
+    
+    local lobbyUI = playerGui:FindFirstChild("LobbyUI")
+    return lobbyUI ~= nil
+end
+
+if isInLobby() then
+    task.spawn(function()
+        local finalExpRemote = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("FinalExpeditionStart")
+        if not finalExpRemote then
+            return
+        end
+        while true do
+            task.wait(2)
+            if getgenv().FinalExpAutoJoinEasyEnabled then
+                pcall(function()
+                    finalExpRemote:FireServer("Easy")
+                end)
+            elseif getgenv().FinalExpAutoJoinHardEnabled then
+                pcall(function()
+                    finalExpRemote:FireServer("Hard")
+                end)
+            end
+        end
+    end)
+end
+
+if not isInLobby() then
+    task.spawn(function()
+        local abilitySelection = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("AbilitySelection")
+        if not abilitySelection then
+            return
+        end
+        task.spawn(function()
+            while true do
+                task.wait(5)
+                if getgenv().FinalExpAutoSkipShopEnabled then
+                    pcall(function()
+                        abilitySelection:FireServer("FinalExpeditionSelection", "Double_Dungeon")
+                    end)
+                end
+            end
+        end)
+        task.spawn(function()
+            while true do
+                task.wait(5)
+                if getgenv().FinalExpAutoSkipShopEnabled then
+                    pcall(function()
+                        abilitySelection:FireServer("FinalExpeditionSelection", "Dungeon")
+                    end)
+                end
+            end
+        end)
+    end)
+end
 
 
 local function formatNumber(num)
@@ -5961,7 +6099,7 @@ task.spawn(function()
     end
 end)
 
-if getgenv().Config.toggles.AutoHideUIToggle then
+if getgenv().Config.toggles.AutoHideUIEnabled then
     task.spawn(function()
         task.wait(2)
         
