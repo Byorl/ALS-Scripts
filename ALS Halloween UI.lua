@@ -19,10 +19,15 @@ local VIM = game:GetService("VirtualInputManager")
 local isMobile = UserInputService.TouchEnabled
 local MOBILE_DELAY_MULTIPLIER = isMobile and 1.5 or 1.0
 
+local defaultWidth = 580
+local defaultHeight = 480
+local customWidth = tonumber(getgenv().Config and getgenv().Config.inputs and getgenv().Config.inputs.UIWidth) or defaultWidth
+local customHeight = tonumber(getgenv().Config and getgenv().Config.inputs and getgenv().Config.inputs.UIHeight) or defaultHeight
+
 local Window = MacLib:Window({
-    Title = "Byorl Last Stand",
+    Title = "ALS Macro System",
     Subtitle = "Anime Last Stand Automation",
-    Size = isMobile and UDim2.fromOffset(580, 480) or UDim2.fromOffset(868, 650),
+    Size = UDim2.fromOffset(customWidth, customHeight),
     DragStyle = 1,
     DisabledWindowControls = {},
     ShowUserInfo = true,
@@ -1277,13 +1282,24 @@ local function executeAction(action)
     end
     
     if action.ActionType == "Upgrade" then
-        local tower = nil
+        local towers = {}
         for _, t in pairs(workspace.Towers:GetChildren()) do
             if t.Name == action.TowerName and t:FindFirstChild("Owner") and t.Owner.Value == LocalPlayer then
-                tower = t
-                break
+                table.insert(towers, t)
             end
         end
+        
+        if #towers == 0 then
+            return false, "Tower not found: " .. action.TowerName
+        end
+        
+        table.sort(towers, function(a, b)
+            local aLevel = a:FindFirstChild("Upgrade") and a.Upgrade.Value or 0
+            local bLevel = b:FindFirstChild("Upgrade") and b.Upgrade.Value or 0
+            return aLevel < bLevel
+        end)
+        
+        local tower = towers[1]
         
         if tower then
             local currentLevel = tower:FindFirstChild("Upgrade") and tower.Upgrade.Value or 0
@@ -1295,7 +1311,7 @@ local function executeAction(action)
                 else
                     remote:FireServer(tower)
                 end
-                task.wait(0.3)
+                task.wait(0.5)
                 return true, "Upgraded"
             else
                 return true, "Already max level"
@@ -3545,6 +3561,53 @@ end
 
 Sections.SettingsLeft:Divider()
 
+Sections.SettingsLeft:Header({ Text = "� UI fSize (Restart Required)" })
+Sections.SettingsLeft:SubLabel({ Text = "Custom window size - changes apply on next script load" })
+
+createInput(
+    Sections.SettingsLeft,
+    "Width",
+    "UIWidth",
+    "Default: 580 (mobile) or 868 (desktop)",
+    "Numeric",
+    function(value)
+        local width = tonumber(value)
+        if width and width >= 400 and width <= 1920 then
+            getgenv().Config.inputs.UIWidth = width
+            saveConfig(getgenv().Config)
+            Window:Notify({
+                Title = "UI Width",
+                Description = "Set to " .. width .. " (restart to apply)",
+                Lifetime = 3
+            })
+        end
+    end,
+    tostring(getgenv().Config.inputs.UIWidth or (isMobile and 580 or 868))
+)
+
+createInput(
+    Sections.SettingsLeft,
+    "Height",
+    "UIHeight",
+    "Default: 480 (mobile) or 650 (desktop)",
+    "Numeric",
+    function(value)
+        local height = tonumber(value)
+        if height and height >= 300 and height <= 1080 then
+            getgenv().Config.inputs.UIHeight = height
+            saveConfig(getgenv().Config)
+            Window:Notify({
+                Title = "UI Height",
+                Description = "Set to " .. height .. " (restart to apply)",
+                Lifetime = 3
+            })
+        end
+    end,
+    tostring(getgenv().Config.inputs.UIHeight or (isMobile and 480 or 650))
+)
+
+Sections.SettingsLeft:Divider()
+
 Sections.SettingsLeft:Header({ Text = "💾 Configuration" })
 
 Sections.SettingsLeft:Button({
@@ -3953,26 +4016,41 @@ task.spawn(function()
                 local retryButton = buttons:FindFirstChild("Retry")
                 local leaveButton = buttons:FindFirstChild("Leave")
                 
+                local function getButtonText(button)
+                    if not button then return "" end
+                    local styling = button:FindFirstChild("Styling")
+                    if styling then
+                        local label = styling:FindFirstChild("Label")
+                        if label and label.Text then
+                            return label.Text:lower()
+                        end
+                    end
+                    return ""
+                end
+                
+                local nextText = getButtonText(nextButton)
+                local retryText = getButtonText(retryButton)
+                
                 local buttonToPress, actionName = nil, ""
                 
                 if getgenv().AutoSmartEnabled then
-                    if nextButton and nextButton.Visible then
+                    if nextButton and nextButton.Visible and (nextText:find("next") or nextText:find("continue")) then
                         buttonToPress = nextButton
                         actionName = "Next"
-                    elseif retryButton and retryButton.Visible then
+                    elseif retryButton and retryButton.Visible and (retryText:find("replay") or retryText:find("retry")) then
                         buttonToPress = retryButton
                         actionName = "Replay"
-                    elseif leaveButton then
+                    elseif leaveButton and leaveButton.Visible then
                         buttonToPress = leaveButton
                         actionName = "Leave"
                     end
-                elseif getgenv().AutoNextEnabled and nextButton and nextButton.Visible then
+                elseif getgenv().AutoNextEnabled and nextButton and nextButton.Visible and (nextText:find("next") or nextText:find("continue")) then
                     buttonToPress = nextButton
                     actionName = "Next"
-                elseif getgenv().AutoFastRetryEnabled and retryButton and retryButton.Visible then
+                elseif getgenv().AutoFastRetryEnabled and retryButton and retryButton.Visible and (retryText:find("replay") or retryText:find("retry")) then
                     buttonToPress = retryButton
                     actionName = "Replay"
-                elseif getgenv().AutoLeaveEnabled and leaveButton then
+                elseif getgenv().AutoLeaveEnabled and leaveButton and leaveButton.Visible then
                     buttonToPress = leaveButton
                     actionName = "Leave"
                 end
