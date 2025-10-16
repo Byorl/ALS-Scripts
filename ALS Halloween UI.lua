@@ -2,6 +2,11 @@ repeat task.wait() until game:IsLoaded()
 
 local MacLib = loadstring(game:HttpGet("https://github.com/biggaboy212/Maclib/releases/latest/download/maclib.txt"))()
 
+if not MacLib then
+    error("[ALS] Failed to load MacLib library")
+    return
+end
+
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local HttpService = game:GetService("HttpService")
@@ -14,32 +19,21 @@ local VIM = game:GetService("VirtualInputManager")
 local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
 local MOBILE_DELAY_MULTIPLIER = isMobile and 1.5 or 1.0
 
-local Window
+local Window = MacLib:Window({
+    Title = "ALS Macro System",
+    Subtitle = "Anime Last Stand Automation",
+    Size = isMobile and UDim2.fromOffset(580, 480) or UDim2.fromOffset(868, 650),
+    DragStyle = 1,
+    DisabledWindowControls = {},
+    ShowUserInfo = true,
+    Keybind = Enum.KeyCode.LeftControl,
+    AcrylicBlur = true,
+})
 
-if isMobile then
-    Window = MacLib:Window({
-        Title = "Byorl Last Stand ",
-        Subtitle = "Anime Last Stand Automation",
-        Size = UDim2.fromOffset(580, 480),
-        DragStyle = 1,
-        DisabledWindowControls = {},
-        ShowUserInfo = true,
-        Keybind = Enum.KeyCode.LeftControl,
-        AcrylicBlur = true,
-    })
-else
-    Window = MacLib:Window({
-        Title = "Byorl Last Stand ",
-        Subtitle = "Anime Last Stand Automation",
-        Size = UDim2.fromOffset(750, 640),
-        DragStyle = 1,
-        DisabledWindowControls = {},
-        ShowUserInfo = true,
-        Keybind = Enum.KeyCode.LeftControl,
-        AcrylicBlur = true,
-    })
+if not Window then
+    error("[ALS] Failed to create Window")
+    return
 end
-
 
 task.wait(2)
 
@@ -1964,7 +1958,8 @@ getgenv().OtherCards = {
     ["Fiery Surge I"] = 999, ["Fiery Surge II"] = 999,
     ["Grevious Wounds I"] = 999, ["Grevious Wounds II"] = 999,
     ["Scorching Hell I"] = 999, ["Scorching Hell II"] = 999,
-    ["Fortune Flow"] = 999, ["Soul Link"] = 999
+    ["Fortune Flow"] = 999, ["Soul Link"] = 999,
+    ["Seeting Bloodlust"] = 999
 }
 
 getgenv().BossRushGeneral = {
@@ -4179,7 +4174,9 @@ local function isOnCooldown(towerName, abilityName)
     if not last then return false end
     local scale = getCurrentTimeScale()
     local effectiveCd = d.cooldown / scale
-    return (tick() - last) < (effectiveCd + 0.15)
+    local timeSinceUse = tick() - last
+    local cooldownRemaining = effectiveCd - timeSinceUse
+    return cooldownRemaining > 0.5
 end
 
 local function setAbilityUsed(towerName, abilityName)
@@ -4385,10 +4382,12 @@ task.spawn(function()
                             end
                             
                             if shouldUse then
-                                useAbility(tower, abilityName)
-                                setAbilityUsed(infoName, abilityName)
-                                
-                                if unitName == "AsuraEvo" and abilityName == "Lines of Sanzu" then
+                                if not isOnCooldown(infoName, abilityName) then
+                                    useAbility(tower, abilityName)
+                                    setAbilityUsed(infoName, abilityName)
+                                    
+                                    if unitName == "AsuraEvo" and abilityName == "Lines of Sanzu" then
+                                    end
                                 end
                             end
                         end
