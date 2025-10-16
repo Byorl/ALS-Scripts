@@ -1159,8 +1159,7 @@ local function setupTowerUpgradeListener(tower)
             towerTracker.lastUpgradeTime[tower] = now
             
             for i = 1, levelsGained do
-                task.wait(0.15)
-                local cost = getgenv().GetRecentCashDecrease and getgenv().GetRecentCashDecrease(0.5) or 0
+                local cost = getgenv().GetRecentCashDecrease and getgenv().GetRecentCashDecrease(0.3) or 0
                 
                 table.insert(getgenv().MacroDataV2, {
                     RemoteName = "Upgrade",
@@ -1275,8 +1274,7 @@ local function processRemoteCall(remoteName, method, args)
             end
             
             if countAfter > countBefore then
-                task.wait(0.15)
-                local cost = getgenv().GetRecentCashDecrease and getgenv().GetRecentCashDecrease(0.5) or 0
+                local cost = getgenv().GetRecentCashDecrease and getgenv().GetRecentCashDecrease(0.3) or 0
                 if cost == 0 and getgenv().GetPlaceCost then
                     cost = getgenv().GetPlaceCost(towerName)
                 end
@@ -1324,10 +1322,8 @@ local function processRemoteCall(remoteName, method, args)
                     towerTracker.pendingActions[upgradeKey] = true
                     
                     task.spawn(function()
-                        task.wait(0.15)
-                        
                         if towerTracker.pendingActions[upgradeKey] then
-                            local cost = getgenv().GetRecentCashDecrease and getgenv().GetRecentCashDecrease(0.5) or 0
+                            local cost = getgenv().GetRecentCashDecrease and getgenv().GetRecentCashDecrease(0.3) or 0
                             
                             table.insert(getgenv().MacroDataV2, {
                                 RemoteName = "Upgrade",
@@ -1430,8 +1426,7 @@ local function setupRecordingHook()
                         end
                         
                         if newestTower then
-                            task.wait(0.15)
-                            local cost = getgenv().GetRecentCashDecrease and getgenv().GetRecentCashDecrease(0.5) or 0
+                            local cost = getgenv().GetRecentCashDecrease and getgenv().GetRecentCashDecrease(0.3) or 0
                             
                             local cframe = newestTower:GetPivot()
                             local savedArgs = {towerName, {cframe:GetComponents()}}
@@ -1639,10 +1634,8 @@ local function executeAction(action)
 end
 
 local function detectMacroProgress(macroData)
-    -- Detect which step we're on based on current game state
     local towerStates = {}
     
-    -- Get current tower states
     for _, tower in pairs(workspace.Towers:GetChildren()) do
         if tower:FindFirstChild("Owner") and tower.Owner.Value == LocalPlayer then
             local towerName = tower.Name
@@ -1657,7 +1650,6 @@ local function detectMacroProgress(macroData)
         end
     end
     
-    -- Find the last completed step
     local lastCompletedStep = 0
     local expectedTowers = {}
     
@@ -1666,17 +1658,15 @@ local function detectMacroProgress(macroData)
             local towerName = action.TowerName
             expectedTowers[towerName] = (expectedTowers[towerName] or 0) + 1
             
-            -- Check if this tower exists
             if towerStates[towerName] and towerStates[towerName].count >= expectedTowers[towerName] then
                 lastCompletedStep = i
             else
-                break -- Tower not placed yet, stop here
+                break
             end
             
         elseif action.ActionType == "Upgrade" then
             local towerName = action.TowerName
             
-            -- Count how many upgrades this tower should have by this step
             local expectedLevel = 0
             for j = 1, i do
                 if macroData[j].ActionType == "Upgrade" and macroData[j].TowerName == towerName then
@@ -1684,17 +1674,16 @@ local function detectMacroProgress(macroData)
                 end
             end
             
-            -- Check if tower has this upgrade level
             if towerStates[towerName] and towerStates[towerName].maxLevel >= expectedLevel then
                 lastCompletedStep = i
             else
-                break -- Upgrade not done yet, stop here
+                break 
             end
         end
     end
     
     print("[Macro Resume] Detected progress: Step", lastCompletedStep, "/", #macroData)
-    return lastCompletedStep + 1 -- Start from next step
+    return lastCompletedStep + 1
 end
 
 local function playMacroV2()
@@ -1712,7 +1701,6 @@ local function playMacroV2()
             return
         end
         
-        -- Detect current progress and resume from there
         local step = detectMacroProgress(macroData)
         
         if step > 1 then
