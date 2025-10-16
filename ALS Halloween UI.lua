@@ -1285,39 +1285,56 @@ local function executeAction(action)
         local towers = {}
         for _, t in pairs(workspace.Towers:GetChildren()) do
             if t.Name == action.TowerName and t:FindFirstChild("Owner") and t.Owner.Value == LocalPlayer then
-                table.insert(towers, t)
+                local currentLevel = t:FindFirstChild("Upgrade") and t.Upgrade.Value or 0
+                local maxLevel = t:FindFirstChild("MaxUpgrade") and t.MaxUpgrade.Value or 999
+                if currentLevel < maxLevel then
+                    table.insert(towers, {tower = t, level = currentLevel})
+                end
             end
         end
         
         if #towers == 0 then
-            return false, "Tower not found: " .. action.TowerName
+            local allTowers = {}
+            for _, t in pairs(workspace.Towers:GetChildren()) do
+                if t.Name == action.TowerName and t:FindFirstChild("Owner") and t.Owner.Value == LocalPlayer then
+                    table.insert(allTowers, t)
+                end
+            end
+            
+            if #allTowers == 0 then
+                return false, "No " .. action.TowerName .. " found"
+            else
+                return true, "All " .. action.TowerName .. " already max level"
+            end
         end
         
         table.sort(towers, function(a, b)
-            local aLevel = a:FindFirstChild("Upgrade") and a.Upgrade.Value or 0
-            local bLevel = b:FindFirstChild("Upgrade") and b.Upgrade.Value or 0
-            return aLevel < bLevel
+            return a.level < b.level
         end)
         
-        local tower = towers[1]
+        local towerData = towers[1]
+        local tower = towerData.tower
         
-        if tower then
-            local currentLevel = tower:FindFirstChild("Upgrade") and tower.Upgrade.Value or 0
-            local maxLevel = tower:FindFirstChild("MaxUpgrade") and tower.MaxUpgrade.Value or 999
-            
-            if currentLevel < maxLevel then
-                if remote:IsA("RemoteFunction") then
-                    remote:InvokeServer(tower)
-                else
-                    remote:FireServer(tower)
-                end
-                task.wait(0.5)
-                return true, "Upgraded"
-            else
-                return true, "Already max level"
-            end
+        local cash = tonumber(getgenv().MacroCurrentCash) or 0
+        local cost = tonumber(action.Cost) or 0
+        
+        if cost > 0 and cash < cost then
+            return false, "Not enough cash: need $" .. cost .. ", have $" .. cash
+        end
+        
+        if remote:IsA("RemoteFunction") then
+            remote:InvokeServer(tower)
         else
-            return false, "Tower not found: " .. action.TowerName
+            remote:FireServer(tower)
+        end
+        
+        task.wait(0.5)
+        
+        local newLevel = tower:FindFirstChild("Upgrade") and tower.Upgrade.Value or towerData.level
+        if newLevel > towerData.level then
+            return true, "Upgraded to level " .. newLevel
+        else
+            return false, "Upgrade may have failed"
         end
         
     elseif action.ActionType == "Sell" then
@@ -1436,32 +1453,59 @@ local function playMacroV2()
             local cash = tonumber(getgenv().MacroCurrentCash) or 0
             local cost = tonumber(action.Cost) or 0
             
+            local shouldSkipStep = false
+            
             if cost > 0 and cash < cost then
                 getgenv().MacroStatusText = "Waiting Cash"
-                getgenv().MacroWaitingText = "$" .. cost
+                getgenv().MacroWaitingText = "$" .. cost .. " (have $" .. cash .. ")"
                 getgenv().UpdateMacroStatus()
                 
                 local cashWaitStart = tick()
-                local maxCashWait = 1200
+                local maxCashWait = 300
+                local lastCash = cash
+                local noIncomeTime = 0
                 
                 while getgenv().MacroPlayEnabled do
+                    task.wait(0.5)
                     cash = tonumber(getgenv().MacroCurrentCash) or 0
-                    if cash >= cost then break end
                     
-                    local waitTime = tick() - cashWaitStart
-                    if waitTime > maxCashWait then
-                        getgenv().MacroStatusText = "Timeout - Skipping Step"
-                        getgenv().MacroWaitingText = "Waited " .. math.floor(waitTime) .. "s"
-                        getgenv().UpdateMacroStatus()
-                        task.wait(2)
-                        step = step + 1
-                        continue
+                    if cash >= cost then 
+                        break 
                     end
                     
-                    RunService.Heartbeat:Wait()
+                    if cash > lastCash then
+                        noIncomeTime = 0
+                    else
+                        noIncomeTime = noIncomeTime + 0.5
+                    end
+                    lastCash = cash
+                    
+                    local waitTime = tick() - cashWaitStart
+                    
+                    if waitTime > maxCashWait then
+                        shouldSkipStep = true
+                        break
+                    end
+                    
+                    if noIncomeTime > 60 and waitTime > 30 then
+                        shouldSkipStep = true
+                        break
+                    end
+                    
+                    getgenv().MacroWaitingText = "$" .. cost .. " (have $" .. cash .. ") - " .. math.floor(waitTime) .. "s"
+                    getgenv().UpdateMacroStatus()
                 end
                 
                 if not getgenv().MacroPlayEnabled then break end
+            end
+            
+            if shouldSkipStep then
+                getgenv().MacroStatusText = "Skipping - Not Enough Cash"
+                getgenv().MacroWaitingText = "Needed $" .. cost .. ", have $" .. cash
+                getgenv().UpdateMacroStatus()
+                task.wait(2)
+                step = step + 1
+                continue
             end
             
             getgenv().MacroStatusText = "Playing"
@@ -1470,34 +1514,28 @@ local function playMacroV2()
             
             local actionSuccess = false
             local actionMessage = ""
-            local actionAttempts = 0
-            local maxAttempts = 3
             
-            while actionAttempts < maxAttempts and not actionSuccess do
-                actionAttempts = actionAttempts + 1
-                
-                local pcallSuccess, result, msg = pcall(function()
-                    return executeAction(action)
-                end)
-                
-                if pcallSuccess and result then
-                    actionSuccess = true
-                    actionMessage = msg or "Success"
-                elseif actionAttempts < maxAttempts then
-                    task.wait(0.5)
-                else
-                    actionMessage = msg or "Failed after " .. maxAttempts .. " attempts"
-                end
+            local success, result, msg = pcall(function()
+                return executeAction(action)
+            end)
+            
+            if success and result then
+                actionSuccess = true
+                actionMessage = msg or "Success"
+            else
+                actionMessage = msg or "Action failed"
             end
             
             if not actionSuccess then
-                getgenv().MacroStatusText = "Step Failed - Skipping"
+                getgenv().MacroStatusText = "Step Failed - Continuing"
                 getgenv().MacroWaitingText = actionMessage
                 getgenv().UpdateMacroStatus()
-                task.wait(1)
+                task.wait(0.5)
             end
             
             step = step + 1
+            
+            task.wait(0.3)
             
             local stepDelay = getgenv().MacroStepDelay or 0
             if stepDelay > 0 then
