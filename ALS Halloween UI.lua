@@ -1838,48 +1838,60 @@ local function playMacroV2()
             print("[Macro] Starting fresh from step 1 (waiting for game to start)")
         end
         
-        print("[Macro] Waiting for round to start...")
+        local elapsedTime = 0
+        local currentWave = 0
         
-        local waitStartTime = tick()
-        
-        while getgenv().MacroPlayEnabled do
-            local elapsedTime = 0
-            local currentWave = 0
+        pcall(function()
+            local elapsed = RS:FindFirstChild("ElapsedTime")
+            if elapsed and elapsed.Value then
+                elapsedTime = elapsed.Value
+            end
             
-            pcall(function()
-                local elapsed = RS:FindFirstChild("ElapsedTime")
-                if elapsed and elapsed.Value then
-                    elapsedTime = elapsed.Value
+            local wave = RS:FindFirstChild("Wave")
+            if wave and wave.Value then
+                currentWave = wave.Value
+            end
+        end)
+        
+        print("[Macro] Initial check - Wave:", currentWave, "ElapsedTime:", elapsedTime)
+        
+        if currentWave > 0 and elapsedTime > 0 then
+            print("[Macro] ✓ Round is running! Starting macro immediately from step", step)
+        else
+            print("[Macro] Waiting for round to start...")
+            local waitStartTime = tick()
+            
+            while getgenv().MacroPlayEnabled do
+                pcall(function()
+                    local elapsed = RS:FindFirstChild("ElapsedTime")
+                    if elapsed and elapsed.Value then
+                        elapsedTime = elapsed.Value
+                    end
+                    
+                    local wave = RS:FindFirstChild("Wave")
+                    if wave and wave.Value then
+                        currentWave = wave.Value
+                    end
+                end)
+                
+                if currentWave > 0 and elapsedTime > 0 then
+                    print("[Macro] ✓ Round started! Wave:", currentWave, "ElapsedTime:", elapsedTime)
+                    break
                 end
                 
-                local wave = RS:FindFirstChild("Wave")
-                if wave and wave.Value then
-                    currentWave = wave.Value
-                end
-            end)
-            
-            if elapsedTime > 0 and currentWave > 0 then
-                print("[Macro] Round started! ElapsedTime:", elapsedTime, "Wave:", currentWave)
-                break
-            end
-            
-            if elapsedTime == 0 then
                 getgenv().MacroStatusText = "Waiting for Start"
                 getgenv().MacroWaitingText = "Round not started..."
-            else
-                getgenv().MacroStatusText = "Waiting for Round"
-                getgenv().MacroWaitingText = "Wave " .. currentWave .. "..."
+                getgenv().UpdateMacroStatus()
+                
+                local elapsed = tick() - waitStartTime
+                if elapsed > 300 then
+                    print("[Macro] ✗ Timeout waiting for round start (5 minutes)")
+                    getgenv().MacroPlaybackActive = false
+                    return
+                end
+                
+                task.wait(0.5)
             end
-            getgenv().UpdateMacroStatus()
-            
-            local elapsed = tick() - waitStartTime
-            if elapsed > 300 then
-                print("[Macro] Timeout waiting for round start (5 minutes)")
-                getgenv().MacroPlaybackActive = false
-                return
-            end
-            
-            task.wait(0.1)
         end
         
         if not getgenv().MacroPlayEnabled then
@@ -1887,8 +1899,8 @@ local function playMacroV2()
             return
         end
         
-        print("[Macro] Starting playback NOW")
-        task.wait(0.5)
+        print("[Macro] ========== STARTING MACRO PLAYBACK ==========")
+        task.wait(0.3)
         
         if not getgenv().MacroPlayEnabled then
             getgenv().MacroPlaybackActive = false
@@ -1908,7 +1920,16 @@ local function playMacroV2()
             end
             
             local currentWave = getgenv().MacroGameState.currentWave
-            if lastWaveCheck > 5 and currentWave == 1 then
+            local elapsedTime = 0
+            pcall(function()
+                local elapsed = RS:FindFirstChild("ElapsedTime")
+                if elapsed and elapsed.Value then
+                    elapsedTime = elapsed.Value
+                end
+            end)
+            
+            if lastWaveCheck > 5 and currentWave == 1 and elapsedTime < 30 then
+                print("[Macro] Round restart detected - Wave:", lastWaveCheck, "→", currentWave, "ElapsedTime:", elapsedTime)
                 getgenv().MacroStatusText = "Wave Reset - Restarting Macro"
                 getgenv().MacroWaitingText = "Detected wave reset..."
                 getgenv().UpdateMacroStatus()
@@ -1919,19 +1940,13 @@ local function playMacroV2()
             end
             lastWaveCheck = currentWave
             
-            if getgenv().MacroGameState.gameEnded then
-                getgenv().MacroStatusText = "Game Ended - Waiting"
-                getgenv().MacroWaitingText = "Waiting for next round..."
+            if getgenv().MacroGameState.gameEnded or getgenv().MacroGameState.hasEndGameUI then
+                print("[Macro] Game ended detected - exiting playback")
+                getgenv().MacroStatusText = "Game Ended"
+                getgenv().MacroWaitingText = "Auto-restart will handle next round..."
                 getgenv().UpdateMacroStatus()
-                
-                while getgenv().MacroGameState.gameEnded and getgenv().MacroPlayEnabled do
-                    task.wait(0.5)
-                end
-                
-                getgenv().MacroGameState.gameEnded = false
-                step = 1
-                task.wait(2)
-                continue
+                getgenv().MacroPlaybackActive = false
+                return
             end
             
             if getgenv().MacroGameState.hasStartButton or getgenv().MacroGameState.currentWave == 0 then
@@ -2066,55 +2081,18 @@ local function playMacroV2()
         end
         
         if step > #macroData then
-            print("[Macro] Finished all steps, waiting for next round...")
-            getgenv().MacroStatusText = "Waiting for Next Round"
-            getgenv().MacroWaitingText = "Macro complete"
+            print("[Macro] ========== Finished all steps ==========")
+            getgenv().MacroStatusText = "Macro Complete"
+            getgenv().MacroWaitingText = "Waiting for game end..."
             getgenv().MacroCurrentStep = #macroData
             getgenv().MacroTotalSteps = #macroData
             getgenv().MacroActionText = "Complete"
             getgenv().MacroUnitText = ""
             getgenv().UpdateMacroStatus()
             
-            local lastWaveBeforeWait = getgenv().MacroGameState.currentWave
-            
-            while getgenv().MacroPlayEnabled do
-                task.wait(0.5)
-                
-                local currentWave = getgenv().MacroGameState.currentWave
-                local elapsedTime = 0
-                pcall(function()
-                    local elapsed = RS:FindFirstChild("ElapsedTime")
-                    if elapsed and elapsed.Value then
-                        elapsedTime = elapsed.Value
-                    end
-                end)
-                
-                if lastWaveBeforeWait > 5 and currentWave > 0 and currentWave < lastWaveBeforeWait then
-                    print("[Macro] Wave decrease detected (", lastWaveBeforeWait, "->", currentWave, ") - Restarting macro")
-                    getgenv().MacroPlaybackActive = false
-                    return
-                end
-                
-                if elapsedTime == 0 and currentWave == 1 then
-                    print("[Macro] ElapsedTime reset detected - New round starting")
-                    getgenv().MacroPlaybackActive = false
-                    return
-                end
-                
-                if getgenv().MacroGameState.hasStartButton or currentWave == 0 then
-                    print("[Macro] New round detected (start button or wave 0)")
-                    getgenv().MacroPlaybackActive = false
-                    return
-                end
-                
-                if getgenv().MacroGameState.gameEnded then
-                    print("[Macro] Game ended, will restart macro...")
-                    getgenv().MacroPlaybackActive = false
-                    return
-                end
-                
-                lastWaveBeforeWait = currentWave
-            end
+            print("[Macro] Exiting playback - auto-restart will handle next round")
+            getgenv().MacroPlaybackActive = false
+            return
         else
             getgenv().MacroStatusText = "Idle"
             getgenv().MacroCurrentStep = 0
@@ -2132,11 +2110,46 @@ setupRecordingHook()
 monitorEndGameUI()
 
 task.spawn(function()
+    local lastRestartAttempt = 0
+    local lastEndGameUIState = false
+    
     while true do
-        task.wait(0.5)
+        task.wait(0.3)
+        
+        local currentEndGameUIState = false
+        pcall(function()
+            local endGameUI = LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
+            currentEndGameUIState = endGameUI and endGameUI.Enabled or false
+        end)
+        
+        if lastEndGameUIState and not currentEndGameUIState and getgenv().MacroPlayEnabled then
+            print("[Macro Auto-Restart] EndGameUI closed - Restarting macro for seamless mode...")
+            task.wait(1)
+            
+            getgenv().MacroPlaybackActive = false
+            getgenv().MacroStatusText = "Idle"
+            getgenv().MacroCurrentStep = 0
+            getgenv().MacroActionText = ""
+            getgenv().MacroUnitText = ""
+            getgenv().MacroWaitingText = ""
+            getgenv().UpdateMacroStatus()
+            
+            task.wait(0.5)
+            
+            print("[Macro Auto-Restart] Starting fresh macro playback...")
+            playMacroV2()
+            lastRestartAttempt = tick()
+        end
+        
+        lastEndGameUIState = currentEndGameUIState
         
         if getgenv().MacroPlayEnabled and not getgenv().MacroPlaybackActive then
-            playMacroV2()
+            local now = tick()
+            if now - lastRestartAttempt > 3 then
+                print("[Macro Auto-Restart] Fallback restart - macro not running...")
+                lastRestartAttempt = now
+                playMacroV2()
+            end
         end
     end
 end)
@@ -4771,14 +4784,6 @@ end)
 
 local GuiService = game:GetService("GuiService")
 
-local function press(key)
-    pcall(function()
-        game:GetService("VirtualInputManager"):SendKeyEvent(true, key, false, game)
-        task.wait(0.05)
-        game:GetService("VirtualInputManager"):SendKeyEvent(false, key, false, game)
-    end)
-end
-
 task.spawn(function()
     local lastEndGameUIInstance = nil
     local hasProcessedCurrentUI = false
@@ -4794,7 +4799,7 @@ task.spawn(function()
             local endGameUI = LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
             
             if endGameUIWasPresent and not endGameUI then
-                print("[Auto Retry] EndGameUI disappeared - Round restarted, units cleared")
+                print("[Auto Retry] ========== EndGameUI disappeared - Round restarted ==========")
                 hasProcessedCurrentUI = false
                 lastEndGameUIInstance = nil
                 endGameUIWasPresent = false
@@ -4804,15 +4809,21 @@ task.spawn(function()
                     currentWave = 0,
                     gameEnded = false
                 }
-                getgenv().MacroCurrentStep = 0
+                getgenv().MacroCurrentStep = 1
                 getgenv().MacroActionText = ""
                 getgenv().MacroUnitText = ""
                 getgenv().MacroWaitingText = ""
                 getgenv().MacroStatusText = "Idle"
+                getgenv().MacroPlaybackActive = false
+                
                 if getgenv().UpdateMacroStatus then
                     getgenv().UpdateMacroStatus()
                 end
-                print("[Auto Retry] Reset macro progress for fresh start")
+                
+                print("[Auto Retry] Reset macro state - MacroCurrentStep set to 1")
+                print("[Auto Retry] MacroPlaybackActive:", getgenv().MacroPlaybackActive)
+                print("[Auto Retry] MacroPlayEnabled:", getgenv().MacroPlayEnabled)
+                print("[Auto Retry] Macro should auto-restart in 0.5s")
                 return
             end
             
@@ -4849,33 +4860,38 @@ task.spawn(function()
             local retryButton = buttons:FindFirstChild("Retry")
             local leaveButton = buttons:FindFirstChild("Leave")
             
+            print("[Auto Button Debug] Next exists:", nextButton ~= nil, "visible:", nextButton and nextButton.Visible or false)
+            print("[Auto Button Debug] Retry exists:", retryButton ~= nil, "visible:", retryButton and retryButton.Visible or false)
+            print("[Auto Button Debug] Leave exists:", leaveButton ~= nil, "visible:", leaveButton and leaveButton.Visible or false)
+            print("[Auto Button Debug] Toggles - Next:", getgenv().AutoNextEnabled, "Retry:", getgenv().AutoFastRetryEnabled, "Leave:", getgenv().AutoLeaveEnabled, "Smart:", getgenv().AutoSmartEnabled)
+            
             local buttonToPress, actionName = nil, ""
             
             if getgenv().AutoNextEnabled and nextButton and nextButton.Visible then
                 buttonToPress = nextButton
                 actionName = "Next"
-                print("[Auto Next] Next button detected and selected")
+                print("[Auto Next] ✓ Next button selected")
             elseif getgenv().AutoFastRetryEnabled and retryButton and retryButton.Visible then
                 buttonToPress = retryButton
                 actionName = "Retry"
-                print("[Auto Retry] Retry button detected and selected")
+                print("[Auto Retry] ✓ Retry button selected")
             elseif getgenv().AutoLeaveEnabled and leaveButton and leaveButton.Visible then
                 buttonToPress = leaveButton
                 actionName = "Leave"
-                print("[Auto Leave] Leave button detected and selected")
+                print("[Auto Leave] ✓ Leave button selected")
             elseif getgenv().AutoSmartEnabled then
                 if nextButton and nextButton.Visible then
                     buttonToPress = nextButton
                     actionName = "Next"
-                    print("[Auto Smart] Next button detected and selected")
+                    print("[Auto Smart] ✓ Next button selected")
                 elseif retryButton and retryButton.Visible then
                     buttonToPress = retryButton
                     actionName = "Retry"
-                    print("[Auto Smart] Retry button detected and selected")
+                    print("[Auto Smart] ✓ Retry button selected")
                 elseif leaveButton and leaveButton.Visible then
                     buttonToPress = leaveButton
                     actionName = "Leave"
-                    print("[Auto Smart] Leave button detected and selected")
+                    print("[Auto Smart] ✓ Leave button selected")
                 end
             end
             
@@ -5270,7 +5286,6 @@ task.spawn(function()
                             end
                             
                             if shouldUse and cfg.onlyOnBoss then
-                                print("[Auto Ability] Checking onlyOnBoss for", unitName, abilityName, "| hasBoss:", hasBoss, "| bossReady:", bossReadyForAbilities())
                                 if not hasBoss then
                                     shouldUse = false
                                     table.insert(debugInfo, "no boss")
@@ -5629,52 +5644,111 @@ task.spawn(function()
                 local frame = promptUI:FindFirstChild("Frame")
                 if not frame then return end
                 
-                local innerFrame = frame:FindFirstChild("Frame")
-                if not innerFrame then return end
+                local function clickOptionButton(button)
+                    if not button then return false end
+                    print("[Final Expedition] Clicking button:", button:GetFullName())
+                    local events = {"Activated", "MouseButton1Click", "MouseButton1Down", "MouseButton1Up"}
+                    for _, ev in ipairs(events) do
+                        pcall(function()
+                            for _, conn in ipairs(getconnections(button[ev])) do
+                                conn:Fire()
+                            end
+                        end)
+                        task.wait(0.05)
+                    end
+                    return true
+                end
                 
-                local optionsFrame = innerFrame:FindFirstChild("Frame")
-                if not optionsFrame then return end
+                local function findOptionsWithButtons()
+                    local options = {}
+                    local innerFrames = frame:GetDescendants()
+                    for _, obj in pairs(innerFrames) do
+                        if obj:IsA("TextButton") then
+                            for _, child in pairs(obj:GetDescendants()) do
+                                if child:IsA("TextLabel") and child.Text and child.Text ~= "" then
+                                    local text = child.Text:gsub("<[^>]+>", ""):gsub("%s+", " "):match("^%s*(.-)%s*$")
+                                    if text ~= "" and #text < 100 then
+                                        options[text] = obj
+                                    end
+                                end
+                            end
+                        end
+                    end
+                    return options
+                end
                 
-                local optionsContainer = optionsFrame:FindFirstChild("Frame")
-                if not optionsContainer then return end
+                local availableOptions = findOptionsWithButtons()
+                if next(availableOptions) == nil then return end
                 
-                local availableOptions = {}
-                for _, child in pairs(optionsContainer:GetChildren()) do
-                    if child:IsA("Frame") or child:IsA("GuiObject") then
-                        local textLabel = child:FindFirstChild("Frame", true)
-                        if textLabel then
-                            textLabel = textLabel:FindFirstChild("TextLabel")
-                            if textLabel and textLabel.Text then
-                                local optionText = textLabel.Text
-                                availableOptions[optionText] = child
-                                print("[Final Expedition] Found option:", optionText)
+                if getgenv().FinalExpSkipRewardsEnabled then
+                    if availableOptions["Click anywhere to continue"] or availableOptions["(Click anywhere to continue)"] then
+                        print("[Final Expedition] Reward screen detected - clicking to skip")
+                        
+                        local textButton = frame:FindFirstChild("TextButton")
+                        if textButton and textButton.Visible then
+                            clickOptionButton(textButton)
+                            task.wait(0.3)
+                            return
+                        end
+                        
+                        local folder = frame:FindFirstChild("Folder")
+                        if folder then
+                            local folderButton = folder:FindFirstChild("TextButton")
+                            if folderButton and folderButton.Visible then
+                                clickOptionButton(folderButton)
+                                task.wait(0.3)
+                                return
                             end
                         end
                     end
                 end
                 
-                if next(availableOptions) == nil then return end
-                
-                local abilitySelectionRemote = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("AbilitySelectionEvent")
-                if not abilitySelectionRemote then return end
-                
                 if getgenv().FinalExpAutoSkipShopEnabled and availableOptions["Shop"] then
-                    print("[Final Expedition] Skipping Shop")
-                    abilitySelectionRemote:FireServer("FinalExpeditionSelection", "Shop")
+                    print("[Final Expedition] Skipping Shop - clicking Shop card")
+                    clickOptionButton(availableOptions["Shop"])
                     task.wait(0.5)
-                    local shopRemote = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("FinalExpedition") and RS.Remotes.FinalExpedition:FindFirstChild("ShopEvent")
-                    if shopRemote then
-                        shopRemote:FireServer("Close")
-                        print("[Final Expedition] Closed Shop")
+                    
+                    print("[Final Expedition] Looking for Shop button inside shop UI...")
+                    local shopButtonClicked = false
+                    local maxAttempts = 10
+                    for attempt = 1, maxAttempts do
+                        local screenGui = LocalPlayer.PlayerGui:FindFirstChild("ScreenGui")
+                        if screenGui then
+                            local shopFrame = screenGui:FindFirstChild("Frame")
+                            if shopFrame then
+                                local children = shopFrame:GetChildren()
+                                if children[4] then
+                                    local innerFrame = children[4]:FindFirstChild("Frame")
+                                    if innerFrame then
+                                        local folder = innerFrame:FindFirstChild("Folder")
+                                        if folder then
+                                            local shopButton = folder:FindFirstChild("TextButton")
+                                            if shopButton then
+                                                print("[Final Expedition] Found Shop button, clicking...")
+                                                clickOptionButton(shopButton)
+                                                shopButtonClicked = true
+                                                task.wait(0.3)
+                                                break
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                        task.wait(0.2)
+                    end
+                    
+                    if not shopButtonClicked then
+                        print("[Final Expedition] Shop button not found after " .. maxAttempts .. " attempts")
                     end
                     return
                 end
                 
                 if getgenv().FinalExpAutoSelectModeEnabled then
                     local priorities = {
-                        {name = "Rest", priority = getgenv().FinalExpRestPriority or 3, remote = "Rest"},
-                        {name = "Dungeon", priority = getgenv().FinalExpDungeonPriority or 1, remote = "Dungeon"},
-                        {name = "Double Dungeon", priority = getgenv().FinalExpDoubleDungeonPriority or 2, remote = "Double_Dungeon"}
+                        {name = "Rest Point", priority = getgenv().FinalExpRestPriority or 3},
+                        {name = "Dungeon", priority = getgenv().FinalExpDungeonPriority or 1},
+                        {name = "Double Dungeon", priority = getgenv().FinalExpDoubleDungeonPriority or 2}
                     }
                     
                     table.sort(priorities, function(a, b) return a.priority < b.priority end)
@@ -5682,40 +5756,45 @@ task.spawn(function()
                     for _, option in ipairs(priorities) do
                         if availableOptions[option.name] then
                             print("[Final Expedition] Auto selecting:", option.name, "(Priority:", option.priority .. ")")
-                            abilitySelectionRemote:FireServer("FinalExpeditionSelection", option.remote)
-                            return
-                        end
-                    end
-                end
-                
-                if getgenv().FinalExpSkipRewardsEnabled then
-                    for optionName, optionFrame in pairs(availableOptions) do
-                        local textButton = optionFrame:FindFirstChildOfClass("TextButton", true)
-                        if textButton then
-                            print("[Final Expedition] Skipping rewards by clicking button")
-                            for _, connection in pairs(getconnections(textButton.MouseButton1Click)) do
-                                connection:Fire()
+                            clickOptionButton(availableOptions[option.name])
+                            task.wait(0.3)
+                            
+                            if option.name == "Rest Point" then
+                                task.wait(0.5)
+                                pcall(function()
+                                    local screenGui = LocalPlayer.PlayerGui:FindFirstChild("ScreenGui")
+                                    if screenGui then
+                                        local restFrame = screenGui:FindFirstChild("Frame")
+                                        if restFrame then
+                                            local children = restFrame:GetChildren()
+                                            if children[4] then
+                                                local innerFrame = children[4]:FindFirstChild("Frame")
+                                                if innerFrame then
+                                                    local folder = innerFrame:FindFirstChild("Folder")
+                                                    if folder then
+                                                        local closeButton = folder:FindFirstChild("TextButton")
+                                                        if closeButton then
+                                                            print("[Final Expedition] Closing Rest Point UI")
+                                                            clickOptionButton(closeButton)
+                                                        end
+                                                    end
+                                                end
+                                            end
+                                        end
+                                    end
+                                end)
                             end
+                            
                             return
                         end
                     end
+                    print("[Final Expedition] No matching options found")
                 end
             end)
         end
     end
 end)
 
-
-local function getClientData()
-    local ok, data = pcall(function()
-        local modulePath = RS:WaitForChild("Modules"):WaitForChild("ClientData")
-        if modulePath and modulePath:IsA("ModuleScript") then
-            return require(modulePath)
-        end
-        return nil
-    end)
-    return ok and data or nil
-end
 
 local function findBestPortal()
     local clientData = getClientData()
@@ -6429,6 +6508,7 @@ if isInLobby then
                 if textButton then
                     clickButton(textButton)
                     success = true
+                    print("[Prompt] Clicked Frame.TextButton")
                 end
                 
                 local folder = frame:FindFirstChild("Folder")
@@ -6437,6 +6517,7 @@ if isInLobby then
                     if folderButton then
                         clickButton(folderButton)
                         success = true
+                        print("[Prompt] Clicked Frame.Folder.TextButton")
                     end
                 end
             end)
@@ -6869,7 +6950,6 @@ do
             task.wait(0.1)
             GuiService.SelectedObject = bestCard.button
             task.wait(0.2)
-            print("[Smart Card] Pressing Enter on card...")
             press(Enum.KeyCode.Return)
             task.wait(0.1)
             GuiService.SelectedObject = nil
