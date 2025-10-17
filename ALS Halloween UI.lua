@@ -80,7 +80,7 @@ getgenv().Config.autoJoin = getgenv().Config.autoJoin or {}
 getgenv().SaveConfig = saveConfig
 getgenv().LoadConfig = loadConfig
 
-local defaultWidth = 580
+local defaultWidth = 660
 local defaultHeight = 480
 local customWidth = tonumber(getgenv().Config.inputs.UIWidth) or defaultWidth
 local customHeight = tonumber(getgenv().Config.inputs.UIHeight) or defaultHeight
@@ -1191,6 +1191,8 @@ local function setupTowerUpgradeListener(tower)
                     cost = getgenv().GetRecentCashDecrease(0.3)
                 end
                 
+                print("[Macro Record] Upgraded:", towerName, "Level:", upgradeLevel, "→", upgradeLevel + 1, "Cost:", cost)
+                
                 table.insert(getgenv().MacroDataV2, {
                     RemoteName = "Upgrade",
                     Args = {},
@@ -1472,6 +1474,12 @@ local function setupRecordingHook()
                         if newestTower then
                             local cost = getgenv().GetRecentCashDecrease and getgenv().GetRecentCashDecrease(0.3) or 0
                             
+                            if cost == 0 and getgenv().GetPlaceCost then
+                                cost = getgenv().GetPlaceCost(towerName)
+                            end
+                            
+                            print("[Macro Record] Placed:", towerName, "Cost:", cost)
+                            
                             local cframe = newestTower:GetPivot()
                             local savedArgs = {towerName, {cframe:GetComponents()}}
                             
@@ -1752,7 +1760,15 @@ local function playMacroV2()
         
         local step = 1
         
-        if not getgenv().MacroGameState.hasStartButton and getgenv().MacroGameState.currentWave > 0 then
+        local elapsedTime = 0
+        pcall(function()
+            local elapsed = RS:FindFirstChild("ElapsedTime")
+            if elapsed and elapsed.Value then
+                elapsedTime = elapsed.Value
+            end
+        end)
+        
+        if not getgenv().MacroGameState.hasStartButton and getgenv().MacroGameState.currentWave > 0 and elapsedTime > 5 then
             step = detectMacroProgress(macroData)
             
             if step == -1 then
@@ -2010,11 +2026,34 @@ local function playMacroV2()
             getgenv().MacroUnitText = ""
             getgenv().UpdateMacroStatus()
             
+            local lastWaveBeforeWait = getgenv().MacroGameState.currentWave
+            
             while getgenv().MacroPlayEnabled do
-                task.wait(1)
+                task.wait(0.5)
                 
-                if getgenv().MacroGameState.hasStartButton or getgenv().MacroGameState.currentWave == 0 then
-                    print("[Macro] New round detected, will restart macro...")
+                local currentWave = getgenv().MacroGameState.currentWave
+                local elapsedTime = 0
+                pcall(function()
+                    local elapsed = RS:FindFirstChild("ElapsedTime")
+                    if elapsed and elapsed.Value then
+                        elapsedTime = elapsed.Value
+                    end
+                end)
+                
+                if lastWaveBeforeWait > 5 and currentWave > 0 and currentWave < lastWaveBeforeWait then
+                    print("[Macro] Wave decrease detected (", lastWaveBeforeWait, "->", currentWave, ") - Restarting macro")
+                    getgenv().MacroPlaybackActive = false
+                    return
+                end
+                
+                if elapsedTime == 0 and currentWave == 1 then
+                    print("[Macro] ElapsedTime reset detected - New round starting")
+                    getgenv().MacroPlaybackActive = false
+                    return
+                end
+                
+                if getgenv().MacroGameState.hasStartButton or currentWave == 0 then
+                    print("[Macro] New round detected (start button or wave 0)")
                     getgenv().MacroPlaybackActive = false
                     return
                 end
@@ -2024,6 +2063,8 @@ local function playMacroV2()
                     getgenv().MacroPlaybackActive = false
                     return
                 end
+                
+                lastWaveBeforeWait = currentWave
             end
         else
             getgenv().MacroStatusText = "Idle"
@@ -2791,7 +2832,14 @@ createInput(
     tostring(getgenv().Config.inputs.EventJoinDelay or 0)
 )
 
-local isInLobby = not RS:FindFirstChild("GameEnded")
+local LOBBY_PLACEIDS = {12886143095, 18583778121}
+local function checkIsInLobby()
+    for _, placeId in ipairs(LOBBY_PLACEIDS) do
+        if game.PlaceId == placeId then return true end
+    end
+    return false
+end
+local isInLobby = checkIsInLobby()
 
 if isInLobby then
     Sections.EventLeft:Divider()
@@ -2923,6 +2971,7 @@ local smartSuccess, smartErr = pcall(function()
         "SmartCardSelectionToggle",
         function(value)
             getgenv().SmartCardSelectionEnabled = value
+            getgenv().Config.toggles.SmartCardSelectionToggle = value
             if value then
                 if fastModeToggle then
                     getgenv().CardSelectionEnabled = false
@@ -2934,8 +2983,8 @@ local smartSuccess, smartErr = pcall(function()
                     getgenv().Config.toggles.SlowerCardSelectionToggle = false
                     pcall(function() slowerModeToggle:UpdateState(false) end)
                 end
-                getgenv().SaveConfig(getgenv().Config)
             end
+            getgenv().SaveConfig(getgenv().Config)
             Window:Notify({
                 Title = "Card Selection",
                 Description = value and "Smart Mode Enabled - Maximizes candy based on wave" or "Disabled",
@@ -4593,42 +4642,38 @@ task.spawn(function()
     local lastEndGameUIInstance = nil
     local hasProcessedCurrentUI = false
     local endGameUIDetectedTime = 0
-    local waveWhenEndGameAppeared = 0
+    local endGameUIWasPresent = false
     
     while true do
-        task.wait(0.5)
-        
-        local currentWave = 0
-        pcall(function()
-            local wave = RS:FindFirstChild("Wave")
-            if wave and wave.Value then
-                currentWave = wave.Value
-            end
-        end)
-        
-        if waveWhenEndGameAppeared > 0 and currentWave > 0 and currentWave < waveWhenEndGameAppeared then
-            print("[Auto Retry] Wave decrease detected (", waveWhenEndGameAppeared, "->", currentWave, ") - Round restarted, resetting UI flag")
-            hasProcessedCurrentUI = false
-            lastEndGameUIInstance = nil
-            waveWhenEndGameAppeared = 0
-        end
+        task.wait(0.2)
         
         local success, errorMsg = pcall(function()
             if not LocalPlayer or not LocalPlayer.PlayerGui then return end
             
             local endGameUI = LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
-            if not endGameUI then 
-                return 
+            
+            if endGameUIWasPresent and not endGameUI then
+                print("[Auto Retry] EndGameUI disappeared - Round restarted, units cleared")
+                hasProcessedCurrentUI = false
+                lastEndGameUIInstance = nil
+                endGameUIWasPresent = false
+                
+                getgenv().MacroGameState = {
+                    hasStartButton = false,
+                    currentWave = 0,
+                    gameEnded = false
+                }
+                getgenv().MacroCurrentStep = 0
+                print("[Auto Retry] Reset macro progress for fresh start")
+                return
             end
             
-            if not lastEndGameUIInstance or endGameUI ~= lastEndGameUIInstance then
-                pcall(function()
-                    local wave = RS:FindFirstChild("Wave")
-                    if wave and wave.Value then
-                        waveWhenEndGameAppeared = wave.Value
-                        print("[Auto Retry] EndGameUI appeared at wave", waveWhenEndGameAppeared)
-                    end
-                end)
+            if endGameUI then
+                endGameUIWasPresent = true
+            end
+            
+            if not endGameUI then 
+                return 
             end
             
             local bg = endGameUI:FindFirstChild("BG")
@@ -4712,34 +4757,34 @@ task.spawn(function()
                 print("[Auto Retry] Button to press:", buttonToPress:GetFullName())
                 
                 if getgenv().WebhookEnabled then
-                    task.wait(4)
-                    local maxWait = 0
-                    while getgenv().WebhookProcessing and maxWait < 15 do
-                        task.wait(0.5)
-                        maxWait = maxWait + 0.5
-                    end
                     task.wait(2)
+                    local maxWait = 0
+                    while getgenv().WebhookProcessing and maxWait < 10 do
+                        task.wait(0.3)
+                        maxWait = maxWait + 0.3
+                    end
+                    task.wait(0.5)
                 end
                 
-                task.wait(1)
+                task.wait(0.3)
                 hasProcessedCurrentUI = true
                 
                 local success = pcall(function()
                     local GuiService = game:GetService("GuiService")
                     
                     GuiService.SelectedObject = nil
-                    task.wait(0.2)
+                    task.wait(0.1)
                     
                     GuiService.SelectedObject = buttonToPress
-                    task.wait(0.5)
+                    task.wait(0.2)
                     
                     if GuiService.SelectedObject == buttonToPress then
                         print("[Auto Retry] Selected button:", buttonToPress.Name)
                         
                         VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
-                        task.wait(0.1)
+                        task.wait(0.05)
                         VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
-                        task.wait(0.5)
+                        task.wait(0.2)
                         
                         GuiService.SelectedObject = nil
                         
@@ -4753,7 +4798,7 @@ task.spawn(function()
                     warn("[Auto Retry] UI navigation failed")
                 end
                 
-                task.wait(1)
+                task.wait(0.3)
                 
                 if LocalPlayer.PlayerGui:FindFirstChild("EndGameUI") then
                     warn("[Auto Retry] EndGameUI still present - button may require server validation")
@@ -5389,7 +5434,7 @@ local function isInLobby()
     return lobbyUI ~= nil
 end
 
-if isInLobby() then
+if isInLobby then
     task.spawn(function()
         local finalExpRemote = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("FinalExpeditionStart")
         if not finalExpRemote then
@@ -5410,7 +5455,7 @@ if isInLobby() then
     end)
 end
 
-if not isInLobby() then
+if not isInLobby then
     task.spawn(function()
         local abilitySelection = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("AbilitySelection")
         if not abilitySelection then
@@ -5534,7 +5579,7 @@ local function activatePortal(portalID)
     return success
 end
 
-if isInLobby() then
+if isInLobby then
     task.spawn(function()
         while true do
             task.wait(2)
@@ -5822,11 +5867,12 @@ local function getMapInfo()
 end
 
 
-task.spawn(function()
-    local lastWebhookHash = ""
-    local lastWebhookTime = 0
-    local WEBHOOK_COOLDOWN = 10
-    local isProcessing = false
+do
+    task.spawn(function()
+        local lastWebhookHash = ""
+        local lastWebhookTime = 0
+        local WEBHOOK_COOLDOWN = 10
+        local isProcessing = false
     
     local function sendWebhook()
         local success, err = pcall(function()
@@ -6205,20 +6251,13 @@ if isInLobby then
             end
         end
     end)
+    end
 end
 
 
 
 do
-    local LOBBY_PLACEIDS = {12886143095, 18583778121}
-    local function checkIsInLobby()
-        for _, placeId in ipairs(LOBBY_PLACEIDS) do
-            if game.PlaceId == placeId then return true end
-        end
-        return false
-    end
-
-    if checkIsInLobby() then
+    if isInLobby then
         task.spawn(function()
         
         local function getAvailableBreaches()
@@ -6264,7 +6303,7 @@ do
                 end
             end
         end
-    end)
+        end)
     end
 end
 
@@ -6487,30 +6526,48 @@ do
         return ok
     end
     
-    local function getSmartCardPriority(cardName, currentWave)
-        local priorities = {
-            ["Critical Denial"] = (currentWave >= 40) and 1 or 999,
-            ["Lingering Fear II"] = (currentWave >= 30) and 2 or 999,
-            ["Hellish Gravity"] = (currentWave >= 25) and 3 or 999,
-            ["Weakened Resolve III"] = (currentWave >= 20) and 4 or 999,
-            ["Fog of War III"] = (currentWave >= 20) and 5 or 999,
-            ["Lingering Fear I"] = (currentWave >= 15 and currentWave < 30) and 6 or 999,
-            ["Deadly Striker"] = (currentWave >= 10 and currentWave < 25) and 7 or 999,
-            ["Greedy Vampire's"] = (currentWave >= 15) and 8 or 999,
-            ["Power Reversal II"] = (currentWave >= 10) and 9 or 999,
-            ["Fog of War II"] = (currentWave >= 10 and currentWave < 20) and 10 or 999,
-            ["Weakened Resolve II"] = (currentWave >= 10 and currentWave < 20) and 11 or 999,
-            ["Fog of War I"] = (currentWave < 10) and 12 or 999,
-            ["Weakened Resolve I"] = (currentWave < 10) and 13 or 999,
-            ["Power Reversal I"] = (currentWave < 10) and 14 or 999,
-            ["Trick or Treat Coin Flip"] = 999,
+    local function calculateCardValue(cardName, currentWave)
+        local wavesRemaining = math.max(1, 50 - currentWave)
+        
+        local currentKills = 0
+        pcall(function()
+            currentKills = game:GetService("Players").LocalPlayer.leaderstats.Kills.Value
+        end)
+        
+        local avgKillsPerWave = 30
+        if currentWave > 0 and currentKills > 0 then
+            avgKillsPerWave = math.max(20, currentKills / currentWave)
+        end
+        
+        local estimatedKillsRemaining = wavesRemaining * avgKillsPerWave
+        
+        local cardValues = {
+            ["Critical Denial"] = 100 * wavesRemaining,           -- +100/wave, no crits (worth it!)
+            ["Weakened Resolve III"] = 50 * wavesRemaining,       -- +50/wave, -15% boss dmg
+            ["Fog of War III"] = 50 * wavesRemaining,             -- +50/wave, -30% range
+            ["Weakened Resolve II"] = 25 * wavesRemaining,        -- +25/wave, -10% boss dmg
+            ["Fog of War II"] = 25 * wavesRemaining,              -- +25/wave, -15% range
+            ["Power Reversal II"] = 25 * wavesRemaining,          -- +25/wave, no buffs
+            ["Greedy Vampire's"] = 25 * wavesRemaining,           -- +25/wave, cash theft risk
+            ["Weakened Resolve I"] = 15 * wavesRemaining,         -- +15/wave, -5% boss dmg
+            ["Fog of War I"] = 15 * wavesRemaining,               -- +15/wave, -5% range
+            ["Power Reversal I"] = 15 * wavesRemaining,           -- +15/wave, -50% buff effectiveness
+            
+            ["Lingering Fear II"] = 2 * estimatedKillsRemaining,  -- +2/kill, -20% attack speed
+            ["Hellish Gravity"] = 2 * estimatedKillsRemaining,    -- +2/kill, -25% AOE dmg
+            ["Lingering Fear I"] = 1 * estimatedKillsRemaining,   -- +1/kill, -10% attack speed
+            ["Deadly Striker"] = 1 * estimatedKillsRemaining,     -- +1/kill, double stock dmg
+            
+            ["Trick or Treat Coin Flip"] = -999,                  -- Random, unreliable
+            ["Devil's Sacrifice"] = -9999,                        -- Never pick (no abilities)
         }
-        return priorities[cardName] or 999
+        
+        return cardValues[cardName] or 0
     end
     
     local function selectCardSmart()
         if not getgenv().SmartCardSelectionEnabled then return false end
-        local ok = pcall(function()
+        local ok, result = pcall(function()
             local currentWave = 0
             pcall(function()
                 local wave = RS:FindFirstChild("Wave")
@@ -6520,21 +6577,34 @@ do
             end)
             
             local list = getAvailableCards()
-            if not list then return false end
+            if not list or #list == 0 then 
+                return false 
+            end
             
             local bestCard = nil
-            local bestPriority = 999
+            local bestValue = 0
             
             for i=1,#list do
                 local nm = list[i].name
-                local p = getSmartCardPriority(nm, currentWave)
-                if p < bestPriority and p < 999 then
-                    bestPriority = p
+                local value = calculateCardValue(nm, currentWave)
+                print("[Smart Card] Card:", nm, "Value:", value, "Wave:", currentWave)
+                if value > bestValue then
+                    bestValue = value
                     bestCard = list[i]
                 end
             end
             
-            if not bestCard or not bestCard.button or bestPriority >= 999 then return false end
+            if not bestCard then
+                return false
+            end
+            
+            if not bestCard.button then
+                return false
+            end
+            
+            if bestValue == 0 then
+                return false
+            end
             
             local GuiService = game:GetService("GuiService")
             local function press(key)
@@ -6555,10 +6625,15 @@ do
             pressConfirm()
             task.wait(0.2)
             
-            print("[Smart Card] Selected:", bestCard.name, "Priority:", bestPriority, "Wave:", currentWave)
+            print("[Smart Card] Selected:", bestCard.name, "Value:", bestValue, "Wave:", currentWave)
             return true
         end)
-        return ok
+        
+        if not ok then
+            warn("[Smart Card] Error:", result)
+        end
+        
+        return ok and result
     end
     
     while true do
@@ -6737,19 +6812,22 @@ if not isInLobby then
 end
 
 
-task.spawn(function()
-    local vu = game:GetService("VirtualUser")
-    Players.LocalPlayer.Idled:Connect(function()
-        if getgenv().AntiAFKEnabled then
-            vu:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
-            task.wait(1)
-            vu:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
-        end
+do
+    task.spawn(function()
+        local vu = game:GetService("VirtualUser")
+        Players.LocalPlayer.Idled:Connect(function()
+            if getgenv().AntiAFKEnabled then
+                vu:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+                task.wait(1)
+                vu:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+            end
+        end)
     end)
-end)
+end
 
-task.spawn(function()
-    local blackScreenGui, blackFrame
+do
+    task.spawn(function()
+        local blackScreenGui, blackFrame
     
     local function createBlack()
         if blackScreenGui then return end
@@ -6807,12 +6885,14 @@ task.spawn(function()
             end
         end
     end
-end)
+    end)
+end
 
-task.spawn(function()
-    while true do
-        task.wait(1)
-        if getgenv().RemoveEnemiesEnabled then
+do
+    task.spawn(function()
+        while true do
+            task.wait(1)
+            if getgenv().RemoveEnemiesEnabled then
             pcall(function()
                 local enemies = workspace:FindFirstChild("Enemies")
                 if enemies then
@@ -6836,7 +6916,8 @@ task.spawn(function()
             end)
         end
     end
-end)
+    end)
+end
 
 if getgenv().Config.toggles.AutoHideUI then
     task.spawn(function()
