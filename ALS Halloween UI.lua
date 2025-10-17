@@ -7267,21 +7267,22 @@ do
             for i=1,#list do
                 local nm = list[i].name
                 
-                if nm == "Devil's Sacrifice" or nm:lower():find("disable") then
+                -- SAFETY: Never pick Devil's Sacrifice or any card with "disable" in name
+                local isBlocked = (nm == "Devil's Sacrifice" or nm:lower():find("disable"))
+                
+                if not isBlocked then
+                    local value = calculateCardValue(nm, currentWave)
+                    print("[Smart Card] Evaluating:", nm, "| Value:", math.floor(value))
+                    
+                    -- Only consider cards with positive value
+                    if value > bestValue and value > 0 then
+                        bestValue = value
+                        bestCard = list[i]
+                        print("[Smart Card] ✓ New best card:", nm, "with value", math.floor(value))
+                    end
+                else
                     print("[Smart Card] ❌ BLOCKED:", nm, "- This card disables abilities!")
-                    goto continue
                 end
-                
-                local value = calculateCardValue(nm, currentWave)
-                print("[Smart Card] Evaluating:", nm, "| Value:", math.floor(value))
-                
-                if value > bestValue and value > 0 then
-                    bestValue = value
-                    bestCard = list[i]
-                    print("[Smart Card] ✓ New best card:", nm, "with value", math.floor(value))
-                end
-                
-                ::continue::
             end
             
             if not bestCard or bestValue <= 0 then
