@@ -4809,7 +4809,6 @@ task.spawn(function()
             end
             
             if buttonToPress then
-                print("[Auto Retry] Button to press:", buttonToPress:GetFullName())
                 
                 if getgenv().WebhookEnabled then
                     task.wait(2)
@@ -4834,7 +4833,6 @@ task.spawn(function()
                     task.wait(0.2)
                     
                     if GuiService.SelectedObject == buttonToPress then
-                        print("[Auto Retry] Selected button:", buttonToPress.Name)
                         
                         VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
                         task.wait(0.05)
@@ -4842,10 +4840,7 @@ task.spawn(function()
                         task.wait(0.2)
                         
                         GuiService.SelectedObject = nil
-                        
-                        print("[Auto Retry] Pressed Enter on", actionName, "button")
-                    else
-                        warn("[Auto Retry] Failed to select the correct button")
+
                     end
                 end)
                 
@@ -5226,7 +5221,6 @@ task.spawn(function()
                             
                             if shouldUse then
                                 if not isOnCooldown(infoName, abilityName) then
-                                    print("[Auto Ability] ✓✓✓ USING ABILITY:", unitName, "-", abilityName, "✓✓✓")
                                     useAbility(tower, abilityName)
                                     setAbilityUsed(infoName, abilityName)
                                     
