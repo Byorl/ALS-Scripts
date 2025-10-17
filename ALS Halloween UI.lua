@@ -1193,6 +1193,7 @@ local function updateGameState()
             getgenv().WukongTrackedClones = {}
             getgenv()._WukongLastSynthesisTime = 0
             getgenv().SmartCardPicked = {}
+            getgenv().SmartCardLastPromptId = nil
         end
         
         getgenv().MacroGameState.lastGameEndedState = currentGameEnded
@@ -7087,7 +7088,7 @@ do
             local absPos = best.button.AbsolutePosition
             local absSize = best.button.AbsoluteSize
             local centerX = absPos.X + (absSize.X / 2)
-            local centerY = absPos.Y + (absSize.Y / 2)
+            local centerY = absPos.Y + (absSize.Y * 0.7)
             
             VirtualInputManager:SendMouseMoveEvent(centerX, centerY, game)
             task.wait(0.1)
@@ -7132,6 +7133,21 @@ do
         getgenv().SmartCardPicked = {}
     end
     
+    if not getgenv().SmartCardLastPromptId then
+        getgenv().SmartCardLastPromptId = nil
+    end
+    
+    local function getPromptId()
+        local ok, id = pcall(function()
+            local prompt = LocalPlayer.PlayerGui:FindFirstChild("Prompt")
+            if prompt and prompt:FindFirstChild("Frame") then
+                return prompt.Frame:GetDebugId()
+            end
+            return nil
+        end)
+        return ok and id or nil
+    end
+    
     local function calculateCardValue(cardName, currentWave)
         local TOTAL_ENEMIES = 1350
         local TOTAL_WAVES = 50
@@ -7153,7 +7169,6 @@ do
             ["Critical Denial"] = 100,
             ["Weakened Resolve III"] = 50,
             ["Fog of War III"] = 50,
-            ["Devil's Sacrifice"] = 25,
             ["Weakened Resolve II"] = 25,
             ["Fog of War II"] = 25,
             ["Power Reversal II"] = 25,
@@ -7221,6 +7236,15 @@ do
     local function selectCardSmart()
         if not getgenv().SmartCardSelectionEnabled then return false end
         local ok, result = pcall(function()
+            local currentPromptId = getPromptId()
+            if not currentPromptId then
+                return false
+            end
+            
+            if getgenv().SmartCardLastPromptId == currentPromptId then
+                return false
+            end
+            
             local currentWave = 0
             pcall(function()
                 local wave = RS:FindFirstChild("Wave")
@@ -7242,17 +7266,26 @@ do
             
             for i=1,#list do
                 local nm = list[i].name
+                
+                if nm == "Devil's Sacrifice" or nm:lower():find("disable") then
+                    print("[Smart Card] ❌ BLOCKED:", nm, "- This card disables abilities!")
+                    goto continue
+                end
+                
                 local value = calculateCardValue(nm, currentWave)
                 print("[Smart Card] Evaluating:", nm, "| Value:", math.floor(value))
-                if value > bestValue then
+                
+                if value > bestValue and value > 0 then
                     bestValue = value
                     bestCard = list[i]
                     print("[Smart Card] ✓ New best card:", nm, "with value", math.floor(value))
                 end
+                
+                ::continue::
             end
             
-            if not bestCard then
-                print("[Smart Card] No valid card found")
+            if not bestCard or bestValue <= 0 then
+                print("[Smart Card] No valid card found (best value:", bestValue, ")")
                 return false
             end
             
@@ -7269,7 +7302,7 @@ do
             local absPos = bestCard.button.AbsolutePosition
             local absSize = bestCard.button.AbsoluteSize
             local centerX = absPos.X + (absSize.X / 2)
-            local centerY = absPos.Y + (absSize.Y / 2)
+            local centerY = absPos.Y + (absSize.Y * 0.7)
             
             VirtualInputManager:SendMouseMoveEvent(centerX, centerY, game)
             task.wait(0.1)
@@ -7278,6 +7311,8 @@ do
             VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, false, game, 0)
             
             print("[Smart Card] Card selected successfully!")
+            
+            getgenv().SmartCardLastPromptId = currentPromptId
             
             task.wait(0.3)
             pressConfirm()
