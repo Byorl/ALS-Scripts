@@ -5116,27 +5116,21 @@ task.spawn(function()
                             local shouldUse = true
                             local debugInfo = {}
                             
-                            print("[Auto Ability] Checking:", unitName, "-", abilityName, "| Wave:", currentWave, "| Boss:", hasBoss)
                             
                             if not hasAbilityBeenUnlocked(infoName, abilityName, towerLevel) then
                                 shouldUse = false
                                 table.insert(debugInfo, "not unlocked (level " .. towerLevel .. ")")
-                                print("[Auto Ability] ✗", unitName, abilityName, "- NOT UNLOCKED at level", towerLevel)
-                            else
-                                print("[Auto Ability] ✓", unitName, abilityName, "- unlocked")
                             end
                             
                             if shouldUse and isOnCooldown(infoName, abilityName) then
                                 shouldUse = false
                                 table.insert(debugInfo, "on cooldown")
-                                print("[Auto Ability] ✗", unitName, abilityName, "- ON COOLDOWN")
                             end
                             
                             if shouldUse and cfg.useOnWave and cfg.specificWave then
                                 if currentWave ~= cfg.specificWave then
                                     shouldUse = false
                                     table.insert(debugInfo, "wrong wave (current: " .. currentWave .. ", need: " .. cfg.specificWave .. ")")
-                                    print("[Auto Ability] ✗", unitName, abilityName, "- WRONG WAVE (need wave", cfg.specificWave, ", current:", currentWave .. ")")
                                 else
                                     table.insert(debugInfo, "wave OK (" .. currentWave .. ")")
                                     print("[Auto Ability] ✓", unitName, abilityName, "- wave condition met (wave", currentWave .. ")")
@@ -5148,11 +5142,9 @@ task.spawn(function()
                                 if not hasBoss then
                                     shouldUse = false
                                     table.insert(debugInfo, "no boss")
-                                    print("[Auto Ability] ✗", unitName, abilityName, "- NO BOSS EXISTS")
                                 elseif not bossReadyForAbilities() then
                                     shouldUse = false
                                     table.insert(debugInfo, "boss not ready")
-                                    print("[Auto Ability] ✗", unitName, abilityName, "- BOSS NOT READY (spawn timer)")
                                 else
                                     table.insert(debugInfo, "boss OK")
                                     print("[Auto Ability] ✓", unitName, abilityName, "- boss condition met")
@@ -5161,11 +5153,9 @@ task.spawn(function()
                             
                             if shouldUse and cfg.requireBossInRange then
                                 local inRange = checkBossInRangeForDuration(tower, 0)
-                                print("[Auto Ability] Checking requireBossInRange for", unitName, abilityName, "| hasBoss:", hasBoss, "| inRange:", inRange)
                                 if not hasBoss or not inRange then
                                     shouldUse = false
                                     table.insert(debugInfo, "boss not in range")
-                                    print("[Auto Ability] ✗", unitName, abilityName, "- BOSS NOT IN RANGE")
                                 else
                                     table.insert(debugInfo, "boss in range")
                                     print("[Auto Ability] ✓", unitName, abilityName, "- boss in range condition met")
@@ -5183,8 +5173,6 @@ task.spawn(function()
                                 else
                                     print("[Auto Ability] ✗", unitName, abilityName, "- FINAL COOLDOWN CHECK FAILED")
                                 end
-                            else
-                                print("[Auto Ability] ✗ SKIPPED:", unitName, "-", abilityName, "| Reasons:", table.concat(debugInfo, ", "))
                             end
                         end
                     end
@@ -6667,11 +6655,6 @@ do
             
             print("[Smart Card] ========== SELECTED:", bestCard.name, "with value", math.floor(bestValue), "==========")
             print("[Smart Card] Clicking card button...")
-            
-            if bestValue <= 0 then
-                print("[Smart Card] Best value is", bestValue, "- skipping selection")
-                return false
-            end
             
             local GuiService = game:GetService("GuiService")
             local function press(key)
