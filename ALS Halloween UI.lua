@@ -80,7 +80,7 @@ getgenv().Config.autoJoin = getgenv().Config.autoJoin or {}
 getgenv().SaveConfig = saveConfig
 getgenv().LoadConfig = loadConfig
 
-local defaultWidth = 660
+local defaultWidth = 720
 local defaultHeight = 480
 local customWidth = tonumber(getgenv().Config.inputs.UIWidth) or defaultWidth
 local customHeight = tonumber(getgenv().Config.inputs.UIHeight) or defaultHeight
@@ -6528,42 +6528,56 @@ do
     end
     
     local function calculateCardValue(cardName, currentWave)
-        local wavesRemaining = math.max(1, 50 - currentWave)
+        local wavesRemaining = math.max(0, 50 - currentWave)
         
         local currentKills = 0
         pcall(function()
             currentKills = game:GetService("Players").LocalPlayer.leaderstats.Kills.Value
         end)
         
-        local avgKillsPerWave = 30
+        local avgKillsPerWave = 50
         if currentWave > 0 and currentKills > 0 then
-            avgKillsPerWave = math.max(20, currentKills / currentWave)
+            avgKillsPerWave = currentKills / currentWave
         end
         
-        local estimatedKillsRemaining = wavesRemaining * avgKillsPerWave
+        local estimatedKillsRemaining = (wavesRemaining + 1) * avgKillsPerWave
         
-        local cardValues = {
-            ["Critical Denial"] = 100 * wavesRemaining,           -- +100/wave, no crits (worth it!)
-            ["Weakened Resolve III"] = 50 * wavesRemaining,       -- +50/wave, -15% boss dmg
-            ["Fog of War III"] = 50 * wavesRemaining,             -- +50/wave, -30% range
-            ["Weakened Resolve II"] = 25 * wavesRemaining,        -- +25/wave, -10% boss dmg
-            ["Fog of War II"] = 25 * wavesRemaining,              -- +25/wave, -15% range
-            ["Power Reversal II"] = 25 * wavesRemaining,          -- +25/wave, no buffs
-            ["Greedy Vampire's"] = 25 * wavesRemaining,           -- +25/wave, cash theft risk
-            ["Weakened Resolve I"] = 15 * wavesRemaining,         -- +15/wave, -5% boss dmg
-            ["Fog of War I"] = 15 * wavesRemaining,               -- +15/wave, -5% range
-            ["Power Reversal I"] = 15 * wavesRemaining,           -- +15/wave, -50% buff effectiveness
-            
-            ["Lingering Fear II"] = 2 * estimatedKillsRemaining,  -- +2/kill, -20% attack speed
-            ["Hellish Gravity"] = 2 * estimatedKillsRemaining,    -- +2/kill, -25% AOE dmg
-            ["Lingering Fear I"] = 1 * estimatedKillsRemaining,   -- +1/kill, -10% attack speed
-            ["Deadly Striker"] = 1 * estimatedKillsRemaining,     -- +1/kill, double stock dmg
-            
-            ["Trick or Treat Coin Flip"] = -999,                  -- Random, unreliable
-            ["Devil's Sacrifice"] = -9999,                        -- Never pick (no abilities)
+        local perWaveValue = {
+            ["Critical Denial"] = 100,      -- +100 candy per wave
+            ["Weakened Resolve III"] = 50,  -- +50 candy per wave
+            ["Fog of War III"] = 50,        -- +50 candy per wave
+            ["Weakened Resolve II"] = 25,   -- +25 candy per wave
+            ["Fog of War II"] = 25,         -- +25 candy per wave
+            ["Power Reversal II"] = 25,     -- +25 candy per wave
+            ["Greedy Vampire's"] = 25,      -- +25 candy per wave (risky!)
+            ["Weakened Resolve I"] = 15,    -- +15 candy per wave
+            ["Fog of War I"] = 15,          -- +15 candy per wave
+            ["Power Reversal I"] = 15,      -- +15 candy per wave
         }
         
-        return cardValues[cardName] or 0
+
+        local perKillBonus = {
+            ["Lingering Fear II"] = 2,      -- +2 bonus (3 total per kill with stacking)
+            ["Hellish Gravity"] = 2,        -- +2 bonus (3 total per kill with stacking)
+            ["Lingering Fear I"] = 1,       -- +1 bonus (2 total per kill with stacking)
+            ["Deadly Striker"] = 1,         -- +1 bonus (2 total per kill with stacking)
+        }
+        
+        if perWaveValue[cardName] then
+            return perWaveValue[cardName] * wavesRemaining
+        elseif perKillBonus[cardName] then
+            local baseValue = perKillBonus[cardName] * estimatedKillsRemaining
+            
+            local stackingMultiplier = 1.3
+            
+            return baseValue * stackingMultiplier
+        elseif cardName == "Trick or Treat Coin Flip" then
+            return -999 
+        elseif cardName == "Devil's Sacrifice" then
+            return -9999
+        end
+        
+        return 0
     end
     
     local function selectCardSmart()
