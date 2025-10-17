@@ -1517,9 +1517,6 @@ local function setupRecordingHook()
     namecallHook = true
 end
 
-local function startUpgradeMonitoring()
-    -- This function kept for compatibility but does nothing
-end
 
 local function monitorEndGameUI()
     task.spawn(function()
@@ -2080,7 +2077,6 @@ local function playMacroV2()
 end
 
 setupRecordingHook()
-startUpgradeMonitoring()
 monitorEndGameUI()
 
 task.spawn(function()
@@ -6013,10 +6009,15 @@ do
             
             local description = "**Username:** ||" .. LocalPlayer.Name .. "||\n**Level:** " .. (clientData.Level or 0) .. " [" .. formatNumber(clientData.EXP or 0) .. "/" .. formatNumber(clientData.MaxEXP or 0) .. "]"
             
+            local embedColor = 0x00ff00
+            if matchResult and (matchResult:upper():find("DEFEAT") or matchResult:upper():find("LOSE") or matchResult:upper():find("LOSS")) then
+                embedColor = 0xff0000
+            end
+            
             local embed = {
                 title = "Anime Last Stand",
                 description = description or "N/A",
-                color = 0x00ff00,
+                color = embedColor,
                 fields = {
                     { name = "Player Stats", value = (formatStats() ~= "" and formatStats() or "N/A"), inline = true },
                     { name = "Rewards", value = (rewardsText ~= "" and rewardsText or "No rewards found"), inline = true },
