@@ -3198,6 +3198,12 @@ getgenv().AutoJoinDelay = tonumber(getgenv().Config.inputs.AutoJoinDelay) or 0
 getgenv().FinalExpAutoJoinEasyEnabled = getgenv().Config.toggles.FinalExpAutoJoinEasyToggle or false
 getgenv().FinalExpAutoJoinHardEnabled = getgenv().Config.toggles.FinalExpAutoJoinHardToggle or false
 getgenv().FinalExpAutoSkipShopEnabled = getgenv().Config.toggles.FinalExpAutoSkipShopToggle or false
+getgenv().FinalExpAutoSelectModeEnabled = getgenv().Config.toggles.FinalExpAutoSelectModeToggle or false
+getgenv().FinalExpSkipRewardsEnabled = getgenv().Config.toggles.FinalExpSkipRewardsToggle or false
+
+getgenv().FinalExpRestPriority = tonumber(getgenv().Config.inputs.FinalExpRestPriority) or 3
+getgenv().FinalExpDungeonPriority = tonumber(getgenv().Config.inputs.FinalExpDungeonPriority) or 1
+getgenv().FinalExpDoubleDungeonPriority = tonumber(getgenv().Config.inputs.FinalExpDoubleDungeonPriority) or 2
 
 local BLACKLISTED_UNITS = {
     "NarutoBaryonClone"
@@ -4540,6 +4546,93 @@ Sections.FinalExpeditionRight:SubLabel({
     Text = "Automatically skips the shop selection when available"
 })
 
+Sections.FinalExpeditionRight:Divider()
+
+createToggle(
+    Sections.FinalExpeditionRight,
+    "Skip Rewards",
+    "FinalExpSkipRewardsToggle",
+    function(value)
+        getgenv().FinalExpSkipRewardsEnabled = value
+        Window:Notify({
+            Title = "Final Expedition",
+            Description = value and "Skip Rewards Enabled" or "Skip Rewards Disabled",
+            Lifetime = 3
+        })
+    end,
+    getgenv().FinalExpSkipRewardsEnabled
+)
+
+Sections.FinalExpeditionRight:SubLabel({
+    Text = "Automatically skips reward screens"
+})
+
+Sections.FinalExpeditionRight:Divider()
+
+Sections.FinalExpeditionRight:Header({ Text = "🎯 Auto Select Mode" })
+Sections.FinalExpeditionRight:SubLabel({ Text = "Automatically select Rest/Dungeon/Double Dungeon based on priority" })
+
+createToggle(
+    Sections.FinalExpeditionRight,
+    "Enable Auto Select Mode",
+    "FinalExpAutoSelectModeToggle",
+    function(value)
+        getgenv().FinalExpAutoSelectModeEnabled = value
+        Window:Notify({
+            Title = "Final Expedition",
+            Description = value and "Auto Select Mode Enabled" or "Auto Select Mode Disabled",
+            Lifetime = 3
+        })
+    end,
+    getgenv().FinalExpAutoSelectModeEnabled
+)
+
+createInput(
+    Sections.FinalExpeditionRight,
+    "Rest Priority (1-3)",
+    "FinalExpRestPriority",
+    "3",
+    "Numeric",
+    function(value)
+        local num = tonumber(value) or 3
+        if num < 1 then num = 1 end
+        if num > 3 then num = 3 end
+        getgenv().FinalExpRestPriority = num
+    end
+)
+
+createInput(
+    Sections.FinalExpeditionRight,
+    "Dungeon Priority (1-3)",
+    "FinalExpDungeonPriority",
+    "1",
+    "Numeric",
+    function(value)
+        local num = tonumber(value) or 1
+        if num < 1 then num = 1 end
+        if num > 3 then num = 3 end
+        getgenv().FinalExpDungeonPriority = num
+    end
+)
+
+createInput(
+    Sections.FinalExpeditionRight,
+    "Double Dungeon Priority (1-3)",
+    "FinalExpDoubleDungeonPriority",
+    "2",
+    "Numeric",
+    function(value)
+        local num = tonumber(value) or 2
+        if num < 1 then num = 1 end
+        if num > 3 then num = 3 end
+        getgenv().FinalExpDoubleDungeonPriority = num
+    end
+)
+
+Sections.FinalExpeditionRight:SubLabel({
+    Text = "1 = Highest priority, 3 = Lowest priority"
+})
+
 
 Sections.SeamlessFixLeft:Header({ Text = "🔄 Seamless Fix" })
 Sections.SeamlessFixLeft:SubLabel({ Text = "Keep script running across teleports" })
@@ -4756,52 +4849,34 @@ task.spawn(function()
             local retryButton = buttons:FindFirstChild("Retry")
             local leaveButton = buttons:FindFirstChild("Leave")
             
-            local function getButtonText(button)
-                if not button then return "" end
-                local styling = button:FindFirstChild("Styling")
-                if styling then
-                    local label = styling:FindFirstChild("Label")
-                    if label and label.Text then
-                        return label.Text:lower()
-                    end
-                end
-                return ""
-            end
-            
-            local nextText = getButtonText(nextButton)
-            local retryText = getButtonText(retryButton)
-            
             local buttonToPress, actionName = nil, ""
             
-            if getgenv().AutoFastRetryEnabled or getgenv().AutoSmartEnabled then
-                print("[Auto Retry Debug] Retry button exists:", retryButton ~= nil)
-                if retryButton then
-                    print("[Auto Retry Debug] Retry visible:", retryButton.Visible)
-                    print("[Auto Retry Debug] Retry text:", retryText)
-                end
-            end
-            
-            if getgenv().AutoSmartEnabled then
-                if nextButton and nextButton.Visible and (nextText:find("next") or nextText:find("continue")) then
-                    buttonToPress = nextButton
-                    actionName = "Next"
-                elseif retryButton and retryButton.Visible and (retryText:find("replay") or retryText:find("retry")) then
-                    buttonToPress = retryButton
-                    actionName = "Replay"
-                elseif leaveButton and leaveButton.Visible then
-                    buttonToPress = leaveButton
-                    actionName = "Leave"
-                end
-            elseif getgenv().AutoNextEnabled and nextButton and nextButton.Visible and (nextText:find("next") or nextText:find("continue")) then
+            if getgenv().AutoNextEnabled and nextButton and nextButton.Visible then
                 buttonToPress = nextButton
                 actionName = "Next"
-            elseif getgenv().AutoFastRetryEnabled and retryButton and retryButton.Visible and (retryText:find("replay") or retryText:find("retry")) then
+                print("[Auto Next] Next button detected and selected")
+            elseif getgenv().AutoFastRetryEnabled and retryButton and retryButton.Visible then
                 buttonToPress = retryButton
-                actionName = "Replay"
-                print("[Auto Retry Debug] Selected Retry button for clicking")
+                actionName = "Retry"
+                print("[Auto Retry] Retry button detected and selected")
             elseif getgenv().AutoLeaveEnabled and leaveButton and leaveButton.Visible then
                 buttonToPress = leaveButton
                 actionName = "Leave"
+                print("[Auto Leave] Leave button detected and selected")
+            elseif getgenv().AutoSmartEnabled then
+                if nextButton and nextButton.Visible then
+                    buttonToPress = nextButton
+                    actionName = "Next"
+                    print("[Auto Smart] Next button detected and selected")
+                elseif retryButton and retryButton.Visible then
+                    buttonToPress = retryButton
+                    actionName = "Retry"
+                    print("[Auto Smart] Retry button detected and selected")
+                elseif leaveButton and leaveButton.Visible then
+                    buttonToPress = leaveButton
+                    actionName = "Leave"
+                    print("[Auto Smart] Leave button detected and selected")
+                end
             end
             
             if not buttonToPress and (getgenv().AutoFastRetryEnabled or getgenv().AutoSmartEnabled) then
@@ -5509,55 +5584,126 @@ local function isInLobby()
     return lobbyUI ~= nil
 end
 
-if isInLobby then
-    task.spawn(function()
-        local finalExpRemote = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("FinalExpeditionStart")
-        if not finalExpRemote then
-            return
+task.spawn(function()
+    while true do
+        task.wait(2)
+        
+        local currentlyInLobby = false
+        pcall(function()
+            local lobbyCheck = workspace:FindFirstChild("Lobby")
+            currentlyInLobby = lobbyCheck ~= nil
+        end)
+        
+        if currentlyInLobby and (getgenv().FinalExpAutoJoinEasyEnabled or getgenv().FinalExpAutoJoinHardEnabled) then
+            pcall(function()
+                local finalExpRemote = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("FinalExpeditionStart")
+                if finalExpRemote then
+                    if getgenv().FinalExpAutoJoinEasyEnabled then
+                        finalExpRemote:FireServer("Easy")
+                        print("[Final Expedition] Auto joining Easy mode")
+                    elseif getgenv().FinalExpAutoJoinHardEnabled then
+                        finalExpRemote:FireServer("Hard")
+                        print("[Final Expedition] Auto joining Hard mode")
+                    end
+                end
+            end)
         end
-        while true do
-            task.wait(2)
-            if getgenv().FinalExpAutoJoinEasyEnabled then
-                pcall(function()
-                    finalExpRemote:FireServer("Easy")
-                end)
-            elseif getgenv().FinalExpAutoJoinHardEnabled then
-                pcall(function()
-                    finalExpRemote:FireServer("Hard")
-                end)
-            end
-        end
-    end)
-end
+    end
+end)
 
-if not isInLobby then
-    task.spawn(function()
-        local abilitySelection = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("AbilitySelection")
-        if not abilitySelection then
-            return
+task.spawn(function()
+    while true do
+        task.wait(1)
+        
+        local currentlyInLobby = false
+        pcall(function()
+            local lobbyCheck = workspace:FindFirstChild("Lobby")
+            currentlyInLobby = lobbyCheck ~= nil
+        end)
+        
+        if not currentlyInLobby then
+            pcall(function()
+                local promptUI = LocalPlayer.PlayerGui:FindFirstChild("Prompt")
+                if not promptUI then return end
+                
+                local frame = promptUI:FindFirstChild("Frame")
+                if not frame then return end
+                
+                local innerFrame = frame:FindFirstChild("Frame")
+                if not innerFrame then return end
+                
+                local optionsFrame = innerFrame:FindFirstChild("Frame")
+                if not optionsFrame then return end
+                
+                local optionsContainer = optionsFrame:FindFirstChild("Frame")
+                if not optionsContainer then return end
+                
+                local availableOptions = {}
+                for _, child in pairs(optionsContainer:GetChildren()) do
+                    if child:IsA("Frame") or child:IsA("GuiObject") then
+                        local textLabel = child:FindFirstChild("Frame", true)
+                        if textLabel then
+                            textLabel = textLabel:FindFirstChild("TextLabel")
+                            if textLabel and textLabel.Text then
+                                local optionText = textLabel.Text
+                                availableOptions[optionText] = child
+                                print("[Final Expedition] Found option:", optionText)
+                            end
+                        end
+                    end
+                end
+                
+                if next(availableOptions) == nil then return end
+                
+                local abilitySelectionRemote = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("AbilitySelectionEvent")
+                if not abilitySelectionRemote then return end
+                
+                if getgenv().FinalExpAutoSkipShopEnabled and availableOptions["Shop"] then
+                    print("[Final Expedition] Skipping Shop")
+                    abilitySelectionRemote:FireServer("FinalExpeditionSelection", "Shop")
+                    task.wait(0.5)
+                    local shopRemote = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("FinalExpedition") and RS.Remotes.FinalExpedition:FindFirstChild("ShopEvent")
+                    if shopRemote then
+                        shopRemote:FireServer("Close")
+                        print("[Final Expedition] Closed Shop")
+                    end
+                    return
+                end
+                
+                if getgenv().FinalExpAutoSelectModeEnabled then
+                    local priorities = {
+                        {name = "Rest", priority = getgenv().FinalExpRestPriority or 3, remote = "Rest"},
+                        {name = "Dungeon", priority = getgenv().FinalExpDungeonPriority or 1, remote = "Dungeon"},
+                        {name = "Double Dungeon", priority = getgenv().FinalExpDoubleDungeonPriority or 2, remote = "Double_Dungeon"}
+                    }
+                    
+                    table.sort(priorities, function(a, b) return a.priority < b.priority end)
+                    
+                    for _, option in ipairs(priorities) do
+                        if availableOptions[option.name] then
+                            print("[Final Expedition] Auto selecting:", option.name, "(Priority:", option.priority .. ")")
+                            abilitySelectionRemote:FireServer("FinalExpeditionSelection", option.remote)
+                            return
+                        end
+                    end
+                end
+                
+                if getgenv().FinalExpSkipRewardsEnabled then
+                    for optionName, optionFrame in pairs(availableOptions) do
+                        local textButton = optionFrame:FindFirstChildOfClass("TextButton", true)
+                        if textButton then
+                            print("[Final Expedition] Skipping rewards by clicking button")
+                            for _, connection in pairs(getconnections(textButton.MouseButton1Click)) do
+                                connection:Fire()
+                            end
+                            return
+                        end
+                    end
+                end
+            end)
         end
-        task.spawn(function()
-            while true do
-                task.wait(5)
-                if getgenv().FinalExpAutoSkipShopEnabled then
-                    pcall(function()
-                        abilitySelection:FireServer("FinalExpeditionSelection", "Double_Dungeon")
-                    end)
-                end
-            end
-        end)
-        task.spawn(function()
-            while true do
-                task.wait(5)
-                if getgenv().FinalExpAutoSkipShopEnabled then
-                    pcall(function()
-                        abilitySelection:FireServer("FinalExpeditionSelection", "Dungeon")
-                    end)
-                end
-            end
-        end)
-    end)
-end
+    end
+end)
 
 
 local function getClientData()
