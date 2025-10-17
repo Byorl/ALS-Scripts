@@ -4960,7 +4960,15 @@ task.spawn(function()
                     task.wait(0.1)
                     
                     GuiService.SelectedObject = buttonToPress
-                    task.wait(0.2)
+                    
+                    local lockConnection
+                    lockConnection = RunService.Heartbeat:Connect(function()
+                        if GuiService.SelectedObject ~= buttonToPress then
+                            GuiService.SelectedObject = buttonToPress
+                        end
+                    end)
+                    
+                    task.wait(0.3)
                     
                     if GuiService.SelectedObject == buttonToPress then
                         VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
@@ -4968,7 +4976,15 @@ task.spawn(function()
                         VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
                         task.wait(0.2)
                         
+                        if lockConnection then
+                            lockConnection:Disconnect()
+                        end
+                        
                         GuiService.SelectedObject = nil
+                    else
+                        if lockConnection then
+                            lockConnection:Disconnect()
+                        end
                     end
                 end)
                 
