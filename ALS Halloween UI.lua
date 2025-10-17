@@ -1785,7 +1785,6 @@ local function detectMacroProgress(macroData)
         end
     end
     
-    print("[Macro Resume] Detected progress: Step", lastCompletedStep, "/", #macroData)
     
     if lastCompletedStep >= #macroData then
         return -1
@@ -1823,7 +1822,6 @@ local function playMacroV2()
             step = detectMacroProgress(macroData)
             
             if step == -1 then
-                print("[Macro Complete] All steps already completed")
                 getgenv().MacroStatusText = "Finished Macro"
                 getgenv().MacroWaitingText = "All steps complete"
                 getgenv().MacroCurrentStep = #macroData
@@ -4714,6 +4712,13 @@ task.spawn(function()
                     gameEnded = false
                 }
                 getgenv().MacroCurrentStep = 0
+                getgenv().MacroActionText = ""
+                getgenv().MacroUnitText = ""
+                getgenv().MacroWaitingText = ""
+                getgenv().MacroStatusText = "Idle"
+                if getgenv().UpdateMacroStatus then
+                    getgenv().UpdateMacroStatus()
+                end
                 print("[Auto Retry] Reset macro progress for fresh start")
                 return
             end
