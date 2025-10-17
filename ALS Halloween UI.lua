@@ -4903,6 +4903,40 @@ task.spawn(function()
             local retryButton = buttons:FindFirstChild("Retry")
             local leaveButton = buttons:FindFirstChild("Leave")
             
+            if not retryButton or not nextButton or not leaveButton then
+                for _, button in pairs(buttons:GetChildren()) do
+                    if button:IsA("TextButton") or button:IsA("ImageButton") then
+                        local textLabel = button:FindFirstChildWhichIsA("TextLabel", true)
+                        if textLabel then
+                            local text = textLabel.Text:lower()
+                            if text:find("retry") and not retryButton then
+                                retryButton = button
+                                print("[Auto Retry] Found Retry button by text:", button.Name)
+                            elseif text:find("next") and not nextButton then
+                                nextButton = button
+                                print("[Auto Retry] Found Next button by text:", button.Name)
+                            elseif text:find("leave") and not leaveButton then
+                                leaveButton = button
+                                print("[Auto Retry] Found Leave button by text:", button.Name)
+                            end
+                        end
+                    end
+                end
+            end
+            
+            print("[Auto Retry Debug] Available buttons:")
+            for _, button in pairs(buttons:GetChildren()) do
+                if button:IsA("GuiButton") then
+                    local textLabel = button:FindFirstChildWhichIsA("TextLabel", true)
+                    local buttonText = textLabel and textLabel.Text or "No text"
+                    print("  - " .. button.Name .. " (Visible: " .. tostring(button.Visible) .. ", Text: " .. buttonText .. ")")
+                end
+            end
+            
+            print("[Auto Retry Debug] Button states:")
+            print("  Next:", nextButton and "Found" or "Missing", nextButton and ("Visible: " .. tostring(nextButton.Visible)) or "")
+            print("  Retry:", retryButton and "Found" or "Missing", retryButton and ("Visible: " .. tostring(retryButton.Visible)) or "")
+            print("  Leave:", leaveButton and "Found" or "Missing", leaveButton and ("Visible: " .. tostring(leaveButton.Visible)) or "")
             
             local buttonToPress, actionName = nil, ""
             
