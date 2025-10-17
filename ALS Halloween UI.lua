@@ -1131,7 +1131,6 @@ local towerTracker = {
 }
 
 local function setupTowerUpgradeListener(tower)
-    print("[Macro Debug] setupTowerUpgradeListener called for:", tower.Name)
     
     if not tower:FindFirstChild("Upgrade") then 
         print("[Macro Debug] ✗ Tower has no Upgrade child:", tower.Name)
@@ -1237,9 +1236,7 @@ local function setupTowerUpgradeListener(tower)
     end)
 end
 
-task.spawn(function()
-    print("[Macro Debug] Starting tower monitoring for upgrade listeners")
-    
+task.spawn(function()    
     workspace.Towers.ChildAdded:Connect(function(tower)
         print("[Macro Debug] Tower added to workspace:", tower.Name)
         
@@ -4952,9 +4949,15 @@ end
 local function bossExists()
     local ok, res = pcall(function()
         local enemies = workspace:FindFirstChild("Enemies")
-        if not enemies then return false end
-        return enemies:FindFirstChild("Boss") ~= nil
+        if not enemies then 
+            return false 
+        end
+        local boss = enemies:FindFirstChild("Boss")
+        return boss ~= nil
     end)
+    if not ok then
+        warn("[Auto Ability] Error checking boss existence:", res)
+    end
     return ok and res
 end
 
@@ -5050,6 +5053,8 @@ local function resetRoundTrackers()
     bossSpawnTime = nil
     generalBossSpawnTime = nil
     bossInRangeTracker = {}
+    abilityCooldowns = {}
+    print("[Auto Ability] Reset all cooldowns for new round")
 end
 
 local function checkGameEndedReset()
@@ -5073,10 +5078,19 @@ task.spawn(function()
             
             if currentWave < lastWave then
                 resetRoundTrackers()
+                print("[Auto Ability] Round restart detected (wave", lastWave, "→", currentWave, "), reset trackers")
             end
+            
             if getgenv().SeamlessFixEnabled and lastWave >= 50 and currentWave < 50 then
                 resetRoundTrackers()
+                print("[Auto Ability] Seamless round restart detected, reset trackers")
             end
+            
+            if currentWave == 1 and lastWave > 10 then
+                resetRoundTrackers()
+                print("[Auto Ability] Wave 1 after high wave, reset trackers")
+            end
+            
             lastWave = currentWave
             
             if not Towers then return end
@@ -5102,54 +5116,75 @@ task.spawn(function()
                             local shouldUse = true
                             local debugInfo = {}
                             
+                            print("[Auto Ability] Checking:", unitName, "-", abilityName, "| Wave:", currentWave, "| Boss:", hasBoss)
+                            
                             if not hasAbilityBeenUnlocked(infoName, abilityName, towerLevel) then
                                 shouldUse = false
-                                table.insert(debugInfo, "not unlocked")
+                                table.insert(debugInfo, "not unlocked (level " .. towerLevel .. ")")
+                                print("[Auto Ability] ✗", unitName, abilityName, "- NOT UNLOCKED at level", towerLevel)
+                            else
+                                print("[Auto Ability] ✓", unitName, abilityName, "- unlocked")
                             end
                             
                             if shouldUse and isOnCooldown(infoName, abilityName) then
                                 shouldUse = false
                                 table.insert(debugInfo, "on cooldown")
+                                print("[Auto Ability] ✗", unitName, abilityName, "- ON COOLDOWN")
                             end
                             
                             if shouldUse and cfg.useOnWave and cfg.specificWave then
                                 if currentWave ~= cfg.specificWave then
                                     shouldUse = false
                                     table.insert(debugInfo, "wrong wave (current: " .. currentWave .. ", need: " .. cfg.specificWave .. ")")
+                                    print("[Auto Ability] ✗", unitName, abilityName, "- WRONG WAVE (need wave", cfg.specificWave, ", current:", currentWave .. ")")
                                 else
                                     table.insert(debugInfo, "wave OK (" .. currentWave .. ")")
+                                    print("[Auto Ability] ✓", unitName, abilityName, "- wave condition met (wave", currentWave .. ")")
                                 end
                             end
                             
                             if shouldUse and cfg.onlyOnBoss then
+                                print("[Auto Ability] Checking onlyOnBoss for", unitName, abilityName, "| hasBoss:", hasBoss, "| bossReady:", bossReadyForAbilities())
                                 if not hasBoss then
                                     shouldUse = false
                                     table.insert(debugInfo, "no boss")
+                                    print("[Auto Ability] ✗", unitName, abilityName, "- NO BOSS EXISTS")
                                 elseif not bossReadyForAbilities() then
                                     shouldUse = false
                                     table.insert(debugInfo, "boss not ready")
+                                    print("[Auto Ability] ✗", unitName, abilityName, "- BOSS NOT READY (spawn timer)")
                                 else
                                     table.insert(debugInfo, "boss OK")
+                                    print("[Auto Ability] ✓", unitName, abilityName, "- boss condition met")
                                 end
                             end
                             
                             if shouldUse and cfg.requireBossInRange then
-                                if not hasBoss or not checkBossInRangeForDuration(tower, 0) then
+                                local inRange = checkBossInRangeForDuration(tower, 0)
+                                print("[Auto Ability] Checking requireBossInRange for", unitName, abilityName, "| hasBoss:", hasBoss, "| inRange:", inRange)
+                                if not hasBoss or not inRange then
                                     shouldUse = false
                                     table.insert(debugInfo, "boss not in range")
+                                    print("[Auto Ability] ✗", unitName, abilityName, "- BOSS NOT IN RANGE")
                                 else
                                     table.insert(debugInfo, "boss in range")
+                                    print("[Auto Ability] ✓", unitName, abilityName, "- boss in range condition met")
                                 end
                             end
                             
                             if shouldUse then
                                 if not isOnCooldown(infoName, abilityName) then
+                                    print("[Auto Ability] ✓✓✓ USING ABILITY:", unitName, "-", abilityName, "✓✓✓")
                                     useAbility(tower, abilityName)
                                     setAbilityUsed(infoName, abilityName)
                                     
                                     if unitName == "AsuraEvo" and abilityName == "Lines of Sanzu" then
                                     end
+                                else
+                                    print("[Auto Ability] ✗", unitName, abilityName, "- FINAL COOLDOWN CHECK FAILED")
                                 end
+                            else
+                                print("[Auto Ability] ✗ SKIPPED:", unitName, "-", abilityName, "| Reasons:", table.concat(debugInfo, ", "))
                             end
                         end
                     end
@@ -6535,49 +6570,56 @@ do
             currentKills = game:GetService("Players").LocalPlayer.leaderstats.Kills.Value
         end)
         
-        local avgKillsPerWave = 50
+        local avgKillsPerWave = 40
         if currentWave > 0 and currentKills > 0 then
             avgKillsPerWave = currentKills / currentWave
         end
         
         local estimatedKillsRemaining = (wavesRemaining + 1) * avgKillsPerWave
         
+        print("[Smart Card] Wave:", currentWave, "| Kills:", currentKills, "| Avg/Wave:", math.floor(avgKillsPerWave), "| Est. Remaining:", math.floor(estimatedKillsRemaining))
+        
         local perWaveValue = {
-            ["Critical Denial"] = 100,      -- +100 candy per wave
-            ["Weakened Resolve III"] = 50,  -- +50 candy per wave
-            ["Fog of War III"] = 50,        -- +50 candy per wave
-            ["Weakened Resolve II"] = 25,   -- +25 candy per wave
-            ["Fog of War II"] = 25,         -- +25 candy per wave
-            ["Power Reversal II"] = 25,     -- +25 candy per wave
-            ["Greedy Vampire's"] = 25,      -- +25 candy per wave (risky!)
-            ["Weakened Resolve I"] = 15,    -- +15 candy per wave
-            ["Fog of War I"] = 15,          -- +15 candy per wave
-            ["Power Reversal I"] = 15,      -- +15 candy per wave
+            ["Critical Denial"] = 100,
+            ["Weakened Resolve III"] = 50,
+            ["Fog of War III"] = 50,
+            ["Weakened Resolve II"] = 25,
+            ["Fog of War II"] = 25,
+            ["Power Reversal II"] = 25,
+            ["Greedy Vampire's"] = 25,
+            ["Weakened Resolve I"] = 15,
+            ["Fog of War I"] = 15,
+            ["Power Reversal I"] = 15,
         }
         
-
         local perKillBonus = {
-            ["Lingering Fear II"] = 2,      -- +2 bonus (3 total per kill with stacking)
-            ["Hellish Gravity"] = 2,        -- +2 bonus (3 total per kill with stacking)
-            ["Lingering Fear I"] = 1,       -- +1 bonus (2 total per kill with stacking)
-            ["Deadly Striker"] = 1,         -- +1 bonus (2 total per kill with stacking)
+            ["Lingering Fear II"] = 2,
+            ["Hellish Gravity"] = 2,
+            ["Lingering Fear I"] = 1,
+            ["Deadly Striker"] = 1,
         }
+        
+        local calculatedValue = 0
         
         if perWaveValue[cardName] then
-            return perWaveValue[cardName] * wavesRemaining
+            calculatedValue = perWaveValue[cardName] * wavesRemaining
+            print("[Smart Card] " .. cardName .. " = " .. perWaveValue[cardName] .. " × " .. wavesRemaining .. " waves = " .. calculatedValue)
         elseif perKillBonus[cardName] then
             local baseValue = perKillBonus[cardName] * estimatedKillsRemaining
-            
             local stackingMultiplier = 1.3
-            
-            return baseValue * stackingMultiplier
+            calculatedValue = baseValue * stackingMultiplier
+            print("[Smart Card] " .. cardName .. " = " .. perKillBonus[cardName] .. " × " .. math.floor(estimatedKillsRemaining) .. " kills × 1.3 = " .. math.floor(calculatedValue))
         elseif cardName == "Trick or Treat Coin Flip" then
-            return -999 
+            calculatedValue = 100
+            print("[Smart Card] " .. cardName .. " = 100 (risky but viable)")
         elseif cardName == "Devil's Sacrifice" then
-            return -9999
+            calculatedValue = -9999
+            print("[Smart Card] " .. cardName .. " = -9999 (AVOID - disables abilities)")
+        else
+            print("[Smart Card] " .. cardName .. " = 0 (unknown card)")
         end
         
-        return 0
+        return calculatedValue
     end
     
     local function selectCardSmart()
@@ -6591,33 +6633,43 @@ do
                 end
             end)
             
+            
             local list = getAvailableCards()
             if not list or #list == 0 then 
                 return false 
             end
             
+            print("[Smart Card] Found", #list, "cards available")
+            
             local bestCard = nil
-            local bestValue = 0
+            local bestValue = -99999
             
             for i=1,#list do
                 local nm = list[i].name
                 local value = calculateCardValue(nm, currentWave)
-                print("[Smart Card] Card:", nm, "Value:", value, "Wave:", currentWave)
+                print("[Smart Card] Evaluating:", nm, "| Value:", math.floor(value))
                 if value > bestValue then
                     bestValue = value
                     bestCard = list[i]
+                    print("[Smart Card] ✓ New best card:", nm, "with value", math.floor(value))
                 end
             end
             
             if not bestCard then
+                print("[Smart Card] No valid card found")
                 return false
             end
             
             if not bestCard.button then
+                print("[Smart Card] Best card has no button:", bestCard.name)
                 return false
             end
             
-            if bestValue == 0 then
+            print("[Smart Card] ========== SELECTED:", bestCard.name, "with value", math.floor(bestValue), "==========")
+            print("[Smart Card] Clicking card button...")
+            
+            if bestValue <= 0 then
+                print("[Smart Card] Best value is", bestValue, "- skipping selection")
                 return false
             end
             
@@ -6632,9 +6684,11 @@ do
             task.wait(0.1)
             GuiService.SelectedObject = bestCard.button
             task.wait(0.2)
+            print("[Smart Card] Pressing Enter on card...")
             press(Enum.KeyCode.Return)
             task.wait(0.1)
             GuiService.SelectedObject = nil
+            print("[Smart Card] Card selected successfully!")
             
             task.wait(0.3)
             pressConfirm()
