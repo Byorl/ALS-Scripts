@@ -111,6 +111,17 @@ Window.onUnloaded(function()
     getgenv().MacroPlayEnabled = false
     getgenv().MacroRecordingV2 = false
     getgenv().AutoAbilitiesEnabled = false
+    
+    pcall(function()
+        if cashConnection then cashConnection:Disconnect() end
+        for tower, conn in pairs(towerTracker.upgradeConnections or {}) do
+            if conn then conn:Disconnect() end
+        end
+    end)
+    
+    getgenv().MacroTowerInfoCache = nil
+    getgenv().MacroRemoteCache = nil
+    getgenv().MacroCashHistory = nil
 end)
 
 task.wait(2)
@@ -284,6 +295,14 @@ local function cleanupBeforeTeleport()
     end)
     
     pcall(function()
+        if cashConnection then cashConnection:Disconnect() end
+        if cashTrackingConnection then cashTrackingConnection:Disconnect() end
+        for tower, conn in pairs(towerTracker.upgradeConnections or {}) do
+            if conn then conn:Disconnect() end
+        end
+    end)
+    
+    pcall(function()
         if getconnections then
             for _, service in pairs({RunService.Heartbeat, RunService.RenderStepped, RunService.Stepped}) do
                 for _, connection in pairs(getconnections(service)) do
@@ -295,8 +314,20 @@ local function cleanupBeforeTeleport()
     end)
     
     pcall(function()
-        collectgarbage("collect")
+        getgenv().MacroTowerInfoCache = nil
+        getgenv().MacroRemoteCache = nil
+        getgenv().MacroCashHistory = nil
+        getgenv().MacroDataV2 = nil
+        towerTracker = {
+            placeCounts = {},
+            upgradeLevels = {},
+            lastPlaceTime = {},
+            lastUpgradeTime = {},
+            pendingActions = {},
+            upgradeConnections = {}
+        }
     end)
+
     
     task.wait(0.2)
 end
@@ -759,6 +790,7 @@ getgenv().MacroCurrentStep = 0
 getgenv().MacroTotalSteps = 0
 getgenv().MacroLastStatusUpdate = 0
 
+local cachedLabels = {}
 getgenv().UpdateMacroStatus = function()
     local now = tick()
     if now - getgenv().MacroLastStatusUpdate < 0.033 then 
@@ -767,30 +799,30 @@ getgenv().UpdateMacroStatus = function()
     getgenv().MacroLastStatusUpdate = now
     
     pcall(function()
-        if getgenv().MacroStatusLabel and getgenv().MacroStatusLabel.UpdateName then
-            local statusText = tostring(getgenv().MacroStatusText or "Idle")
-            getgenv().MacroStatusLabel:UpdateName("Status: " .. statusText)
+        if not cachedLabels.status then cachedLabels.status = getgenv().MacroStatusLabel end
+        if not cachedLabels.step then cachedLabels.step = getgenv().MacroStepLabel end
+        if not cachedLabels.action then cachedLabels.action = getgenv().MacroActionLabel end
+        if not cachedLabels.unit then cachedLabels.unit = getgenv().MacroUnitLabel end
+        if not cachedLabels.waiting then cachedLabels.waiting = getgenv().MacroWaitingLabel end
+        
+        if cachedLabels.status and cachedLabels.status.UpdateName then
+            cachedLabels.status:UpdateName("Status: " .. (getgenv().MacroStatusText or "Idle"))
         end
         
-        if getgenv().MacroStepLabel and getgenv().MacroStepLabel.UpdateName then
-            local currentStep = tonumber(getgenv().MacroCurrentStep) or 0
-            local totalSteps = tonumber(getgenv().MacroTotalSteps) or 0
-            getgenv().MacroStepLabel:UpdateName("📝 Step: " .. currentStep .. "/" .. totalSteps)
+        if cachedLabels.step and cachedLabels.step.UpdateName then
+            cachedLabels.step:UpdateName("📝 Step: " .. (getgenv().MacroCurrentStep or 0) .. "/" .. (getgenv().MacroTotalSteps or 0))
         end
         
-        if getgenv().MacroActionLabel and getgenv().MacroActionLabel.UpdateName then
-            local actionText = (getgenv().MacroActionText and tostring(getgenv().MacroActionText) ~= "") and tostring(getgenv().MacroActionText) or "None"
-            getgenv().MacroActionLabel:UpdateName("⚡ Action: " .. actionText)
+        if cachedLabels.action and cachedLabels.action.UpdateName then
+            cachedLabels.action:UpdateName("⚡ Action: " .. (getgenv().MacroActionText ~= "" and getgenv().MacroActionText or "None"))
         end
         
-        if getgenv().MacroUnitLabel and getgenv().MacroUnitLabel.UpdateName then
-            local unitText = (getgenv().MacroUnitText and tostring(getgenv().MacroUnitText) ~= "") and tostring(getgenv().MacroUnitText) or "None"
-            getgenv().MacroUnitLabel:UpdateName("🗼 Unit: " .. unitText)
+        if cachedLabels.unit and cachedLabels.unit.UpdateName then
+            cachedLabels.unit:UpdateName("🗼 Unit: " .. (getgenv().MacroUnitText ~= "" and getgenv().MacroUnitText or "None"))
         end
         
-        if getgenv().MacroWaitingLabel and getgenv().MacroWaitingLabel.UpdateName then
-            local waitingText = (getgenv().MacroWaitingText and tostring(getgenv().MacroWaitingText) ~= "") and tostring(getgenv().MacroWaitingText) or "None"
-            getgenv().MacroWaitingLabel:UpdateName("⏳ Waiting: " .. waitingText)
+        if cachedLabels.waiting and cachedLabels.waiting.UpdateName then
+            cachedLabels.waiting:UpdateName("⏳ Waiting: " .. (getgenv().MacroWaitingText ~= "" and getgenv().MacroWaitingText or "None"))
         end
     end)
 end
@@ -801,45 +833,46 @@ getgenv().MacroLastCash = 0
 getgenv().MacroCashHistory = {}
 local MAX_CASH_HISTORY = 30
 
-task.spawn(function()
-    while true do
-        RunService.Heartbeat:Wait()
-        pcall(function()
+local cashConnection
+pcall(function()
+    if LocalPlayer:FindFirstChild("Cash") then
+        getgenv().MacroCurrentCash = LocalPlayer.Cash.Value
+        cashConnection = LocalPlayer.Cash:GetPropertyChangedSignal("Value"):Connect(function()
             getgenv().MacroCurrentCash = LocalPlayer.Cash.Value
         end)
     end
 end)
 
 local cashTrackingActive = false
+local cashTrackingConnection
 local function trackCash()
     if cashTrackingActive then return end
     cashTrackingActive = true
     
-    task.spawn(function()
-        while true do
-            RunService.Heartbeat:Wait()
+    pcall(function()
+        if LocalPlayer:FindFirstChild("Cash") then
+            getgenv().MacroLastCash = LocalPlayer.Cash.Value
             
-            local currentCash = 0
-            pcall(function()
-                currentCash = tonumber(LocalPlayer.Cash.Value) or 0
-            end)
-            
-            local lastCash = tonumber(getgenv().MacroLastCash) or 0
-            if lastCash > 0 and currentCash < lastCash then
-                local decrease = lastCash - currentCash
-                table.insert(getgenv().MacroCashHistory, 1, {
-                    time = tick(),
-                    decrease = decrease,
-                    before = lastCash,
-                    after = currentCash
-                })
+            cashTrackingConnection = LocalPlayer.Cash:GetPropertyChangedSignal("Value"):Connect(function()
+                local currentCash = tonumber(LocalPlayer.Cash.Value) or 0
+                local lastCash = tonumber(getgenv().MacroLastCash) or 0
                 
-                if #getgenv().MacroCashHistory > MAX_CASH_HISTORY then
-                    table.remove(getgenv().MacroCashHistory, #getgenv().MacroCashHistory)
+                if lastCash > 0 and currentCash < lastCash then
+                    local decrease = lastCash - currentCash
+                    table.insert(getgenv().MacroCashHistory, 1, {
+                        time = tick(),
+                        decrease = decrease,
+                        before = lastCash,
+                        after = currentCash
+                    })
+                    
+                    if #getgenv().MacroCashHistory > MAX_CASH_HISTORY then
+                        table.remove(getgenv().MacroCashHistory)
+                    end
                 end
-            end
-            
-            getgenv().MacroLastCash = currentCash
+                
+                getgenv().MacroLastCash = currentCash
+            end)
         end
     end)
 end
@@ -1160,6 +1193,7 @@ local function updateGameState()
             getgenv().BulmaWishUsedThisRound = false
             getgenv().WukongTrackedClones = {}
             getgenv()._WukongLastSynthesisTime = 0
+            getgenv().SmartCardPicked = {}
         end
         
         getgenv().MacroGameState.lastGameEndedState = currentGameEnded
@@ -1169,7 +1203,7 @@ end
 
 task.spawn(function()
     while true do
-        RunService.Heartbeat:Wait()
+        task.wait(0.1)
         updateGameState()
     end
 end)
@@ -1189,48 +1223,29 @@ local towerTracker = {
 
 local function setupTowerUpgradeListener(tower)
     
-    if not tower:FindFirstChild("Upgrade") then 
-        print("[Macro Debug] ✗ Tower has no Upgrade child:", tower.Name)
-        return 
-    end
-    
-    if towerTracker.upgradeConnections[tower] then 
-        print("[Macro Debug] ✗ Listener already exists for:", tower.Name)
+    if not tower:FindFirstChild("Upgrade") or towerTracker.upgradeConnections[tower] then 
         return 
     end
     
     local currentLevel = tower.Upgrade.Value
     towerTracker.upgradeLevels[tower] = currentLevel
-    print("[Macro Debug] ✓ Setting up upgrade listener for:", tower.Name, "Initial level:", currentLevel)
     
     local connection = tower.Upgrade:GetPropertyChangedSignal("Value"):Connect(function()
         if not getgenv().MacroRecordingV2 then return end
         
         local success, err = pcall(function()
-            if not tower or not tower.Parent or not tower:FindFirstChild("Upgrade") then 
-                print("[Macro Debug] Tower or Upgrade missing")
-                return 
-            end
+            if not tower or not tower.Parent or not tower:FindFirstChild("Upgrade") then return end
             
             local towerName = tower.Name
             local currentLevel = tower.Upgrade.Value
             local now = tick()
             
-            print("[Macro Debug] Upgrade detected:", towerName, "Level:", currentLevel)
-            
-            if towerName == "NarutoBaryonClone" or towerName == "WukongClone" then
-                print("[Macro Debug] Skipping clone upgrade")
-                return
-            end
+            if towerName == "NarutoBaryonClone" or towerName == "WukongClone" then return end
             
             local oldLevel = towerTracker.upgradeLevels[tower] or 0
-            if currentLevel <= oldLevel then
-                print("[Macro Debug] Level not increased (Old:", oldLevel, "New:", currentLevel, "), skipping")
-                return
-            end
+            if currentLevel <= oldLevel then return end
             
             local levelsGained = currentLevel - oldLevel
-            print("[Macro Debug] Levels gained:", levelsGained, "Old:", oldLevel, "New:", currentLevel)
             
             towerTracker.upgradeLevels[tower] = currentLevel
             towerTracker.lastUpgradeTime[tower] = now
@@ -1247,7 +1262,7 @@ local function setupTowerUpgradeListener(tower)
                     cost = getgenv().GetRecentCashDecrease(0.3)
                 end
                 
-                print("[Macro Record] Upgraded:", towerName, "Level:", upgradeLevel, "→", upgradeLevel + 1, "Cost:", cost)
+
                 
                 table.insert(getgenv().MacroDataV2, {
                     RemoteName = "Upgrade",
@@ -1267,13 +1282,10 @@ local function setupTowerUpgradeListener(tower)
             getgenv().MacroActionText = "Upgrade"
             getgenv().MacroUnitText = towerName
             
-            task.spawn(function()
-                if getgenv().UpdateMacroStatus then
-                    getgenv().UpdateMacroStatus()
-                end
-            end)
-            
-            print("[Macro Debug] ✓ Recorded", levelsGained, "upgrade(s) for", towerName, "- Total steps:", #getgenv().MacroDataV2)
+            if getgenv().UpdateMacroStatus then
+                getgenv().UpdateMacroStatus()
+            end
+
         end)
         
         if not success then
@@ -1283,11 +1295,19 @@ local function setupTowerUpgradeListener(tower)
     
     towerTracker.upgradeConnections[tower] = connection
     
-    tower.AncestryChanged:Connect(function()
+    local ancestryConnection
+    ancestryConnection = tower.AncestryChanged:Connect(function()
         if not tower:IsDescendantOf(game) then
             if towerTracker.upgradeConnections[tower] then
                 towerTracker.upgradeConnections[tower]:Disconnect()
                 towerTracker.upgradeConnections[tower] = nil
+            end
+            if towerTracker.upgradeLevels[tower] then
+                towerTracker.upgradeLevels[tower] = nil
+            end
+            if ancestryConnection then
+                ancestryConnection:Disconnect()
+                ancestryConnection = nil
             end
         end
     end)
@@ -1295,26 +1315,14 @@ end
 
 task.spawn(function()    
     workspace.Towers.ChildAdded:Connect(function(tower)
-        print("[Macro Debug] Tower added to workspace:", tower.Name)
-        
         task.spawn(function()
-            local maxAttempts = 10
-            for attempt = 1, maxAttempts do
+            for attempt = 1, 10 do
                 task.wait(0.1)
-                
                 if tower:FindFirstChild("Owner") then
                     if tower.Owner.Value == LocalPlayer then
-                        print("[Macro Debug] ✓ New tower added:", tower.Name, "(attempt", attempt .. ")")
                         setupTowerUpgradeListener(tower)
-                        return
-                    else
-                        print("[Macro Debug] Tower not owned by player:", tower.Name)
-                        return
                     end
-                end
-                
-                if attempt == maxAttempts then
-                    print("[Macro Debug] ✗ Timeout waiting for Owner on:", tower.Name)
+                    return
                 end
             end
         end)
@@ -1323,13 +1331,9 @@ task.spawn(function()
     task.wait(0.5)
     for _, tower in pairs(workspace.Towers:GetChildren()) do
         if tower:FindFirstChild("Owner") and tower.Owner.Value == LocalPlayer then
-            print("[Macro Debug] Found existing tower:", tower.Name)
             setupTowerUpgradeListener(tower)
-        else
-            print("[Macro Debug] Skipping tower (not owned):", tower.Name)
         end
     end
-    print("[Macro Debug] Finished setting up listeners for existing towers")
 end)
 
 local originalNamecall
@@ -1643,8 +1647,11 @@ local function executeAction(action)
     
     if action.ActionType == "Upgrade" then
         local towers = {}
+        local allTowers = {}
+        
         for _, t in pairs(workspace.Towers:GetChildren()) do
             if t.Name == action.TowerName and t:FindFirstChild("Owner") and t.Owner.Value == LocalPlayer then
+                table.insert(allTowers, t)
                 local currentLevel = t:FindFirstChild("Upgrade") and t.Upgrade.Value or 0
                 local maxLevel = t:FindFirstChild("MaxUpgrade") and t.MaxUpgrade.Value or 999
                 if currentLevel < maxLevel then
@@ -1653,19 +1660,12 @@ local function executeAction(action)
             end
         end
         
+        if #allTowers == 0 then
+            return false, "No " .. action.TowerName .. " found"
+        end
+        
         if #towers == 0 then
-            local allTowers = {}
-            for _, t in pairs(workspace.Towers:GetChildren()) do
-                if t.Name == action.TowerName and t:FindFirstChild("Owner") and t.Owner.Value == LocalPlayer then
-                    table.insert(allTowers, t)
-                end
-            end
-            
-            if #allTowers == 0 then
-                return false, "No " .. action.TowerName .. " found"
-            else
-                return true, "All " .. action.TowerName .. " already max level"
-            end
+            return true, "All " .. action.TowerName .. " already max level"
         end
         
         table.sort(towers, function(a, b)
@@ -2746,10 +2746,22 @@ createToggle(
     function(value)
         getgenv().PortalConfig.useBestPortal = value
         getgenv().Config.portals.useBestPortal = value
+        
+        if value and getgenv().PortalConfig.useSelectedTier then
+            getgenv().PortalConfig.useSelectedTier = false
+            getgenv().Config.portals.useSelectedTier = false
+            saveConfig(getgenv().Config)
+            pcall(function()
+                if MacLib.Flags["UseSelectedTier"] then
+                    MacLib.Flags["UseSelectedTier"]:UpdateState(false)
+                end
+            end)
+        end
+        
         saveConfig(getgenv().Config)
         Window:Notify({
             Title = "Portal System",
-            Description = value and "Will use highest tier portal available" or "Will use selected tier",
+            Description = value and "Will use highest tier portal available" or "Disabled",
             Lifetime = 3
         })
     end,
@@ -2758,20 +2770,55 @@ createToggle(
 
 createToggle(
     Sections.PortalsRight,
-    "Pick Portal (Manual Selection)",
-    "PickPortal",
+    "Use Selected Tier",
+    "UseSelectedTier",
     function(value)
-        getgenv().PortalConfig.pickPortal = value
-        getgenv().Config.portals.pickPortal = value
+        getgenv().PortalConfig.useSelectedTier = value
+        getgenv().Config.portals.useSelectedTier = value
+        
+        if value and getgenv().PortalConfig.useBestPortal then
+            getgenv().PortalConfig.useBestPortal = false
+            getgenv().Config.portals.useBestPortal = false
+            saveConfig(getgenv().Config)
+            pcall(function()
+                if MacLib.Flags["UseBestPortal"] then
+                    MacLib.Flags["UseBestPortal"]:UpdateState(false)
+                end
+            end)
+        end
+        
         saveConfig(getgenv().Config)
         Window:Notify({
             Title = "Portal System",
-            Description = value and "Manual portal selection enabled" or "Automatic selection enabled",
+            Description = value and "Will use selected map and tier" or "Disabled",
             Lifetime = 3
         })
     end,
-    getgenv().PortalConfig.pickPortal
+    getgenv().PortalConfig.useSelectedTier or false
 )
+
+createToggle(
+    Sections.PortalsRight,
+    "Auto Pick Portal Reward",
+    "AutoPickPortalReward",
+    function(value)
+        getgenv().PortalConfig.autoPickReward = value
+        getgenv().Config.portals.autoPickReward = value
+        saveConfig(getgenv().Config)
+        Window:Notify({
+            Title = "Portal System",
+            Description = value and "Auto pick portal reward enabled" or "Auto pick portal reward disabled",
+            Lifetime = 3
+        })
+    end,
+    getgenv().PortalConfig.autoPickReward or false
+)
+
+Sections.PortalsRight:SubLabel({
+    Text = "⚠️ Portal rewards are selected randomly (fast method)"
+})
+
+Sections.PortalsRight:Divider()
 
 Sections.PortalsLeft:Header({ Text = "🎯 Challenge Priority" })
 Sections.PortalsLeft:SubLabel({ Text = "Assign priority (1-6) to each challenge. 1 = highest priority, 0 = ignore" })
@@ -4925,24 +4972,19 @@ task.spawn(function()
                 hasProcessedCurrentUI = true
                 
                 local success = pcall(function()
-                    local GuiService = game:GetService("GuiService")
+                    local VirtualInputManager = game:GetService("VirtualInputManager")
                     
-                    GuiService.SelectedObject = nil
+                    local absPos = buttonToPress.AbsolutePosition
+                    local absSize = buttonToPress.AbsoluteSize
+                    local centerX = absPos.X + (absSize.X / 2)
+                    local centerY = absPos.Y + (absSize.Y / 2)
+                    
+                    VirtualInputManager:SendMouseMoveEvent(centerX, centerY, game)
                     task.wait(0.1)
-                    
-                    GuiService.SelectedObject = buttonToPress
+                    VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, true, game, 0)
+                    task.wait(0.05)
+                    VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, false, game, 0)
                     task.wait(0.2)
-                    
-                    if GuiService.SelectedObject == buttonToPress then
-                        
-                        VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
-                        task.wait(0.05)
-                        VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
-                        task.wait(0.2)
-                        
-                        GuiService.SelectedObject = nil
-
-                    end
                 end)
                 
                 if not success then
@@ -5805,18 +5847,26 @@ task.spawn(function()
 end)
 
 
-local function findBestPortal()
+local function findBestPortalFromClientData()
     local clientData = getClientData()
-    if not clientData then return nil end
+    if not clientData or not clientData.PortalData then 
+        print("[Portal] No portal data found in ClientData")
+        return nil 
+    end
     
     local selectedMap = getgenv().PortalConfig.selectedMap
     local targetTier = getgenv().PortalConfig.tier
     local useBestPortal = getgenv().PortalConfig.useBestPortal
     local priorities = getgenv().PortalConfig.priorities
     
+    print("[Portal] Scanning ClientData.PortalData...")
+    print("[Portal] Selected Map:", selectedMap)
+    print("[Portal] Use Best Portal:", useBestPortal)
+    print("[Portal] Target Tier:", targetTier)
+    
     local matchingPortals = {}
     
-    for portalID, portalInfo in pairs(clientData) do
+    for portalID, portalInfo in pairs(clientData.PortalData) do
         if type(portalInfo) == "table" and portalInfo.PortalData then
             local portalData = portalInfo.PortalData
             local mapMatch = (selectedMap == "" or portalData.Map == selectedMap)
@@ -5828,17 +5878,47 @@ local function findBestPortal()
                     challenge = portalData.Challenges or "",
                     map = portalData.Map or ""
                 })
+                print("[Portal] Found: " .. portalData.Map .. " | Tier " .. portalData.Tier .. " | " .. portalData.Challenges)
             end
         end
     end
     
-    if #matchingPortals == 0 then return nil end
+    if #matchingPortals == 0 then 
+        print("[Portal] No matching portals found!")
+        return nil 
+    end
+    
+    print("[Portal] Total matching portals: " .. #matchingPortals)
     
     if useBestPortal then
         table.sort(matchingPortals, function(a, b)
             return a.tier > b.tier
         end)
-        return matchingPortals[1].id
+        
+        local bestTier = matchingPortals[1].tier
+        local bestTierPortals = {}
+        
+        for _, portal in ipairs(matchingPortals) do
+            if portal.tier == bestTier then
+                table.insert(bestTierPortals, portal)
+            end
+        end
+        
+        for priority = 1, 6 do
+            for challengeName, priorityNum in pairs(priorities) do
+                if priorityNum == priority and priorityNum > 0 then
+                    for _, portal in ipairs(bestTierPortals) do
+                        if portal.challenge == challengeName then
+                            print("[Portal] ✓ Selected: " .. portal.map .. " | Tier " .. portal.tier .. " | " .. portal.challenge .. " (Priority: " .. priorityNum .. ")")
+                            return portal.id
+                        end
+                    end
+                end
+            end
+        end
+        
+        print("[Portal] ✓ Selected: " .. bestTierPortals[1].map .. " | Tier " .. bestTierPortals[1].tier .. " (No priority match)")
+        return bestTierPortals[1].id
     end
     
     local tierFiltered = {}
@@ -5849,21 +5929,16 @@ local function findBestPortal()
     end
     
     if #tierFiltered == 0 then
+        print("[Portal] No portals found for tier " .. targetTier .. ", using first available")
         return matchingPortals[1].id
     end
     
-    local challengePriorityMap = {}
-    for challengeName, priorityNum in pairs(priorities) do
-        if priorityNum > 0 and priorityNum <= 6 then
-            challengePriorityMap[challengeName] = priorityNum
-        end
-    end
-    
     for priority = 1, 6 do
-        for challengeName, priorityNum in pairs(challengePriorityMap) do
-            if priorityNum == priority then
+        for challengeName, priorityNum in pairs(priorities) do
+            if priorityNum == priority and priorityNum > 0 then
                 for _, portal in ipairs(tierFiltered) do
-                    if portal.challenge:lower():find(challengeName:lower()) then
+                    if portal.challenge == challengeName then
+                        print("[Portal] ✓ Selected: " .. portal.map .. " | Tier " .. portal.tier .. " | " .. portal.challenge .. " (Priority: " .. priorityNum .. ")")
                         return portal.id
                     end
                 end
@@ -5871,61 +5946,230 @@ local function findBestPortal()
         end
     end
     
+    print("[Portal] ✓ Selected: " .. tierFiltered[1].map .. " | Tier " .. tierFiltered[1].tier .. " (No priority match)")
     return tierFiltered[1].id
 end
 
-local function activatePortal(portalID)
-    if not portalID then return false end
+local function activatePortalAndStart(portalID)
+    if not portalID then 
+        print("[Portal] ❌ No portal ID provided")
+        return false 
+    end
     
-    local success = pcall(function()
-        local portalRemote = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("Portals") and RS.Remotes.Portals:FindFirstChild("ActivateEvent")
-        if portalRemote then
-            portalRemote:InvokeServer(portalID)
+    print("[Portal] 🎯 Attempting to activate portal: " .. portalID)
+    
+    local success, err = pcall(function()
+        local remotes = RS:FindFirstChild("Remotes")
+        if not remotes then
+            print("[Portal] ❌ Remotes not found")
+            return false
+        end
+        
+        local portalsFolder = remotes:FindFirstChild("Portals")
+        if not portalsFolder then
+            print("[Portal] ❌ Portals folder not found")
+            print("[Portal] 🔍 Contents of Remotes:")
+            for _, child in ipairs(remotes:GetChildren()) do
+                print("  - " .. child.Name .. " (" .. child.ClassName .. ")")
+            end
+            return false
+        end
+        
+        print("[Portal] 🔍 Contents of Portals folder:")
+        for _, child in ipairs(portalsFolder:GetChildren()) do
+            print("  - " .. child.Name .. " (" .. child.ClassName .. ")")
+        end
+        
+        local activateEvent = portalsFolder:FindFirstChild("Activate")
+        if not activateEvent then
+            print("[Portal] ❌ ActivateEvent not found in Portals folder")
+            return false
+        end
+        
+        print("[Portal] ✓ Found ActivateEvent, calling InvokeServer(" .. portalID .. ")")
+        local result = activateEvent:InvokeServer(portalID)
+        print("[Portal] ✓ ActivateEvent returned:", tostring(result))
+        
+        task.wait(0.5)
+        
+        local startEvent = portalsFolder:FindFirstChild("Start")
+        if startEvent then
+            print("[Portal] ✓ Calling Start:FireServer()")
+            startEvent:FireServer()
+            print("[Portal] ✅ Portal activated and started!")
+            return true
+        else
+            print("[Portal] ⚠️ Start event not found, but portal activated")
             return true
         end
     end)
     
+    if not success then
+        print("[Portal] ❌ Error activating portal:", err)
+    end
+    
     return success
 end
 
+local function fastSelectPortal()
+    print("[Portal Reward] Fast selecting portal...")
+    
+    local ok = pcall(function()
+        local prompt = LocalPlayer.PlayerGui:FindFirstChild("Prompt")
+        if not prompt then return false end
+        
+        local portalButton = nil
+        for _, descendant in ipairs(prompt:GetDescendants()) do
+            if descendant:IsA("TextButton") and descendant.Name == "TextButton" then
+                local hasConfirmText = false
+                for _, child in ipairs(descendant:GetChildren()) do
+                    if child:IsA("TextLabel") and (child.Text == "Choose a portal..." or child.Text == "Confirm") then
+                        hasConfirmText = true
+                        break
+                    end
+                end
+                
+                if not hasConfirmText then
+                    portalButton = descendant
+                    print("[Portal Reward] ✓ Found portal button")
+                    break
+                end
+            end
+        end
+        
+        if not portalButton then
+            print("[Portal Reward] ❌ No portal button found")
+            return false
+        end
+        
+        print("[Portal Reward] Clicking portal...")
+        for _, conn in ipairs(getconnections(portalButton.MouseButton1Click)) do
+            conn:Fire()
+        end
+        task.wait(0.5)
+        
+        print("[Portal Reward] Looking for confirm button...")
+        local confirmButton = nil
+        for _, descendant in ipairs(prompt:GetDescendants()) do
+            if descendant:IsA("TextButton") then
+                for _, child in ipairs(descendant:GetChildren()) do
+                    if child:IsA("TextLabel") and (child.Text == "Choose a portal..." or child.Text == "Confirm") then
+                        confirmButton = descendant
+                        print("[Portal Reward] ✓ Found confirm button")
+                        break
+                    end
+                end
+                if confirmButton then break end
+            end
+        end
+        
+        if confirmButton then
+            print("[Portal Reward] Clicking confirm...")
+            for _, conn in ipairs(getconnections(confirmButton.MouseButton1Click)) do
+                conn:Fire()
+            end
+            print("[Portal Reward] ✅ Portal selected!")
+            return true
+        else
+            print("[Portal Reward] ❌ Confirm button not found")
+            return false
+        end
+    end)
+    
+    return ok
+end
+
+task.spawn(function()
+    local lastProcessedTime = 0
+    local isProcessing = false
+    
+    while true do
+        task.wait(0.5)
+        
+        if getgenv().PortalConfig.autoPickReward and not isProcessing then
+            local success, err = pcall(function()
+                local promptUI = LocalPlayer.PlayerGui:FindFirstChild("Prompt")
+                if not promptUI then return end
+                
+                local frame = promptUI:FindFirstChild("Frame")
+                if not frame or not frame:FindFirstChild("Frame") then return end
+                
+                local children = frame.Frame:GetChildren()
+                local hasPortalButtons = false
+                
+                for _, child in ipairs(children) do
+                    if child:IsA("Frame") then
+                        for _, descendant in ipairs(child:GetDescendants()) do
+                            if descendant:IsA("TextButton") and descendant.Name == "TextButton" then
+                                hasPortalButtons = true
+                                break
+                            end
+                        end
+                        if hasPortalButtons then break end
+                    end
+                end
+                
+                if hasPortalButtons then
+                    local now = tick()
+                    if now - lastProcessedTime > 10 then
+                        isProcessing = true
+                        lastProcessedTime = now
+                        print("[Portal Reward] ========== Portal selection screen detected! ==========")
+                        task.wait(1)
+                        
+                        local success = fastSelectPortal()
+                        
+                        if success then
+                            task.wait(2)
+                            for i = 1, 10 do
+                                if not LocalPlayer.PlayerGui:FindFirstChild("Prompt") then
+                                    print("[Portal Reward] ✓ Prompt closed, selection complete")
+                                    break
+                                end
+                                task.wait(0.5)
+                            end
+                        end
+                        
+                        isProcessing = false
+                    end
+                end
+            end)
+            
+            if not success then
+                warn("[Portal Reward] Error in detection loop:", err)
+                isProcessing = false
+            end
+        end
+    end
+end)
+
 if isInLobby then
     task.spawn(function()
+        local lastActivationTime = 0
+        
         while true do
             task.wait(2)
             
-            if getgenv().PortalConfig.pickPortal then
-                pcall(function()
-                    local promptUI = LocalPlayer.PlayerGui:FindFirstChild("Prompt")
-                    if promptUI and promptUI:FindFirstChild("Frame") then
-                        local frame = promptUI.Frame:FindFirstChild("Frame")
-                        if frame then
-                            local children = frame:GetChildren()
-                            for _, child in ipairs(children) do
-                                if child:IsA("Frame") or child:IsA("GuiObject") then
-                                    local textButton = child:FindFirstChildOfClass("TextButton", true)
-                                    if textButton then
-                                        for i, v in pairs(getconnections(textButton.MouseButton1Click)) do
-                                            v:Fire()
-                                        end
-                                        task.wait(0.2)
-                                        
-                                        local confirmButton = promptUI:FindFirstChild("Confirm", true)
-                                        if confirmButton and confirmButton:IsA("TextButton") then
-                                            for i, v in pairs(getconnections(confirmButton.MouseButton1Click)) do
-                                                v:Fire()
-                                            end
-                                        end
-                                        break
-                                    end
+            local shouldActivate = (getgenv().PortalConfig.useBestPortal == true) or 
+                                   (getgenv().PortalConfig.useSelectedTier == true)
+            
+            if shouldActivate then
+                local promptExists = LocalPlayer.PlayerGui:FindFirstChild("Prompt") ~= nil
+                
+                if not promptExists then
+                    local now = tick()
+                    
+                    if now - lastActivationTime > 10 then
+                        pcall(function()
+                            local portalID = findBestPortalFromClientData()
+                            if portalID then
+                                local success = activatePortalAndStart(portalID)
+                                if success then
+                                    lastActivationTime = now
                                 end
                             end
-                        end
+                        end)
                     end
-                end)
-            else
-                local portalID = findBestPortal()
-                if portalID then
-                    activatePortal(portalID)
                 end
             end
         end
@@ -6807,16 +7051,21 @@ do
             local _, best, priority = findBestCard(list)
             if not best or not best.button or not priority then return false end
             if priority >= 999 then return false end
-            local GuiService = game:GetService("GuiService")
-            local function press(key)
-                VIM:SendKeyEvent(true, key, false, game)
-                task.wait(0.15)
-                VIM:SendKeyEvent(false, key, false, game)
-            end
-            GuiService.SelectedObject = best.button
-            task.wait(0.4)
-            press(Enum.KeyCode.Return)
+            
+            local VirtualInputManager = game:GetService("VirtualInputManager")
+            
+            local absPos = best.button.AbsolutePosition
+            local absSize = best.button.AbsoluteSize
+            local centerX = absPos.X + (absSize.X / 2)
+            local centerY = absPos.Y + (absSize.Y / 2)
+            
+            VirtualInputManager:SendMouseMoveEvent(centerX, centerY, game)
+            task.wait(0.1)
+            VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, true, game, 0)
+            task.wait(0.05)
+            VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, false, game, 0)
             task.wait(0.5)
+            
             local ok2, confirmButton = pcall(function()
                 local prompt = LocalPlayer.PlayerGui:FindFirstChild("Prompt")
                 if not prompt then return nil end
@@ -6831,38 +7080,50 @@ do
                 end
                 return nil
             end)
+            
             if ok2 and confirmButton then
-                GuiService.SelectedObject = confirmButton
-                task.wait(0.4)
-                press(Enum.KeyCode.Return)
+                local absPos2 = confirmButton.AbsolutePosition
+                local absSize2 = confirmButton.AbsoluteSize
+                local centerX2 = absPos2.X + (absSize2.X / 2)
+                local centerY2 = absPos2.Y + (absSize2.Y / 2)
+                
+                VirtualInputManager:SendMouseMoveEvent(centerX2, centerY2, game)
+                task.wait(0.1)
+                VirtualInputManager:SendMouseButtonEvent(centerX2, centerY2, 0, true, game, 0)
+                task.wait(0.05)
+                VirtualInputManager:SendMouseButtonEvent(centerX2, centerY2, 0, false, game, 0)
                 task.wait(0.5)
             end
-            GuiService.SelectedObject = nil
         end)
         return ok
     end
     
+    if not getgenv().SmartCardPicked then
+        getgenv().SmartCardPicked = {}
+    end
+    
     local function calculateCardValue(cardName, currentWave)
-        local wavesRemaining = math.max(0, 50 - currentWave)
+        local TOTAL_ENEMIES = 1350
+        local TOTAL_WAVES = 50
+        local AVG_ENEMIES_PER_WAVE = TOTAL_ENEMIES / TOTAL_WAVES
+        
+        local wavesRemaining = math.max(0, TOTAL_WAVES - currentWave)
         
         local currentKills = 0
         pcall(function()
             currentKills = game:GetService("Players").LocalPlayer.leaderstats.Kills.Value
         end)
         
-        local avgKillsPerWave = 40
-        if currentWave > 0 and currentKills > 0 then
-            avgKillsPerWave = currentKills / currentWave
-        end
+        local enemiesRemaining = TOTAL_ENEMIES - currentKills
+        if enemiesRemaining < 0 then enemiesRemaining = wavesRemaining * AVG_ENEMIES_PER_WAVE end
         
-        local estimatedKillsRemaining = (wavesRemaining + 1) * avgKillsPerWave
+        print("[Smart Card] Wave:", currentWave, "| Kills:", currentKills, "| Avg/Wave:", math.floor(AVG_ENEMIES_PER_WAVE), "| Est. Remaining:", math.floor(enemiesRemaining))
         
-        print("[Smart Card] Wave:", currentWave, "| Kills:", currentKills, "| Avg/Wave:", math.floor(avgKillsPerWave), "| Est. Remaining:", math.floor(estimatedKillsRemaining))
-        
-        local perWaveValue = {
+        local perWaveCards = {
             ["Critical Denial"] = 100,
             ["Weakened Resolve III"] = 50,
             ["Fog of War III"] = 50,
+            ["Devil's Sacrifice"] = 25,
             ["Weakened Resolve II"] = 25,
             ["Fog of War II"] = 25,
             ["Power Reversal II"] = 25,
@@ -6872,30 +7133,55 @@ do
             ["Power Reversal I"] = 15,
         }
         
-        local perKillBonus = {
+        local perKillCards = {
             ["Lingering Fear II"] = 2,
             ["Hellish Gravity"] = 2,
             ["Lingering Fear I"] = 1,
             ["Deadly Striker"] = 1,
         }
         
+        local currentPerWaveBonus = 0
+        for _, pickedCard in ipairs(getgenv().SmartCardPicked) do
+            if perWaveCards[pickedCard] then
+                currentPerWaveBonus = currentPerWaveBonus + perWaveCards[pickedCard]
+            end
+        end
+        
         local calculatedValue = 0
         
-        if perWaveValue[cardName] then
-            calculatedValue = perWaveValue[cardName] * wavesRemaining
-            print("[Smart Card] " .. cardName .. " = " .. perWaveValue[cardName] .. " × " .. wavesRemaining .. " waves = " .. calculatedValue)
-        elseif perKillBonus[cardName] then
-            local baseValue = perKillBonus[cardName] * estimatedKillsRemaining
-            local stackingMultiplier = 1.3
-            calculatedValue = baseValue * stackingMultiplier
-            print("[Smart Card] " .. cardName .. " = " .. perKillBonus[cardName] .. " × " .. math.floor(estimatedKillsRemaining) .. " kills × 1.3 = " .. math.floor(calculatedValue))
+        if perWaveCards[cardName] then
+            local baseValue = perWaveCards[cardName] * wavesRemaining
+            
+            if currentPerWaveBonus > 0 then
+                local newTotal = currentPerWaveBonus + perWaveCards[cardName]
+                local stackedValue = newTotal * wavesRemaining
+                local previousValue = currentPerWaveBonus * wavesRemaining
+                local stackBonus = stackedValue - previousValue
+                calculatedValue = stackBonus * 1.2
+                print("[Smart Card] " .. cardName .. " = " .. perWaveCards[cardName] .. " × " .. wavesRemaining .. " = " .. baseValue .. " + stack (+" .. currentPerWaveBonus .. "/wave) = " .. math.floor(calculatedValue))
+            else
+                calculatedValue = baseValue
+                print("[Smart Card] " .. cardName .. " = " .. perWaveCards[cardName] .. " × " .. wavesRemaining .. " waves = " .. calculatedValue)
+            end
+            
+        elseif perKillCards[cardName] then
+            calculatedValue = perKillCards[cardName] * enemiesRemaining
+            print("[Smart Card] " .. cardName .. " = " .. perKillCards[cardName] .. " × " .. math.floor(enemiesRemaining) .. " kills = " .. math.floor(calculatedValue))
+            
         elseif cardName == "Trick or Treat Coin Flip" then
-            calculatedValue = 100
-            print("[Smart Card] " .. cardName .. " = 100 (risky but viable)")
+            if wavesRemaining > 20 then
+                calculatedValue = 2500
+            else
+                calculatedValue = 1000
+            end
+            print("[Smart Card] " .. cardName .. " = " .. calculatedValue .. " (50/50 gamble)")
+            
         elseif cardName == "Devil's Sacrifice" then
-            calculatedValue = -9999
-            print("[Smart Card] " .. cardName .. " = -9999 (AVOID - disables abilities)")
+            calculatedValue = -99999
+            print("[Smart Card] " .. cardName .. " = -99999 (NEVER PICK - disables abilities)")
+            
         else
+            calculatedValue = 0
             print("[Smart Card] " .. cardName .. " = 0 (unknown card)")
         end
         
@@ -6948,27 +7234,29 @@ do
             print("[Smart Card] ========== SELECTED:", bestCard.name, "with value", math.floor(bestValue), "==========")
             print("[Smart Card] Clicking card button...")
             
-            local GuiService = game:GetService("GuiService")
-            local function press(key)
-                VIM:SendKeyEvent(true, key, false, game)
-                task.wait(0.05)
-                VIM:SendKeyEvent(false, key, false, game)
-            end
+            local VirtualInputManager = game:GetService("VirtualInputManager")
             
-            GuiService.SelectedObject = nil
+            local absPos = bestCard.button.AbsolutePosition
+            local absSize = bestCard.button.AbsoluteSize
+            local centerX = absPos.X + (absSize.X / 2)
+            local centerY = absPos.Y + (absSize.Y / 2)
+            
+            VirtualInputManager:SendMouseMoveEvent(centerX, centerY, game)
             task.wait(0.1)
-            GuiService.SelectedObject = bestCard.button
-            task.wait(0.2)
-            press(Enum.KeyCode.Return)
-            task.wait(0.1)
-            GuiService.SelectedObject = nil
+            VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, true, game, 0)
+            task.wait(0.05)
+            VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, false, game, 0)
+            
             print("[Smart Card] Card selected successfully!")
             
             task.wait(0.3)
             pressConfirm()
             task.wait(0.2)
             
-            print("[Smart Card] Selected:", bestCard.name, "Value:", bestValue, "Wave:", currentWave)
+            table.insert(getgenv().SmartCardPicked, bestCard.name)
+            
+            print("[Smart Card] ========== SELECTED:", bestCard.name, "| Value:", math.floor(bestValue), "| Wave:", currentWave, "==========")
+            print("[Smart Card] Picked cards this round:", table.concat(getgenv().SmartCardPicked, ", "))
             return true
         end)
         
@@ -7353,8 +7641,6 @@ if not isInLobby then
                             end
                         end
                     end
-                    
-                    collectgarbage("collect")
                 end)
             end
         end
