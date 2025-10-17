@@ -1069,7 +1069,6 @@ if getgenv().AutoExecuteEnabled and queueteleport then
             print("[ALS] Auto Execute queued for next game")
         end
     end)
-    print("[ALS] Auto Execute on Teleport enabled")
 elseif getgenv().AutoExecuteEnabled and not queueteleport then
     warn("[ALS] Auto Execute enabled but queue_on_teleport function not found in your executor")
 end
@@ -1450,7 +1449,6 @@ local function processRemoteCall(remoteName, method, args)
                                 getgenv().UpdateMacroStatus()
                             end
                             
-                            print("[Macro Debug] Upgrade recorded via remote hook (backup):", towerName)
                         end
                         
                         towerTracker.pendingActions[upgradeKey] = nil
@@ -1562,7 +1560,6 @@ local function setupRecordingHook()
                                 getgenv().UpdateMacroStatus()
                             end
                             
-                            print("[Macro Debug] Recorded placement:", towerName)
                         end
                     end
                 end
@@ -1962,7 +1959,6 @@ local function playMacroV2()
                     break
                 end
                 
-                print("[Macro] Game restarted, waiting 2 seconds...")
                 task.wait(2)
                 
                 step = 1
@@ -2090,7 +2086,6 @@ local function playMacroV2()
             getgenv().MacroUnitText = ""
             getgenv().UpdateMacroStatus()
             
-            print("[Macro] Exiting playback - auto-restart will handle next round")
             getgenv().MacroPlaybackActive = false
             return
         else
@@ -2123,7 +2118,6 @@ task.spawn(function()
         end)
         
         if lastEndGameUIState and not currentEndGameUIState and getgenv().MacroPlayEnabled then
-            print("[Macro Auto-Restart] EndGameUI closed - Restarting macro for seamless mode...")
             task.wait(1)
             
             getgenv().MacroPlaybackActive = false
@@ -2141,7 +2135,6 @@ task.spawn(function()
             
             task.wait(0.5)
             
-            print("[Macro Auto-Restart] Starting fresh macro playback...")
             playMacroV2()
             lastRestartAttempt = tick()
         end
@@ -2150,9 +2143,7 @@ task.spawn(function()
         
         if getgenv().MacroPlayEnabled and not getgenv().MacroPlaybackActive then
             local now = tick()
-            if now - lastRestartAttempt > 3 then
-                print("[Macro Auto-Restart] Fallback restart - macro not running...")
-                
+            if now - lastRestartAttempt > 3 then                
                 getgenv().MacroGameState.gameEnded = false
                 getgenv().MacroGameState.hasEndGameUI = false
                 getgenv().MacroGameState.lastGameEndedState = false
@@ -4856,7 +4847,6 @@ task.spawn(function()
             local endGameUI = LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
             
             if endGameUIWasPresent and not endGameUI then
-                print("[Auto Retry] ========== EndGameUI disappeared - Round restarted ==========")
                 hasProcessedCurrentUI = false
                 lastEndGameUIInstance = nil
                 endGameUIWasPresent = false
@@ -4876,11 +4866,7 @@ task.spawn(function()
                 if getgenv().UpdateMacroStatus then
                     getgenv().UpdateMacroStatus()
                 end
-                
-                print("[Auto Retry] Reset macro state - MacroCurrentStep set to 1")
-                print("[Auto Retry] MacroPlaybackActive:", getgenv().MacroPlaybackActive)
-                print("[Auto Retry] MacroPlayEnabled:", getgenv().MacroPlayEnabled)
-                print("[Auto Retry] Macro should auto-restart in 0.5s")
+
                 return
             end
             
@@ -4917,10 +4903,6 @@ task.spawn(function()
             local retryButton = buttons:FindFirstChild("Retry")
             local leaveButton = buttons:FindFirstChild("Leave")
             
-            print("[Auto Button Debug] Next exists:", nextButton ~= nil, "visible:", nextButton and nextButton.Visible or false)
-            print("[Auto Button Debug] Retry exists:", retryButton ~= nil, "visible:", retryButton and retryButton.Visible or false)
-            print("[Auto Button Debug] Leave exists:", leaveButton ~= nil, "visible:", leaveButton and leaveButton.Visible or false)
-            print("[Auto Button Debug] Toggles - Next:", getgenv().AutoNextEnabled, "Retry:", getgenv().AutoFastRetryEnabled, "Leave:", getgenv().AutoLeaveEnabled, "Smart:", getgenv().AutoSmartEnabled)
             
             local buttonToPress, actionName = nil, ""
             
@@ -4972,19 +4954,22 @@ task.spawn(function()
                 hasProcessedCurrentUI = true
                 
                 local success = pcall(function()
-                    local VirtualInputManager = game:GetService("VirtualInputManager")
+                    local GuiService = game:GetService("GuiService")
                     
-                    local absPos = buttonToPress.AbsolutePosition
-                    local absSize = buttonToPress.AbsoluteSize
-                    local centerX = absPos.X + (absSize.X / 2)
-                    local centerY = absPos.Y + (absSize.Y / 2)
-                    
-                    VirtualInputManager:SendMouseMoveEvent(centerX, centerY, game)
+                    GuiService.SelectedObject = nil
                     task.wait(0.1)
-                    VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, true, game, 0)
-                    task.wait(0.05)
-                    VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, false, game, 0)
+                    
+                    GuiService.SelectedObject = buttonToPress
                     task.wait(0.2)
+                    
+                    if GuiService.SelectedObject == buttonToPress then
+                        VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
+                        task.wait(0.05)
+                        VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
+                        task.wait(0.2)
+                        
+                        GuiService.SelectedObject = nil
+                    end
                 end)
                 
                 if not success then
@@ -5858,11 +5843,7 @@ local function findBestPortalFromClientData()
     local targetTier = getgenv().PortalConfig.tier
     local useBestPortal = getgenv().PortalConfig.useBestPortal
     local priorities = getgenv().PortalConfig.priorities
-    
-    print("[Portal] Scanning ClientData.PortalData...")
-    print("[Portal] Selected Map:", selectedMap)
-    print("[Portal] Use Best Portal:", useBestPortal)
-    print("[Portal] Target Tier:", targetTier)
+
     
     local matchingPortals = {}
     
@@ -5884,7 +5865,6 @@ local function findBestPortalFromClientData()
     end
     
     if #matchingPortals == 0 then 
-        print("[Portal] No matching portals found!")
         return nil 
     end
     
@@ -7591,7 +7571,7 @@ if not isInLobby then
                 pcall(function()
                     local lighting = game:GetService("Lighting")
                     for _, child in ipairs(lighting:GetChildren()) do
-                        child:Destroy()
+                        pcall(function() child:Destroy() end)
                     end
                     lighting.Ambient = Color3.new(1, 1, 1)
                     lighting.Brightness = 1
@@ -7602,42 +7582,44 @@ if not isInLobby then
                     lighting.GeographicLatitude = 0
                     
                     for _, obj in ipairs(game.Workspace:GetDescendants()) do
-                        if obj:IsA("BasePart") then
-                            if obj:IsA("Part") or obj:IsA("MeshPart") or obj:IsA("WedgePart") or obj:IsA("CornerWedgePart") then
-                                obj.Material = Enum.Material.SmoothPlastic
-                                obj.CastShadow = false
-                                if obj:FindFirstChildOfClass("Texture") then
-                                    for _, t in ipairs(obj:GetChildren()) do
-                                        if t:IsA("Texture") then
-                                            t:Destroy()
+                        pcall(function()
+                            if obj:IsA("BasePart") then
+                                if obj:IsA("Part") or obj:IsA("MeshPart") or obj:IsA("WedgePart") or obj:IsA("CornerWedgePart") then
+                                    obj.Material = Enum.Material.SmoothPlastic
+                                    obj.CastShadow = false
+                                    if obj:FindFirstChildOfClass("Texture") then
+                                        for _, t in ipairs(obj:GetChildren()) do
+                                            if t:IsA("Texture") then
+                                                pcall(function() t:Destroy() end)
+                                            end
                                         end
                                     end
+                                    if obj:IsA("MeshPart") then
+                                        obj.TextureID = ""
+                                    end
                                 end
-                                if obj:IsA("MeshPart") then
-                                    obj.TextureID = ""
+                                if obj:IsA("Decal") then
+                                    pcall(function() obj:Destroy() end)
                                 end
                             end
-                            if obj:IsA("Decal") then
-                                obj:Destroy()
+                            if obj:IsA("SurfaceAppearance") then
+                                pcall(function() obj:Destroy() end)
                             end
-                        end
-                        if obj:IsA("SurfaceAppearance") then
-                            obj:Destroy()
-                        end
-                        if obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Beam") then
-                            obj.Enabled = false
-                        end
-                        if obj:IsA("Sound") then
-                            obj.Volume = 0
-                            obj:Stop()
-                        end
+                            if obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Beam") then
+                                obj.Enabled = false
+                            end
+                            if obj:IsA("Sound") then
+                                obj.Volume = 0
+                                obj:Stop()
+                            end
+                        end)
                     end
                     
                     local mapPath = game.Workspace:FindFirstChild("Map") and game.Workspace.Map:FindFirstChild("Map")
                     if mapPath then
                         for _, ch in ipairs(mapPath:GetChildren()) do
                             if not ch:IsA("Model") then
-                                ch:Destroy()
+                                pcall(function() ch:Destroy() end)
                             end
                         end
                     end
