@@ -148,6 +148,63 @@ end
 
 task.wait(1)
 
+if not getgenv().Config.hasJoinedDiscord then
+    Window:Dialog({
+        Title = "Join Our Discord!",
+        Description = "Have you joined the Byorl Last Stand Discord server? Get updates, support, and connect with the community!",
+        Buttons = {
+            {
+                Name = "Yes, I'm in!",
+                Callback = function()
+                    getgenv().Config.hasJoinedDiscord = true
+                    saveConfig(getgenv().Config)
+                    Window:Notify({
+                        Title = "Byorl Last Stand",
+                        Description = "Awesome! Thanks for being part of the community!",
+                        Lifetime = 3
+                    })
+                end,
+            },
+            {
+                Name = "Not yet",
+                Callback = function()
+                    getgenv().Config.hasJoinedDiscord = true
+                    saveConfig(getgenv().Config)
+                    
+                    if setclipboard then
+                        setclipboard("https://discord.gg/V3WcdHpd3J")
+                    end
+                    
+                    Window:Notify({
+                        Title = "Byorl Last Stand",
+                        Description = "Discord link copied! Opening in browser...",
+                        Lifetime = 5
+                    })
+                    
+                    task.wait(0.5)
+                    
+                    local success = pcall(function()
+                        if request then
+                            request({
+                                Url = "https://discord.gg/V3WcdHpd3J",
+                                Method = "GET"
+                            })
+                        end
+                    end)
+                    
+                    if not success then
+                        Window:Notify({
+                            Title = "Byorl Last Stand",
+                            Description = "Link copied to clipboard: discord.gg/V3WcdHpd3J",
+                            Lifetime = 5
+                        })
+                    end
+                end,
+            }
+        }
+    })
+end
+
 getgenv()._AbilityUIBuilt = false
 getgenv()._AbilityUIBuilding = false
 
