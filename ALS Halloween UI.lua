@@ -2132,6 +2132,11 @@ task.spawn(function()
             getgenv().MacroActionText = ""
             getgenv().MacroUnitText = ""
             getgenv().MacroWaitingText = ""
+            
+            getgenv().MacroGameState.gameEnded = false
+            getgenv().MacroGameState.hasEndGameUI = false
+            getgenv().MacroGameState.lastGameEndedState = false
+            
             getgenv().UpdateMacroStatus()
             
             task.wait(0.5)
@@ -2147,6 +2152,11 @@ task.spawn(function()
             local now = tick()
             if now - lastRestartAttempt > 3 then
                 print("[Macro Auto-Restart] Fallback restart - macro not running...")
+                
+                getgenv().MacroGameState.gameEnded = false
+                getgenv().MacroGameState.hasEndGameUI = false
+                getgenv().MacroGameState.lastGameEndedState = false
+                
                 lastRestartAttempt = now
                 playMacroV2()
             end
@@ -5281,7 +5291,6 @@ task.spawn(function()
                                     table.insert(debugInfo, "wrong wave (current: " .. currentWave .. ", need: " .. cfg.specificWave .. ")")
                                 else
                                     table.insert(debugInfo, "wave OK (" .. currentWave .. ")")
-                                    print("[Auto Ability] ✓", unitName, abilityName, "- wave condition met (wave", currentWave .. ")")
                                 end
                             end
                             
