@@ -4171,6 +4171,20 @@ Sections.MacroLeft:Button({
             return
         end
         
+        print("[Equip Macro Units] Unequipping all units...")
+        local unequipped = 0
+        for unitID, unitInfo in pairs(clientData.UnitData) do
+            if unitInfo.Equipped then
+                pcall(function()
+                    equipRemote:InvokeServer(unitID)
+                    unequipped = unequipped + 1
+                end)
+            end
+        end
+        
+        print("[Equip Macro Units] Unequipped " .. unequipped .. " units")
+        
+        print("[Equip Macro Units] Equipping macro units...")
         local equipped = 0
         for i, macroUnit in ipairs(macroUnits) do
             if i <= 6 then
@@ -4179,13 +4193,10 @@ Sections.MacroLeft:Button({
                     pcall(function()
                         equipRemote:InvokeServer(unitID)
                         equipped = equipped + 1
-                        task.wait(0.1)
                     end)
                 end
             end
         end
-        
-        task.wait(0.5)
         
         Window:Notify({
             Title = "Equip Macro Units",
