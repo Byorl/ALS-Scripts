@@ -4011,6 +4011,8 @@ end
 
 Sections.AutoPlayRight:Divider()
 
+Sections.AutoPlayRight:SubLabel({ Text = "Priority: 1 = Highest (upgrades first), 6 = Lowest" })
+
 for i = 1, 6 do
     if not getgenv().AutoPlayConfig.upgradePriorities then
         getgenv().AutoPlayConfig.upgradePriorities = {1, 2, 3, 4, 5, 6}
