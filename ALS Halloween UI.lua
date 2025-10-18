@@ -1,7 +1,7 @@
 repeat task.wait() until game:IsLoaded()
 
 if getgenv().ALSScriptLoaded then
-    warn("[ALS] Script already running! Please restart Roblox to reload.")
+    warn("[ALS] Script already running! Please rejoin the game to reload.")
     return
 end
 getgenv().ALSScriptLoaded = true
@@ -5164,13 +5164,6 @@ end
 
 
 do
-local abilityCooldowns = {}
-local bossSpawnTime = nil
-local generalBossSpawnTime = nil
-local bossInRangeTracker = {}
-local lastWave = 0
-local Towers = workspace:WaitForChild("Towers", 10)
-
 local function getCurrentWave()
     local ok, res = pcall(function()
         local waveValue = RS:FindFirstChild("Wave")
@@ -5262,6 +5255,44 @@ local function hasAbilityBeenUnlocked(towerName, abilityName, towerLevel)
     return d and towerLevel >= d.requiredLevel
 end
 
+getgenv()._AbilityHelpers1 = {
+    getCurrentWave = getCurrentWave,
+    getCurrentTimeScale = getCurrentTimeScale,
+    getUpgradeLevel = getUpgradeLevel,
+    fixAbilityName = fixAbilityName,
+    useAbility = useAbility,
+    getAbilityData = getAbilityData,
+    isOnCooldown = isOnCooldown,
+    setAbilityUsed = setAbilityUsed,
+    hasAbilityBeenUnlocked = hasAbilityBeenUnlocked
+}
+
+end
+
+do
+local abilityCooldowns = {}
+local bossSpawnTime = nil
+local generalBossSpawnTime = nil
+local bossInRangeTracker = {}
+local helpers1 = getgenv()._AbilityHelpers1
+
+local function isOnCooldown(towerName, abilityName)
+    local d = helpers1.getAbilityData(towerName, abilityName)
+    if not d or not d.cooldown then return false end
+    local key = towerName .. "_" .. abilityName
+    local last = abilityCooldowns[key]
+    if not last then return false end
+    local scale = helpers1.getCurrentTimeScale()
+    local effectiveCd = d.cooldown / scale
+    local timeSinceUse = tick() - last
+    local cooldownRemaining = effectiveCd - timeSinceUse
+    return cooldownRemaining > 0.5
+end
+
+local function setAbilityUsed(towerName, abilityName)
+    abilityCooldowns[towerName.."_"..abilityName] = tick()
+end
+
 local function bossExists()
     local ok, res = pcall(function()
         local enemies = workspace:FindFirstChild("Enemies")
@@ -5285,6 +5316,24 @@ local function bossReadyForAbilities()
         generalBossSpawnTime = nil
         return false
     end
+end
+
+getgenv()._AbilityHelpers2a = {
+    isOnCooldown = isOnCooldown,
+    setAbilityUsed = setAbilityUsed,
+    bossExists = bossExists,
+    bossReadyForAbilities = bossReadyForAbilities
+}
+
+end
+
+do
+local bossSpawnTime = nil
+local bossInRangeTracker = {}
+local helpers2a = getgenv()._AbilityHelpers2a
+
+local function bossExists()
+    return helpers2a.bossExists()
 end
 
 local function checkBossSpawnTime()
@@ -5374,204 +5423,23 @@ end
 
 end
 
-do 
-local abilityCooldowns = {}
-local bossSpawnTime = nil
-local generalBossSpawnTime = nil
-local bossInRangeTracker = {}
+do
 local lastWave = 0
 local Towers = workspace:WaitForChild("Towers", 10)
-
-local function getCurrentWave()
-    local ok, res = pcall(function()
-        local waveValue = RS:FindFirstChild("Wave")
-        if waveValue and waveValue:IsA("IntValue") then
-            return waveValue.Value
-        end
-        return 0
-    end)
-    if ok and res > 0 then return res end
-    local ok2, res2 = pcall(function()
-        local gui = LocalPlayer.PlayerGui:FindFirstChild("HUD")
-        if not gui then return 0 end
-        local frame = gui:FindFirstChild("Frame")
-        if not frame then return 0 end
-        local wave = frame:FindFirstChild("Wave")
-        if not wave then return 0 end
-        local label = wave:FindFirstChild("TextLabel")
-        if not label then return 0 end
-        local text = label.Text
-        local num = tonumber(text:match("%d+"))
-        return num or 0
-    end)
-    return ok2 and res2 or 0
-end
-
-local function getCurrentTimeScale()
-    local ok, res = pcall(function()
-        local timeScale = RS:FindFirstChild("TimeScale")
-        if timeScale and timeScale:IsA("NumberValue") then
-            return timeScale.Value or 1
-        end
-        return 1
-    end)
-    return ok and res or 1
-end
-
-local function getUpgradeLevel(tower)
-    if not tower then return 0 end
-    local ok, res = pcall(function()
-        local u = tower:FindFirstChild("Upgrade")
-        if u and u:IsA("ValueBase") then return u.Value or 0 end
-        return 0
-    end)
-    return ok and res or 0
-end
-
-local function fixAbilityName(abilityName)
-    local fixed = abilityName
-    fixed = fixed:gsub("!!+", "!")
-    fixed = fixed:gsub("%?%?+", "?")
-    return fixed
-end
-
-local function useAbility(tower, abilityName)
-    if tower then
-        local correctedName = fixAbilityName(abilityName)
-        pcall(function() RS.Remotes.Ability:InvokeServer(tower, correctedName) end)
-    end
-end
-
-local function getAbilityData(towerName, abilityName)
-    local abilities = getAllAbilities(towerName)
-    return abilities[abilityName]
-end
-
-local function isOnCooldown(towerName, abilityName)
-    local d = getAbilityData(towerName, abilityName)
-    if not d or not d.cooldown then return false end
-    local key = towerName .. "_" .. abilityName
-    local last = abilityCooldowns[key]
-    if not last then return false end
-    local scale = getCurrentTimeScale()
-    local effectiveCd = d.cooldown / scale
-    local timeSinceUse = tick() - last
-    local cooldownRemaining = effectiveCd - timeSinceUse
-    return cooldownRemaining > 0.5
-end
-
-local function setAbilityUsed(towerName, abilityName)
-    abilityCooldowns[towerName.."_"..abilityName] = tick()
-end
-
-local function hasAbilityBeenUnlocked(towerName, abilityName, towerLevel)
-    local d = getAbilityData(towerName, abilityName)
-    return d and towerLevel >= d.requiredLevel
-end
-
-local function bossExists()
-    local ok, res = pcall(function()
-        local enemies = workspace:FindFirstChild("Enemies")
-        if not enemies then return false end
-        local boss = enemies:FindFirstChild("Boss")
-        return boss ~= nil
-    end)
-    return ok and res or false
-end
-
-local function bossReadyForAbilities()
-    if not generalBossSpawnTime then
-        if bossExists() then
-            generalBossSpawnTime = tick()
-        end
-        return false
-    end
-    return (tick() - generalBossSpawnTime) >= 1
-end
-
-local function getTowerCFrame(tower)
-    if not tower then return nil end
-    local ok, res = pcall(function()
-        return tower:GetPivot()
-    end)
-    return ok and res or nil
-end
-
-local function getBossCFrame()
-    local ok, res = pcall(function()
-        local enemies = workspace:FindFirstChild("Enemies")
-        if not enemies then return nil end
-        local boss = enemies:FindFirstChild("Boss")
-        if not boss then return nil end
-        return boss:GetPivot()
-    end)
-    return ok and res or nil
-end
-
-local function getTowerRange(tower)
-    if not tower then return 0 end
-    local ok, res = pcall(function()
-        local stats = tower:FindFirstChild("Stats")
-        if not stats then return 0 end
-        local range = stats:FindFirstChild("Range")
-        if not range then return 0 end
-        return range.Value or 0
-    end)
-    return ok and res or 0
-end
-
-local function isBossInRange(tower)
-    local bossCF = getBossCFrame()
-    local towerCF = getTowerCFrame(tower)
-    if not bossCF or not towerCF then return false end
-    local range = getTowerRange(tower)
-    if range <= 0 then return false end
-    local distance = (bossCF.Position - towerCF.Position).Magnitude
-    return distance <= range
-end
-
-local function checkBossInRangeForDuration(tower, requiredDuration)
-    if not tower then return false end
-    local name = tower.Name
-    local currentTime = tick()
-    if isBossInRange(tower) then
-        if requiredDuration == 0 then return true end
-        if not bossInRangeTracker[name] then
-            bossInRangeTracker[name] = currentTime
-            return false
-        else
-            return (currentTime - bossInRangeTracker[name]) >= requiredDuration
-        end
-    else
-        bossInRangeTracker[name] = nil
-    end
-    return false
-end
-
-local function getTowerInfoName(tower)
-    if not tower then return nil end
-    return tower.Name
-end
-
-local function resetRoundTrackers()
-    bossSpawnTime = nil
-    generalBossSpawnTime = nil
-    bossInRangeTracker = {}
-    abilityCooldowns = {}
-end
+local funcs = getgenv()._AbilitySystemFuncs
 
 local function checkGameEndedReset()
     local ok = pcall(function()
         local endGameUI = LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
         if endGameUI and endGameUI:FindFirstChild("Frame") then
-            resetRoundTrackers()
+            funcs.resetRoundTrackers()
         end
     end)
 end
 
 local function processAbility(tower, unitName, abilityName, cfg, currentWave, hasBoss)
-    local infoName = getTowerInfoName(tower)
-    local towerLevel = getUpgradeLevel(tower)
+    local infoName = funcs.getTowerInfoName(tower)
+    local towerLevel = funcs.getUpgradeLevel(tower)
     local savedCfg = getgenv().Config.abilities[unitName] and getgenv().Config.abilities[unitName][abilityName]
     
     if savedCfg then
@@ -5586,11 +5454,11 @@ local function processAbility(tower, unitName, abilityName, cfg, currentWave, ha
     
     local shouldUse = true
     
-    if not hasAbilityBeenUnlocked(infoName, abilityName, towerLevel) then
+    if not funcs.hasAbilityBeenUnlocked(infoName, abilityName, towerLevel) then
         return
     end
     
-    if isOnCooldown(infoName, abilityName) then
+    if funcs.isOnCooldown(infoName, abilityName) then
         return
     end
     
@@ -5601,20 +5469,20 @@ local function processAbility(tower, unitName, abilityName, cfg, currentWave, ha
     end
     
     if cfg.onlyOnBoss then
-        if not hasBoss or not bossReadyForAbilities() then
+        if not hasBoss or not funcs.bossReadyForAbilities() then
             return
         end
     end
     
     if cfg.requireBossInRange then
-        if not hasBoss or not checkBossInRangeForDuration(tower, 0) then
+        if not hasBoss or not funcs.checkBossInRangeForDuration(tower, 0) then
             return
         end
     end
     
-    if not isOnCooldown(infoName, abilityName) then
-        useAbility(tower, abilityName)
-        setAbilityUsed(infoName, abilityName)
+    if not funcs.isOnCooldown(infoName, abilityName) then
+        funcs.useAbility(tower, abilityName)
+        funcs.setAbilityUsed(infoName, abilityName)
     end
 end
 
@@ -5623,19 +5491,19 @@ task.spawn(function()
         task.wait(1)
         pcall(function()
             checkGameEndedReset()
-            local currentWave = getCurrentWave()
-            local hasBoss = bossExists()
+            local currentWave = funcs.getCurrentWave()
+            local hasBoss = funcs.bossExists()
             
             if currentWave < lastWave then
-                resetRoundTrackers()
+                funcs.resetRoundTrackers()
             end
             
             if getgenv().SeamlessFixEnabled and lastWave >= 50 and currentWave < 50 then
-                resetRoundTrackers()
+                funcs.resetRoundTrackers()
             end
             
             if currentWave == 1 and lastWave > 10 then
-                resetRoundTrackers()
+                funcs.resetRoundTrackers()
             end
             
             lastWave = currentWave
