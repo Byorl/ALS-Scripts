@@ -5422,28 +5422,27 @@ task.spawn(function()
             end
             
             local nextButton = nil
-            local retryButton = nil
-            local leaveButton = nil
+            local nextButton = buttons:FindFirstChild("Next")
+            local retryButton = buttons:FindFirstChild("Retry")
+            local leaveButton = buttons:FindFirstChild("Leave")
             
-            for _, button in pairs(buttons:GetChildren()) do
-                if button:IsA("TextButton") or button:IsA("ImageButton") then
-                    local textLabel = button:FindFirstChildWhichIsA("TextLabel", true)
-                    if textLabel then
-                        local text = textLabel.Text:lower()
-                        if text:find("retry") and not retryButton then
-                            retryButton = button
-                        elseif text:find("next") and not nextButton then
-                            nextButton = button
-                        elseif text:find("leave") and not leaveButton then
-                            leaveButton = button
+            if not retryButton or not nextButton or not leaveButton then
+                for _, button in pairs(buttons:GetChildren()) do
+                    if button:IsA("TextButton") or button:IsA("ImageButton") then
+                        local textLabel = button:FindFirstChildWhichIsA("TextLabel", true)
+                        if textLabel then
+                            local text = textLabel.Text:lower()
+                            if text:find("retry") and not retryButton then
+                                retryButton = button
+                            elseif text:find("next") and not nextButton then
+                                nextButton = button
+                            elseif text:find("leave") and not leaveButton then
+                                leaveButton = button
+                            end
                         end
                     end
                 end
             end
-            
-            if not nextButton then nextButton = buttons:FindFirstChild("Next") end
-            if not retryButton then retryButton = buttons:FindFirstChild("Retry") end
-            if not leaveButton then leaveButton = buttons:FindFirstChild("Leave") end
             
             local buttonToPress, actionName = nil, ""
             
