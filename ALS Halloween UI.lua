@@ -5270,8 +5270,6 @@ getgenv()._AbilityHelpers1 = {
 end
 
 do
--- Ability system part 2a: Cooldown and boss tracking (SHARED STATE)
--- Initialize shared state in getgenv if not exists
 if not getgenv()._AbilityState then
     getgenv()._AbilityState = {
         abilityCooldowns = {},
@@ -5336,7 +5334,6 @@ getgenv()._AbilityHelpers2a = {
 end
 
 do
--- Ability system part 2b: Tower position and range functions (SHARED STATE)
 local state = getgenv()._AbilityState
 local helpers2a = getgenv()._AbilityHelpers2a
 
@@ -5429,7 +5426,6 @@ local function resetRoundTrackers()
     state.abilityCooldowns = {}
 end
 
--- Merge all helper functions into final table
 local helpers1 = getgenv()._AbilityHelpers1
 local helpers2a = getgenv()._AbilityHelpers2a
 getgenv()._AbilitySystemFuncs = {
@@ -5456,7 +5452,6 @@ getgenv()._AbilitySystemFuncs = {
 end
 
 do
--- Main ability loop (separate do block to avoid local register overflow)
 local lastWave = 0
 local Towers = workspace:WaitForChild("Towers", 10)
 local funcs = getgenv()._AbilitySystemFuncs
