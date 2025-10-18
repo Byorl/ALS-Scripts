@@ -3911,21 +3911,6 @@ getgenv().AutoPlaySliders = {
     upgradeCaps = {}
 }
 
-local function getUnitMaxLevel(unitName)
-    if not unitName then return 20 end
-    local towerInfo = getTowerInfo(unitName)
-    if not towerInfo then return 20 end
-    
-    local maxLevel = 0
-    for level, data in pairs(towerInfo) do
-        if type(level) == "number" and level > 0 and level > maxLevel then
-            maxLevel = level
-        end
-    end
-    
-    return maxLevel > 0 and maxLevel or 20
-end
-
 local function updateAutoPlaySliders()
     local clientData = getClientData()
     if not clientData or not clientData.Slots then return end
@@ -3934,7 +3919,6 @@ local function updateAutoPlaySliders()
     for i = 1, 6 do
         local slotData = clientData.Slots[sortedSlots[i]]
         local unitName = slotData and slotData.Value or nil
-        local maxLevel = getUnitMaxLevel(unitName)
         
         if getgenv().AutoPlaySliders.upgradeCaps[i] then
             pcall(function()
@@ -4094,6 +4078,119 @@ Sections.MacroLeft:Button({
             Title = "Macro System",
             Description = "Loaded " .. #macroNames .. " macro(s)",
             Lifetime = 2
+        })
+    end,
+})
+
+Sections.MacroLeft:Button({
+    Name = "⚙️ Equip Macro Units",
+    Callback = function()
+        local selectedMacro = getgenv().MacroSelectedName
+        if not selectedMacro or selectedMacro == "" then
+            Window:Notify({
+                Title = "Equip Macro Units",
+                Description = "Please select a macro first!",
+                Lifetime = 3
+            })
+            return
+        end
+        
+        local macroData = loadMacro(selectedMacro)
+        if not macroData or #macroData == 0 then
+            Window:Notify({
+                Title = "Equip Macro Units",
+                Description = "Failed to load macro data!",
+                Lifetime = 3
+            })
+            return
+        end
+        
+        local macroUnits = {}
+        local unitSet = {}
+        for _, action in ipairs(macroData) do
+            if action.ActionType == "Place" and action.TowerName then
+                if not unitSet[action.TowerName] then
+                    unitSet[action.TowerName] = true
+                    table.insert(macroUnits, action.TowerName)
+                end
+            end
+        end
+        
+        if #macroUnits == 0 then
+            Window:Notify({
+                Title = "Equip Macro Units",
+                Description = "No units found in macro!",
+                Lifetime = 3
+            })
+            return
+        end
+        
+        local clientData = getClientData()
+        if not clientData or not clientData.UnitData or not clientData.Slots then
+            Window:Notify({
+                Title = "Equip Macro Units",
+                Description = "Failed to get client data!",
+                Lifetime = 3
+            })
+            return
+        end
+        
+        local unitIDs = {}
+        for unitID, unitInfo in pairs(clientData.UnitData) do
+            for _, macroUnit in ipairs(macroUnits) do
+                if unitInfo.UnitName == macroUnit then
+                    unitIDs[macroUnit] = unitID
+                    break
+                end
+            end
+        end
+        
+        local missingUnits = {}
+        for _, macroUnit in ipairs(macroUnits) do
+            if not unitIDs[macroUnit] then
+                table.insert(missingUnits, macroUnit)
+            end
+        end
+        
+        if #missingUnits > 0 then
+            Window:Notify({
+                Title = "Equip Macro Units",
+                Description = "Missing units: " .. table.concat(missingUnits, ", "),
+                Lifetime = 5
+            })
+            return
+        end
+        
+        local equipRemote = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("EquipEvent")
+        if not equipRemote then
+            Window:Notify({
+                Title = "Equip Macro Units",
+                Description = "EquipEvent remote not found!",
+                Lifetime = 3
+            })
+            return
+        end
+        
+        local equipped = 0
+        for i, macroUnit in ipairs(macroUnits) do
+            if i <= 6 then
+                local unitID = unitIDs[macroUnit]
+                if unitID then
+                    pcall(function()
+                        equipRemote:InvokeServer(unitID)
+                        equipped = equipped + 1
+                        task.wait(0.1)
+                    end)
+                end
+            end
+        end
+        
+        task.wait(0.5)
+        
+        Window:Notify({
+            Title = "Equip Macro Units",
+            Description = "Equipped " .. equipped .. " unit(s) for " .. selectedMacro,
+            Lifetime = 3
         })
     end,
 })
@@ -5302,6 +5399,19 @@ task.spawn(function()
             if buttonToPress then
                 
                 if getgenv().WebhookEnabled then
+                    local isFinalExpedition = false
+                    pcall(function()
+                        local gamemode = RS:FindFirstChild("Gamemode")
+                        if gamemode and gamemode.Value == "FinalExpedition" then
+                            isFinalExpedition = true
+                        end
+                    end)
+                    
+                    if isFinalExpedition and actionName == "Next" then
+                        print("[Auto Next] Waiting for webhook in Final Expedition...")
+                        task.wait(2)
+                    end
+                    
                     local maxWait = 0
                     while getgenv().WebhookProcessing and maxWait < 15 do
                         task.wait(0.5)
@@ -8423,21 +8533,6 @@ if not isInLobby then
             return towerInfo[1].Attack == "Cash"
         end
         
-        local function getUnitMaxLevel(unitName)
-            if not unitName then return 20 end
-            local towerInfo = getTowerInfo(unitName)
-            if not towerInfo then return 20 end
-            
-            local maxLevel = 0
-            for level, data in pairs(towerInfo) do
-                if type(level) == "number" and level > 0 and level > maxLevel then
-                    maxLevel = level
-                end
-            end
-            
-            return maxLevel > 0 and maxLevel or 20
-        end
-        
         local function getWaypoints()
             local waypoints = {}
             local waypointsFolder = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Waypoints")
@@ -8795,42 +8890,47 @@ if not isInLobby then
                 local farmUnits = {}
                 local normalUnits = {}
                 
+                local slotUpgradeCaps = {}
                 local sortedSlots = {"Slot1", "Slot2", "Slot3", "Slot4", "Slot5", "Slot6"}
                 for slotNum = 1, 6 do
                     local slotData = clientData.Slots[sortedSlots[slotNum]]
                     if slotData and slotData.Value then
                         local unitName = slotData.Value
-                        local upgradeCap = math.floor(getgenv().AutoPlayConfig.upgradeCaps[slotNum] or 10)
+                        local upgradeCap = math.floor(getgenv().AutoPlayConfig.upgradeCaps[slotNum] or 0)
+                        slotUpgradeCaps[unitName] = upgradeCap
+                    end
+                end
+                
+                for _, tower in pairs(towersFolder:GetChildren()) do
+                    local owner = tower:FindFirstChild("Owner")
+                    if owner and owner.Value == Players.LocalPlayer then
+                        local unitName = tower.Name
+                        local level = getTowerLevel(tower)
+                        local maxUpgrade = tower:FindFirstChild("MaxUpgrade")
+                        local actualMaxLevel = maxUpgrade and maxUpgrade.Value or 20
                         
-                        if upgradeCap > 0 then
-                            local maxLevel = getUnitMaxLevel(unitName)
+                        local upgradeCap = slotUpgradeCaps[unitName] or 20 
+                        
+                        if slotUpgradeCaps[unitName] and slotUpgradeCaps[unitName] == 0 then
+                            continue
+                        end
+                        
+                        local effectiveCap = math.min(upgradeCap, actualMaxLevel)
+                        
+                        if level < effectiveCap then
+                            local upgradeCost = getgenv().GetUpgradeCost and getgenv().GetUpgradeCost(unitName, level) or 999999999
                             
-                            for _, tower in pairs(towersFolder:GetChildren()) do
-                                if tower.Name == unitName then
-                                    local owner = tower:FindFirstChild("Owner")
-                                    if owner and owner.Value == Players.LocalPlayer then
-                                        local level = getTowerLevel(tower)
-                                        local maxUpgrade = tower:FindFirstChild("MaxUpgrade")
-                                        local actualMaxLevel = maxUpgrade and maxUpgrade.Value or maxLevel
-                                        
-                                        local effectiveCap = math.min(upgradeCap, actualMaxLevel)
-                                        
-                                        if level < effectiveCap then
-                                            if isFarmUnit(unitName) then
-                                                table.insert(farmUnits, {tower = tower, level = level, cap = effectiveCap, unitName = unitName})
-                                            else
-                                                table.insert(normalUnits, {tower = tower, level = level, cap = effectiveCap, unitName = unitName})
-                                            end
-                                        end
-                                    end
-                                end
+                            if isFarmUnit(unitName) then
+                                table.insert(farmUnits, {tower = tower, level = level, cap = effectiveCap, unitName = unitName, cost = upgradeCost})
+                            else
+                                table.insert(normalUnits, {tower = tower, level = level, cap = effectiveCap, unitName = unitName, cost = upgradeCost})
                             end
                         end
                     end
                 end
                 
-                table.sort(farmUnits, function(a, b) return a.level < b.level end)
-                table.sort(normalUnits, function(a, b) return a.level < b.level end)
+                table.sort(farmUnits, function(a, b) return a.cost < b.cost end)
+                table.sort(normalUnits, function(a, b) return a.cost < b.cost end)
                 
                 local currentCash = tonumber(getgenv().MacroCurrentCash) or 0
                 
@@ -8840,10 +8940,9 @@ if not isInLobby then
                     for _, data in ipairs(farmUnits) do
                         if upgraded then break end
                         currentCash = tonumber(getgenv().MacroCurrentCash) or 0
-                        local upgradeCost = getgenv().GetUpgradeCost and getgenv().GetUpgradeCost(data.unitName, data.level) or 0
                         
-                        if upgradeCost > 0 and currentCash >= upgradeCost then
-                            print("[AutoUpgrade] [FARM PRIORITY] Upgrading " .. data.unitName .. " from level " .. data.level .. " (Cost: " .. upgradeCost .. ")")
+                        if data.cost > 0 and currentCash >= data.cost then
+                            print("[AutoUpgrade] [FARM PRIORITY] Upgrading " .. data.unitName .. " from level " .. data.level .. " (Cost: $" .. data.cost .. ")")
                             if upgradeTower(data.tower) then
                                 upgraded = true
                                 task.wait(0.5)
@@ -8855,10 +8954,9 @@ if not isInLobby then
                         for _, data in ipairs(normalUnits) do
                             if upgraded then break end
                             currentCash = tonumber(getgenv().MacroCurrentCash) or 0
-                            local upgradeCost = getgenv().GetUpgradeCost and getgenv().GetUpgradeCost(data.unitName, data.level) or 0
                             
-                            if upgradeCost > 0 and currentCash >= upgradeCost then
-                                print("[AutoUpgrade] Upgrading " .. data.unitName .. " from level " .. data.level .. " (Cost: " .. upgradeCost .. ")")
+                            if data.cost > 0 and currentCash >= data.cost then
+                                print("[AutoUpgrade] Upgrading " .. data.unitName .. " from level " .. data.level .. " (Cost: $" .. data.cost .. ")")
                                 if upgradeTower(data.tower) then
                                     upgraded = true
                                     task.wait(0.5)
@@ -8870,10 +8968,9 @@ if not isInLobby then
                     for _, data in ipairs(normalUnits) do
                         if upgraded then break end
                         currentCash = tonumber(getgenv().MacroCurrentCash) or 0
-                        local upgradeCost = getgenv().GetUpgradeCost and getgenv().GetUpgradeCost(data.unitName, data.level) or 0
                         
-                        if upgradeCost > 0 and currentCash >= upgradeCost then
-                            print("[AutoUpgrade] Upgrading " .. data.unitName .. " from level " .. data.level .. " (Cost: " .. upgradeCost .. ")")
+                        if data.cost > 0 and currentCash >= data.cost then
+                            print("[AutoUpgrade] Upgrading " .. data.unitName .. " from level " .. data.level .. " (Cost: $" .. data.cost .. ")")
                             if upgradeTower(data.tower) then
                                 upgraded = true
                                 task.wait(0.5)
@@ -8885,10 +8982,9 @@ if not isInLobby then
                         for _, data in ipairs(farmUnits) do
                             if upgraded then break end
                             currentCash = tonumber(getgenv().MacroCurrentCash) or 0
-                            local upgradeCost = getgenv().GetUpgradeCost and getgenv().GetUpgradeCost(data.unitName, data.level) or 0
                             
-                            if upgradeCost > 0 and currentCash >= upgradeCost then
-                                print("[AutoUpgrade] Upgrading " .. data.unitName .. " from level " .. data.level .. " (Cost: " .. upgradeCost .. ")")
+                            if data.cost > 0 and currentCash >= data.cost then
+                                print("[AutoUpgrade] Upgrading " .. data.unitName .. " from level " .. data.level .. " (Cost: $" .. data.cost .. ")")
                                 if upgradeTower(data.tower) then
                                     upgraded = true
                                     task.wait(0.5)
