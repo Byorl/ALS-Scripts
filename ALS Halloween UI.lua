@@ -5270,17 +5270,25 @@ getgenv()._AbilityHelpers1 = {
 end
 
 do
-local abilityCooldowns = {}
-local bossSpawnTime = nil
-local generalBossSpawnTime = nil
-local bossInRangeTracker = {}
+-- Ability system part 2a: Cooldown and boss tracking (SHARED STATE)
+-- Initialize shared state in getgenv if not exists
+if not getgenv()._AbilityState then
+    getgenv()._AbilityState = {
+        abilityCooldowns = {},
+        bossSpawnTime = nil,
+        generalBossSpawnTime = nil,
+        bossInRangeTracker = {}
+    }
+end
+
+local state = getgenv()._AbilityState
 local helpers1 = getgenv()._AbilityHelpers1
 
 local function isOnCooldown(towerName, abilityName)
     local d = helpers1.getAbilityData(towerName, abilityName)
     if not d or not d.cooldown then return false end
     local key = towerName .. "_" .. abilityName
-    local last = abilityCooldowns[key]
+    local last = state.abilityCooldowns[key]
     if not last then return false end
     local scale = helpers1.getCurrentTimeScale()
     local effectiveCd = d.cooldown / scale
@@ -5290,7 +5298,7 @@ local function isOnCooldown(towerName, abilityName)
 end
 
 local function setAbilityUsed(towerName, abilityName)
-    abilityCooldowns[towerName.."_"..abilityName] = tick()
+    state.abilityCooldowns[towerName.."_"..abilityName] = tick()
 end
 
 local function bossExists()
@@ -5310,10 +5318,10 @@ end
 
 local function bossReadyForAbilities()
     if bossExists() then
-        if not generalBossSpawnTime then generalBossSpawnTime = tick() end
-        return (tick() - generalBossSpawnTime) >= 1
+        if not state.generalBossSpawnTime then state.generalBossSpawnTime = tick() end
+        return (tick() - state.generalBossSpawnTime) >= 1
     else
-        generalBossSpawnTime = nil
+        state.generalBossSpawnTime = nil
         return false
     end
 end
@@ -5328,8 +5336,8 @@ getgenv()._AbilityHelpers2a = {
 end
 
 do
-local bossSpawnTime = nil
-local bossInRangeTracker = {}
+-- Ability system part 2b: Tower position and range functions (SHARED STATE)
+local state = getgenv()._AbilityState
 local helpers2a = getgenv()._AbilityHelpers2a
 
 local function bossExists()
@@ -5338,10 +5346,10 @@ end
 
 local function checkBossSpawnTime()
     if bossExists() then
-        if not bossSpawnTime then bossSpawnTime = tick() end
-        return (tick() - bossSpawnTime) >= 16
+        if not state.bossSpawnTime then state.bossSpawnTime = tick() end
+        return (tick() - state.bossSpawnTime) >= 16
     else
-        bossSpawnTime = nil
+        state.bossSpawnTime = nil
         return false
     end
 end
@@ -5397,14 +5405,14 @@ local function checkBossInRangeForDuration(tower, requiredDuration)
     local currentTime = tick()
     if isBossInRange(tower) then
         if requiredDuration == 0 then return true end
-        if not bossInRangeTracker[name] then
-            bossInRangeTracker[name] = currentTime
+        if not state.bossInRangeTracker[name] then
+            state.bossInRangeTracker[name] = currentTime
             return false
         else
-            return (currentTime - bossInRangeTracker[name]) >= requiredDuration
+            return (currentTime - state.bossInRangeTracker[name]) >= requiredDuration
         end
     else
-        bossInRangeTracker[name] = nil
+        state.bossInRangeTracker[name] = nil
     end
     return false
 end
@@ -5415,15 +5423,40 @@ local function getTowerInfoName(tower)
 end
 
 local function resetRoundTrackers()
-    bossSpawnTime = nil
-    generalBossSpawnTime = nil
-    bossInRangeTracker = {}
-    abilityCooldowns = {}
+    state.bossSpawnTime = nil
+    state.generalBossSpawnTime = nil
+    state.bossInRangeTracker = {}
+    state.abilityCooldowns = {}
 end
+
+-- Merge all helper functions into final table
+local helpers1 = getgenv()._AbilityHelpers1
+local helpers2a = getgenv()._AbilityHelpers2a
+getgenv()._AbilitySystemFuncs = {
+    getCurrentWave = helpers1.getCurrentWave,
+    getCurrentTimeScale = helpers1.getCurrentTimeScale,
+    getUpgradeLevel = helpers1.getUpgradeLevel,
+    fixAbilityName = helpers1.fixAbilityName,
+    useAbility = helpers1.useAbility,
+    getAbilityData = helpers1.getAbilityData,
+    hasAbilityBeenUnlocked = helpers1.hasAbilityBeenUnlocked,
+    isOnCooldown = helpers2a.isOnCooldown,
+    setAbilityUsed = helpers2a.setAbilityUsed,
+    bossExists = helpers2a.bossExists,
+    bossReadyForAbilities = helpers2a.bossReadyForAbilities,
+    getTowerCFrame = getTowerCFrame,
+    getBossCFrame = getBossCFrame,
+    getTowerRange = getTowerRange,
+    isBossInRange = isBossInRange,
+    checkBossInRangeForDuration = checkBossInRangeForDuration,
+    getTowerInfoName = getTowerInfoName,
+    resetRoundTrackers = resetRoundTrackers
+}
 
 end
 
 do
+-- Main ability loop (separate do block to avoid local register overflow)
 local lastWave = 0
 local Towers = workspace:WaitForChild("Towers", 10)
 local funcs = getgenv()._AbilitySystemFuncs
