@@ -1151,6 +1151,8 @@ getgenv().AntiAFKEnabled = getgenv().Config.toggles.AntiAFKToggle or false
 getgenv().BlackScreenEnabled = getgenv().Config.toggles.BlackScreenToggle or false
 getgenv().FPSBoostEnabled = getgenv().Config.toggles.FPSBoostToggle or false
 
+getgenv().BossRushEnabled = getgenv().Config.toggles.BossRushToggle or false
+
 getgenv().SeamlessFixEnabled = getgenv().Config.toggles.SeamlessFixToggle or false
 getgenv().SeamlessRounds = tonumber(getgenv().Config.inputs.SeamlessRounds) or 4
 getgenv().AutoExecuteTeleportEnabled = getgenv().Config.toggles.AutoExecuteTeleport or false
@@ -3251,13 +3253,15 @@ createToggle(
     "BossRushToggle",
     function(value)
         getgenv().BossRushEnabled = value
+        getgenv().Config.toggles.BossRushToggle = value
+        saveConfig(getgenv().Config)
         Window:Notify({
             Title = "Boss Rush",
             Description = value and "Enabled" or "Disabled",
             Lifetime = 3
         })
     end,
-    getgenv().BossRushEnabled or false
+    getgenv().BossRushEnabled
 )
 
 Sections.BossRushLeft:Divider()
@@ -7784,6 +7788,10 @@ do
             local button = best.button
             local GuiService = game:GetService("GuiService")
             
+            if not button:IsDescendantOf(LocalPlayer.PlayerGui) then
+                return false
+            end
+            
             GuiService.SelectedObject = nil
             task.wait(0.1)
             
@@ -8181,6 +8189,19 @@ do
     
     while true do
         task.wait(1.5)
+        
+        local promptVisible = false
+        pcall(function()
+            local prompt = LocalPlayer.PlayerGui:FindFirstChild("Prompt")
+            if prompt and prompt.Enabled then
+                promptVisible = true
+            end
+        end)
+        
+        if not promptVisible then
+            task.wait(0.5)
+            continue
+        end
         
         local isBossRush = false
         pcall(function()
