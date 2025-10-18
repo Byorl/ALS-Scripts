@@ -2229,6 +2229,7 @@ end)
 local function getMapsByMode(mode)
     if not MapData then return {} end
     if mode == "ElementalCaverns" then return {"Light","Nature","Fire","Dark","Water"} end
+    if mode == "FinalExpedition" then mode = "Story" end
     local maps = {}
     for mapName, mapInfo in pairs(MapData) do
         if mapInfo.Type and type(mapInfo.Type) == "table" then
@@ -2264,7 +2265,7 @@ if not success then
     error("[FATAL] Cannot continue - Main tab header failed: " .. tostring(err))
 end
 
-local autoJoinModeList = {"Story", "Infinite", "Challenge", "LegendaryStages", "Raids", "Dungeon", "Survival", "ElementalCaverns", "Event", "MidnightHunt", "BossRush", "Siege", "Breach"}
+local autoJoinModeList = {"Story", "Infinite", "Challenge", "LegendaryStages", "Raids", "Dungeon", "Survival", "ElementalCaverns", "Event", "MidnightHunt", "BossRush", "Siege", "Breach", "FinalExpedition"}
 
 local autoJoinMapDropdown = nil
 
@@ -4068,7 +4069,7 @@ local gamemodeDropdown = createDropdown(
     Sections.MacroRight,
     "Select Gamemode",
     "MacroMapsGamemode",
-    {"Story", "Infinite", "Challenge", "LegendaryStages", "Raids", "Dungeon", "Survival", "ElementalCaverns", "Event", "MidnightHunt", "BossRush", "Siege", "Breach"},
+    {"Story", "Infinite", "Challenge", "LegendaryStages", "Raids", "Dungeon", "Survival", "ElementalCaverns", "Event", "MidnightHunt", "BossRush", "Siege", "Breach", "FinalExpedition"},
     false,
     function(value)
         selectedGamemode = value
@@ -4090,6 +4091,7 @@ end)
 local function getMapsByGamemode(mode)
     if not MapData then return {} end
     if mode == "ElementalCaverns" then return {"Light","Nature","Fire","Dark","Water"} end
+    if mode == "FinalExpedition" then mode = "Story" end
     local maps = {}
     for mapName, mapInfo in pairs(MapData) do
         if mapInfo.Type and type(mapInfo.Type) == "table" then
