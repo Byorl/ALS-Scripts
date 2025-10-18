@@ -4085,7 +4085,7 @@ Sections.MacroLeft:Button({
 Sections.MacroLeft:Button({
     Name = "⚙️ Equip Macro Units",
     Callback = function()
-        local selectedMacro = getgenv().MacroSelectedName
+        local selectedMacro = getgenv().CurrentMacro
         if not selectedMacro or selectedMacro == "" then
             Window:Notify({
                 Title = "Equip Macro Units",
@@ -4095,7 +4095,7 @@ Sections.MacroLeft:Button({
             return
         end
         
-        local macroData = loadMacro(selectedMacro)
+        local macroData = getgenv().MacroData or loadMacro(selectedMacro)
         if not macroData or #macroData == 0 then
             Window:Notify({
                 Title = "Equip Macro Units",
