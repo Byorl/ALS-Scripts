@@ -4032,7 +4032,7 @@ for i = 1, 6 do
             getgenv().AutoPlayConfig.upgradePriorities[i] = math.floor(value)
         end,
         "Default",
-        1
+        0
     )
 end
 
