@@ -6,10 +6,30 @@ if getgenv().ALSScriptLoaded then
 end
 getgenv().ALSScriptLoaded = true
 
-local MacLib = loadstring(game:HttpGet("https://github.com/biggaboy212/Maclib/releases/latest/download/maclib.txt"))()
+local MacLib
+local loadSuccess, loadError = pcall(function()
+    local url = "https://github.com/biggaboy212/Maclib/releases/latest/download/maclib.txt"
+    local response = game:HttpGet(url)
+    
+    if not response or response == "" then
+        error("Empty response from MacLib URL")
+    end
+    
+    local loadFunc, loadErr = loadstring(response)
+    if not loadFunc then
+        error("Failed to compile MacLib: " .. tostring(loadErr))
+    end
+    
+    MacLib = loadFunc()
+end)
+
+if not loadSuccess then
+    error("[ALS] Failed to load MacLib library: " .. tostring(loadError) .. "\n\nPlease check:\n1. Your internet connection\n2. Your executor supports HttpGet\n3. Try restarting Roblox")
+    return
+end
 
 if not MacLib then
-    error("[ALS] Failed to load MacLib library")
+    error("[ALS] MacLib loaded but returned nil. This may be an executor compatibility issue.\n\nTry:\n1. Using a different executor\n2. Restarting Roblox\n3. Checking if your executor is up to date")
     return
 end
 
