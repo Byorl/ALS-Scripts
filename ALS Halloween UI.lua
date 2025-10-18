@@ -7806,7 +7806,11 @@ if not isInLobby then
                 pcall(function()
                     local lighting = game:GetService("Lighting")
                     for _, child in ipairs(lighting:GetChildren()) do
-                        pcall(function() child:Destroy() end)
+                        pcall(function()
+                            if not child:IsA("Sky") and not child:IsA("Atmosphere") then
+                                child:Destroy()
+                            end
+                        end)
                     end
                     lighting.Ambient = Color3.new(1, 1, 1)
                     lighting.Brightness = 1
