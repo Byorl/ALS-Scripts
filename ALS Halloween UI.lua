@@ -3853,7 +3853,7 @@ local function updatePathSliderMax()
             for _, wp in pairs(waypointsFolder:GetChildren()) do
                 if wp:IsA("BasePart") then
                     local num = tonumber(wp.Name)
-                    if num and num >= 3 then
+                    if num and num >= 1 then
                         table.insert(waypoints, num)
                     end
                 end
@@ -4203,6 +4203,53 @@ Sections.MacroLeft:Button({
             Description = "Equipped " .. equipped .. " unit(s) for " .. selectedMacro,
             Lifetime = 3
         })
+    end,
+})
+
+Sections.MacroLeft:Button({
+    Name = "🗑️ Delete Macro",
+    Callback = function()
+        local selectedMacro = getgenv().CurrentMacro
+        if not selectedMacro or selectedMacro == "" then
+            Window:Notify({
+                Title = "Delete Macro",
+                Description = "Please select a macro first!",
+                Lifetime = 3
+            })
+            return
+        end
+        
+        local macroPath = "ALSHalloweenEvent/macros/" .. selectedMacro .. ".json"
+        
+        local success = pcall(function()
+            if isfile(macroPath) then
+                delfile(macroPath)
+            end
+        end)
+        
+        if success then
+            getgenv().Macros[selectedMacro] = nil
+            getgenv().CurrentMacro = nil
+            
+            Window:Notify({
+                Title = "Delete Macro",
+                Description = "Deleted macro: " .. selectedMacro,
+                Lifetime = 3
+            })
+            
+            if getgenv().MacroDropdown then
+                pcall(function()
+                    getgenv().MacroDropdown:UpdateOptions(getMacroNames())
+                    getgenv().MacroDropdown:UpdateValue("None")
+                end)
+            end
+        else
+            Window:Notify({
+                Title = "Delete Macro",
+                Description = "Failed to delete macro!",
+                Lifetime = 3
+            })
+        end
     end,
 })
 
@@ -5158,8 +5205,6 @@ Sections.FinalExpeditionRight:SubLabel({
 
 
 Sections.SeamlessFixLeft:Header({ Text = "🔄 Seamless Fix" })
-Sections.SeamlessFixLeft:SubLabel({ Text = "Keep script running across teleports" })
-
 Sections.SeamlessFixLeft:Divider()
 
 Sections.SeamlessFixLeft:Header({ Text = "💡 What is Seamless Fix?" })
@@ -7628,39 +7673,31 @@ do
             if not prompt then return nil end
             local frame = prompt:FindFirstChild("Frame")
             if not frame or not frame:FindFirstChild("Frame") then return nil end
-            local cards, cardButtons = {}, {}
-            local descendants = frame:GetDescendants()
-            for i = 1, #descendants do
-                local d = descendants[i]
-                if d:IsA("TextLabel") and d.Parent and d.Parent:IsA("Frame") then
-                    local text = d.Text
-                    if text and text ~= "" and text ~= "Confirm" then
-                        local button = d.Parent.Parent
-                        if button:IsA("GuiButton") or button:IsA("TextButton") or button:IsA("ImageButton") then
-                            local alreadyAdded = false
-                            for _, existing in ipairs(cardButtons) do
-                                if existing.text == text and existing.button == button then
-                                    alreadyAdded = true
-                                    break
-                                end
-                            end
-                            if not alreadyAdded then
-                                table.insert(cardButtons, {text=text, button=button})
-                            end
+            
+            local frameChildren = frame:FindFirstChild("Frame"):GetChildren()
+            if #frameChildren < 4 then return nil end
+            
+            local fourthFrame = frameChildren[4]
+            local cardButtons = fourthFrame:GetChildren()
+            
+            local cards = {}
+            for i = 1, math.min(4, #cardButtons) do
+                local cardButton = cardButtons[i]
+                if cardButton and cardButton:IsA("TextButton") then
+                    local frameChild = cardButton:FindFirstChild("Frame")
+                    if frameChild then
+                        local textLabel = frameChild:FindFirstChild("TextLabel")
+                        if textLabel and textLabel.Text and textLabel.Text ~= "" then
+                            local cardName = textLabel.Text
+                            table.insert(cards, { name = cardName, button = cardButton })
                         end
                     end
                 end
             end
-            table.sort(cardButtons, function(a,b) 
-                if not a.button or not a.button.AbsolutePosition then return false end
-                if not b.button or not b.button.AbsolutePosition then return true end
-                return a.button.AbsolutePosition.X < b.button.AbsolutePosition.X 
-            end)
-            for i, c in ipairs(cardButtons) do
-                cards[i] = { name=c.text, button=c.button }
-            end
+            
             return #cards > 0 and cards or nil
         end)
+        
         return ok and result or nil
     end
     
@@ -7722,27 +7759,47 @@ do
     end
     
     local function selectCard()
-        if not getgenv().CardSelectionEnabled then return false end
+        local isBossRush = false
+        pcall(function()
+            local gamemode = RS:FindFirstChild("Gamemode")
+            if gamemode and gamemode.Value == "BossRush" then
+                isBossRush = true
+            end
+        end)
+        
+        if isBossRush then
+            if not getgenv().BossRushEnabled then return false end
+        else
+            if not getgenv().CardSelectionEnabled then return false end
+        end
+        
         local ok = pcall(function()
             local list = getAvailableCards()
             if not list then return false end
+            
             local _, best, priority = findBestCard(list)
             if not best or not best.button or not priority then return false end
             if priority >= 999 then return false end
+            
             local button = best.button
-            local events = {"Activated","MouseButton1Click","MouseButton1Down","MouseButton1Up"}
-            for _, ev in ipairs(events) do
-                pcall(function()
-                    for _, conn in ipairs(getconnections(button[ev])) do
-                        conn:Fire()
-                    end
-                end)
-                task.wait(0.05)
-            end
+            local GuiService = game:GetService("GuiService")
+            
+            GuiService.SelectedObject = nil
+            task.wait(0.1)
+            
+            GuiService.SelectedObject = button
+            task.wait(0.2)
+            
+            VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
+            task.wait(0.05)
+            VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
+            
             task.wait(0.3)
+            
             pressConfirm()
             task.wait(0.2)
         end)
+        
         return ok
     end
     
@@ -8231,12 +8288,18 @@ if not isInLobby then
         
         LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
             pcall(function()
-                if child.Name == "EndGameUI" and not hasRun then
+                if child.Name == "EndGameUI" then
                     local currentTime = tick()
                     if currentTime - lastEndgameTime < DEBOUNCE_TIME then
                         print("[Seamless Fix] Debounced duplicate EndGameUI trigger")
                         return
                     end
+                    
+                    if hasRun then
+                        print("[Seamless Fix] EndGameUI detected but hasRun is true, resetting...")
+                        hasRun = false
+                    end
+                    
                     hasRun = true
                     lastEndgameTime = currentTime
                     endgameCount = endgameCount + 1
@@ -8276,6 +8339,7 @@ if not isInLobby then
                                     endgameCount = 0
                                     maxRoundsReached = false
                                     hasRun = false
+                                    enableSeamlessIfNeeded()
                                 else
                                     warn("[Seamless Fix] RestartMatch remote not found")
                                 end
@@ -8285,6 +8349,10 @@ if not isInLobby then
                                 warn("[Seamless Fix] Restart failed:", err)
                             end
                         end)
+                    else
+                        task.delay(3, function()
+                            hasRun = false
+                        end)
                     end
                 end
             end)
@@ -8292,7 +8360,7 @@ if not isInLobby then
         
         LocalPlayer.PlayerGui.ChildRemoved:Connect(function(child) 
             if child.Name == "EndGameUI" then 
-                task.wait(2) 
+                task.wait(3) 
                 hasRun = false 
             end 
         end)
@@ -8422,34 +8490,14 @@ do
     end)
 end
 
-if getgenv().Config.toggles.AutoHideUI then
+if getgenv().AutoHideUIEnabled or getgenv().Config.toggles.AutoHideUI then
     task.spawn(function()
-        task.wait(2)
+        task.wait(3)
         
         if Window and Window.SetState then
-            local hideAttempts = 0
-            local hideSuccess = false
-            
-            while hideAttempts < 3 and not hideSuccess do
-                hideAttempts = hideAttempts + 1
-                local ok = pcall(function()
-                    Window:SetState(false)
-                    hideSuccess = true
-                end)
-                
-                if ok and hideSuccess then
-                    break
-                else
-                    warn("[Auto Hide] Attempt " .. hideAttempts .. " failed, retrying...")
-                    task.wait(0.5)
-                end
-            end
-            
-            if not hideSuccess then
-                warn("[Auto Hide] Failed to minimize UI after 3 attempts - UI will remain visible")
-            end
-        else
-            warn("[Auto Hide] Window not ready, skipping auto-hide")
+            pcall(function()
+                Window:SetState(false)
+            end)
         end
     end)
 end
@@ -8572,7 +8620,7 @@ if not isInLobby then
             for _, wp in pairs(waypointsFolder:GetChildren()) do
                 if wp:IsA("BasePart") then
                     local num = tonumber(wp.Name)
-                    if num and num >= 3 then
+                    if num and num >= 1 then
                         table.insert(waypoints, {number = num, part = wp})
                     end
                 end
@@ -8621,7 +8669,7 @@ if not isInLobby then
             
             if distance == 0 then distance = 10 end
             
-            local baseAngle = (slotNum - 1) * 60
+            local baseAngle = slotNum * 60
             
             for attempt = 1, 15 do
                 local angleVariation = math.random(-20, 20)
