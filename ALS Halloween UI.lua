@@ -88,8 +88,6 @@ local customHeight = tonumber(getgenv().Config.inputs.UIHeight) or defaultHeight
 if customWidth < 400 or customWidth > 1920 then customWidth = defaultWidth end
 if customHeight < 300 or customHeight > 1080 then customHeight = defaultHeight end
 
-print("[UI Size] Creating window with size:", customWidth, "x", customHeight)
-
 local Window = MacLib:Window({
     Title = "Byorl Last Stand",
     Subtitle = "Anime Last Stand Automation",
@@ -105,6 +103,45 @@ if not Window then
     error("[ALS] Failed to create Window")
     return
 end
+
+local globalSettings = {
+    UIBlurToggle = Window:GlobalSetting({
+        Name = "UI Blur",
+        Default = Window:GetAcrylicBlurState(),
+        Callback = function(bool)
+            Window:SetAcrylicBlurState(bool)
+            Window:Notify({
+                Title = Window.Settings.Title,
+                Description = (bool and "Enabled" or "Disabled") .. " UI Blur",
+                Lifetime = 5
+            })
+        end,
+    }),
+    NotificationToggler = Window:GlobalSetting({
+        Name = "Notifications",
+        Default = Window:GetNotificationsState(),
+        Callback = function(bool)
+            Window:SetNotificationsState(bool)
+            Window:Notify({
+                Title = Window.Settings.Title,
+                Description = (bool and "Enabled" or "Disabled") .. " Notifications",
+                Lifetime = 5
+            })
+        end,
+    }),
+    ShowUserInfo = Window:GlobalSetting({
+        Name = "Show User Info",
+        Default = Window:GetUserInfoState(),
+        Callback = function(bool)
+            Window:SetUserInfoState(bool)
+            Window:Notify({
+                Title = Window.Settings.Title,
+                Description = (bool and "Showing" or "Redacted") .. " User Info",
+                Lifetime = 5
+            })
+        end,
+    })
+}
 
 Window.onUnloaded(function()
     getgenv().ALSScriptLoaded = false
@@ -1535,7 +1572,6 @@ local function setupRecordingHook()
                                 cost = getgenv().GetPlaceCost(towerName)
                             end
                             
-                            print("[Macro Record] Placed:", towerName, "Cost:", cost)
                             
                             local cframe = newestTower:GetPivot()
                             local savedArgs = {towerName, {cframe:GetComponents()}}
@@ -1829,11 +1865,6 @@ local function playMacroV2()
                 return
             end
             
-            if step > 1 then
-                print("[Macro Resume] Resuming from step", step)
-            end
-        else
-            print("[Macro] Starting fresh from step 1 (waiting for game to start)")
         end
         
         local elapsedTime = 0
@@ -1851,12 +1882,8 @@ local function playMacroV2()
             end
         end)
         
-        print("[Macro] Initial check - Wave:", currentWave, "ElapsedTime:", elapsedTime)
-        
         if currentWave > 0 and elapsedTime > 0 then
-            print("[Macro] ✓ Round is running! Starting macro immediately from step", step)
         else
-            print("[Macro] Waiting for round to start...")
             local waitStartTime = tick()
             
             while getgenv().MacroPlayEnabled do
@@ -1873,7 +1900,6 @@ local function playMacroV2()
                 end)
                 
                 if currentWave > 0 and elapsedTime > 0 then
-                    print("[Macro] ✓ Round started! Wave:", currentWave, "ElapsedTime:", elapsedTime)
                     break
                 end
                 
@@ -1897,7 +1923,6 @@ local function playMacroV2()
             return
         end
         
-        print("[Macro] ========== STARTING MACRO PLAYBACK ==========")
         task.wait(0.3)
         
         if not getgenv().MacroPlayEnabled then
@@ -1927,7 +1952,6 @@ local function playMacroV2()
             end)
             
             if lastWaveCheck > 5 and currentWave == 1 and elapsedTime < 30 then
-                print("[Macro] Round restart detected - Wave:", lastWaveCheck, "→", currentWave, "ElapsedTime:", elapsedTime)
                 getgenv().MacroStatusText = "Wave Reset - Restarting Macro"
                 getgenv().MacroWaitingText = "Detected wave reset..."
                 getgenv().UpdateMacroStatus()
@@ -1939,7 +1963,6 @@ local function playMacroV2()
             lastWaveCheck = currentWave
             
             if getgenv().MacroGameState.gameEnded or getgenv().MacroGameState.hasEndGameUI then
-                print("[Macro] Game ended detected - exiting playback")
                 getgenv().MacroStatusText = "Game Ended"
                 getgenv().MacroWaitingText = "Auto-restart will handle next round..."
                 getgenv().UpdateMacroStatus()
@@ -2040,8 +2063,6 @@ local function playMacroV2()
             getgenv().MacroWaitingText = ""
             getgenv().UpdateMacroStatus()
             
-            print("[Macro] Executing step", step, "-", action.ActionType, action.TowerName or "?", "Cost:", action.Cost or 0)
-            
             local actionSuccess = false
             local actionMessage = ""
             
@@ -2078,7 +2099,6 @@ local function playMacroV2()
         end
         
         if step > #macroData then
-            print("[Macro] ========== Finished all steps ==========")
             getgenv().MacroStatusText = "Macro Complete"
             getgenv().MacroWaitingText = "Waiting for game end..."
             getgenv().MacroCurrentStep = #macroData
@@ -3789,8 +3809,6 @@ local macroRecordToggle = createToggleNoSave(
             getgenv().MacroCurrentStep = 0
             getgenv().MacroTotalSteps = 0
             
-            print("[Macro Recording] Started recording for:", getgenv().CurrentMacro)
-            print("[Macro Recording] MacroRecordingV2 =", getgenv().MacroRecordingV2)
             
             if getgenv().UpdateMacroStatus then
                 getgenv().UpdateMacroStatus()
@@ -4912,65 +4930,38 @@ task.spawn(function()
                             local text = textLabel.Text:lower()
                             if text:find("retry") and not retryButton then
                                 retryButton = button
-                                print("[Auto Retry] Found Retry button by text:", button.Name)
                             elseif text:find("next") and not nextButton then
                                 nextButton = button
-                                print("[Auto Retry] Found Next button by text:", button.Name)
                             elseif text:find("leave") and not leaveButton then
                                 leaveButton = button
-                                print("[Auto Retry] Found Leave button by text:", button.Name)
                             end
                         end
                     end
                 end
             end
             
-            print("[Auto Retry Debug] Available buttons:")
-            for _, button in pairs(buttons:GetChildren()) do
-                if button:IsA("GuiButton") then
-                    local textLabel = button:FindFirstChildWhichIsA("TextLabel", true)
-                    local buttonText = textLabel and textLabel.Text or "No text"
-                    print("  - " .. button.Name .. " (Visible: " .. tostring(button.Visible) .. ", Text: " .. buttonText .. ")")
-                end
-            end
-            
-            print("[Auto Retry Debug] Button states:")
-            print("  Next:", nextButton and "Found" or "Missing", nextButton and ("Visible: " .. tostring(nextButton.Visible)) or "")
-            print("  Retry:", retryButton and "Found" or "Missing", retryButton and ("Visible: " .. tostring(retryButton.Visible)) or "")
-            print("  Leave:", leaveButton and "Found" or "Missing", leaveButton and ("Visible: " .. tostring(leaveButton.Visible)) or "")
-            
             local buttonToPress, actionName = nil, ""
             
             if getgenv().AutoNextEnabled and nextButton and nextButton.Visible then
                 buttonToPress = nextButton
                 actionName = "Next"
-                print("[Auto Next] ✓ Next button selected")
             elseif getgenv().AutoFastRetryEnabled and retryButton and retryButton.Visible then
                 buttonToPress = retryButton
                 actionName = "Retry"
-                print("[Auto Retry] ✓ Retry button selected")
             elseif getgenv().AutoLeaveEnabled and leaveButton and leaveButton.Visible then
                 buttonToPress = leaveButton
                 actionName = "Leave"
-                print("[Auto Leave] ✓ Leave button selected")
             elseif getgenv().AutoSmartEnabled then
                 if nextButton and nextButton.Visible then
                     buttonToPress = nextButton
                     actionName = "Next"
-                    print("[Auto Smart] ✓ Next button selected")
                 elseif retryButton and retryButton.Visible then
                     buttonToPress = retryButton
                     actionName = "Retry"
-                    print("[Auto Smart] ✓ Retry button selected")
                 elseif leaveButton and leaveButton.Visible then
                     buttonToPress = leaveButton
                     actionName = "Leave"
-                    print("[Auto Smart] ✓ Leave button selected")
                 end
-            end
-            
-            if not buttonToPress and (getgenv().AutoFastRetryEnabled or getgenv().AutoSmartEnabled) then
-                print("[Auto Retry Debug] No button selected - AutoFastRetryEnabled:", getgenv().AutoFastRetryEnabled)
             end
             
             if buttonToPress then
@@ -5031,8 +5022,6 @@ task.spawn(function()
                 
                 if LocalPlayer.PlayerGui:FindFirstChild("EndGameUI") then
                     warn("[Auto Retry] EndGameUI still present - button may require server validation")
-                else
-                    print("[Auto Retry] Successfully clicked " .. actionName .. " button - EndGameUI closed")
                 end
             end
         end)
@@ -5290,7 +5279,6 @@ local function resetRoundTrackers()
     generalBossSpawnTime = nil
     bossInRangeTracker = {}
     abilityCooldowns = {}
-    print("[Auto Ability] Reset all cooldowns for new round")
 end
 
 local function checkGameEndedReset()
@@ -5314,17 +5302,14 @@ task.spawn(function()
             
             if currentWave < lastWave then
                 resetRoundTrackers()
-                print("[Auto Ability] Round restart detected (wave", lastWave, "→", currentWave, "), reset trackers")
             end
             
             if getgenv().SeamlessFixEnabled and lastWave >= 50 and currentWave < 50 then
                 resetRoundTrackers()
-                print("[Auto Ability] Seamless round restart detected, reset trackers")
             end
             
             if currentWave == 1 and lastWave > 10 then
                 resetRoundTrackers()
-                print("[Auto Ability] Wave 1 after high wave, reset trackers")
             end
             
             lastWave = currentWave
@@ -7149,9 +7134,33 @@ do
     end
     
     local function calculateCardValue(cardName, currentWave)
-        local TOTAL_ENEMIES = 1350
+        local validCandyCards = {
+            ["Critical Denial"] = {type = "wave", value = 100},
+            ["Weakened Resolve III"] = {type = "wave", value = 50},
+            ["Fog of War III"] = {type = "wave", value = 50},
+            ["Weakened Resolve II"] = {type = "wave", value = 25},
+            ["Fog of War II"] = {type = "wave", value = 25},
+            ["Power Reversal II"] = {type = "wave", value = 25},
+            ["Greedy Vampire's"] = {type = "wave", value = 25},
+            ["Weakened Resolve I"] = {type = "wave", value = 15},
+            ["Fog of War I"] = {type = "wave", value = 15},
+            ["Power Reversal I"] = {type = "wave", value = 15},
+            
+            ["Lingering Fear II"] = {type = "kill", value = 2},
+            ["Hellish Gravity"] = {type = "kill", value = 2},
+            ["Lingering Fear I"] = {type = "kill", value = 1},
+            ["Deadly Striker"] = {type = "kill", value = 1},
+            
+            ["Trick or Treat Coin Flip"] = {type = "special", value = 0},
+        }
+        
+        local cardData = validCandyCards[cardName]
+        if not cardData then
+            return -999999
+        end
+        
         local TOTAL_WAVES = 50
-        local AVG_ENEMIES_PER_WAVE = TOTAL_ENEMIES / TOTAL_WAVES
+        local TOTAL_ENEMIES = 1350
         
         local wavesRemaining = math.max(0, TOTAL_WAVES - currentWave)
         
@@ -7160,77 +7169,25 @@ do
             currentKills = game:GetService("Players").LocalPlayer.leaderstats.Kills.Value
         end)
         
-        local enemiesRemaining = TOTAL_ENEMIES - currentKills
-        if enemiesRemaining < 0 then enemiesRemaining = wavesRemaining * AVG_ENEMIES_PER_WAVE end
+        local enemiesRemaining = math.max(0, TOTAL_ENEMIES - currentKills)
         
-        print("[Smart Card] Wave:", currentWave, "| Kills:", currentKills, "| Avg/Wave:", math.floor(AVG_ENEMIES_PER_WAVE), "| Est. Remaining:", math.floor(enemiesRemaining))
+        local candyValue = 0
         
-        local perWaveCards = {
-            ["Critical Denial"] = 100,
-            ["Weakened Resolve III"] = 50,
-            ["Fog of War III"] = 50,
-            ["Weakened Resolve II"] = 25,
-            ["Fog of War II"] = 25,
-            ["Power Reversal II"] = 25,
-            ["Greedy Vampire's"] = 25,
-            ["Weakened Resolve I"] = 15,
-            ["Fog of War I"] = 15,
-            ["Power Reversal I"] = 15,
-        }
-        
-        local perKillCards = {
-            ["Lingering Fear II"] = 2,
-            ["Hellish Gravity"] = 2,
-            ["Lingering Fear I"] = 1,
-            ["Deadly Striker"] = 1,
-        }
-        
-        local currentPerWaveBonus = 0
-        for _, pickedCard in ipairs(getgenv().SmartCardPicked) do
-            if perWaveCards[pickedCard] then
-                currentPerWaveBonus = currentPerWaveBonus + perWaveCards[pickedCard]
+        if cardData.type == "wave" then
+            candyValue = cardData.value * wavesRemaining
+        elseif cardData.type == "kill" then
+            candyValue = cardData.value * enemiesRemaining
+        elseif cardData.type == "special" and cardName == "Trick or Treat Coin Flip" then
+            if wavesRemaining >= 40 then
+                candyValue = 3000
+            elseif wavesRemaining >= 25 then
+                candyValue = 1500
+            else
+                candyValue = 500
             end
         end
         
-        local calculatedValue = 0
-        
-        if perWaveCards[cardName] then
-            local baseValue = perWaveCards[cardName] * wavesRemaining
-            
-            if currentPerWaveBonus > 0 then
-                local newTotal = currentPerWaveBonus + perWaveCards[cardName]
-                local stackedValue = newTotal * wavesRemaining
-                local previousValue = currentPerWaveBonus * wavesRemaining
-                local stackBonus = stackedValue - previousValue
-                calculatedValue = stackBonus * 1.2
-                print("[Smart Card] " .. cardName .. " = " .. perWaveCards[cardName] .. " × " .. wavesRemaining .. " = " .. baseValue .. " + stack (+" .. currentPerWaveBonus .. "/wave) = " .. math.floor(calculatedValue))
-            else
-                calculatedValue = baseValue
-                print("[Smart Card] " .. cardName .. " = " .. perWaveCards[cardName] .. " × " .. wavesRemaining .. " waves = " .. calculatedValue)
-            end
-            
-        elseif perKillCards[cardName] then
-            calculatedValue = perKillCards[cardName] * enemiesRemaining
-            print("[Smart Card] " .. cardName .. " = " .. perKillCards[cardName] .. " × " .. math.floor(enemiesRemaining) .. " kills = " .. math.floor(calculatedValue))
-            
-        elseif cardName == "Trick or Treat Coin Flip" then
-            if wavesRemaining > 20 then
-                calculatedValue = 2500
-            else
-                calculatedValue = 1000
-            end
-            print("[Smart Card] " .. cardName .. " = " .. calculatedValue .. " (50/50 gamble)")
-            
-        elseif cardName == "Devil's Sacrifice" then
-            calculatedValue = -99999
-            print("[Smart Card] " .. cardName .. " = -99999 (NEVER PICK - disables abilities)")
-            
-        else
-            calculatedValue = 0
-            print("[Smart Card] " .. cardName .. " = 0 (unknown card)")
-        end
-        
-        return calculatedValue
+        return candyValue
     end
     
     local function selectCardSmart()
@@ -7259,44 +7216,27 @@ do
                 return false 
             end
             
-            print("[Smart Card] Found", #list, "cards available")
-            
             local bestCard = nil
             local bestValue = -99999
             
             for i=1,#list do
                 local nm = list[i].name
                 
-                -- SAFETY: Never pick Devil's Sacrifice or any card with "disable" in name
-                local isBlocked = (nm == "Devil's Sacrifice" or nm:lower():find("disable"))
-                
-                if not isBlocked then
+                if nm ~= "Devil's Sacrifice" then
                     local value = calculateCardValue(nm, currentWave)
-                    print("[Smart Card] Evaluating:", nm, "| Value:", math.floor(value))
                     
-                    -- Only consider cards with positive value
-                    if value > bestValue and value > 0 then
+                    if value > 0 and value > bestValue then
                         bestValue = value
                         bestCard = list[i]
-                        print("[Smart Card] ✓ New best card:", nm, "with value", math.floor(value))
                     end
-                else
-                    print("[Smart Card] ❌ BLOCKED:", nm, "- This card disables abilities!")
                 end
             end
             
-            if not bestCard or bestValue <= 0 then
-                print("[Smart Card] No valid card found (best value:", bestValue, ")")
+            if not bestCard or bestValue <= 0 or not bestCard.button then
                 return false
             end
             
-            if not bestCard.button then
-                print("[Smart Card] Best card has no button:", bestCard.name)
-                return false
-            end
-            
-            print("[Smart Card] ========== SELECTED:", bestCard.name, "with value", math.floor(bestValue), "==========")
-            print("[Smart Card] Clicking card button...")
+            print("[Smart Card] Selected:", bestCard.name, "| Value:", math.floor(bestValue))
             
             local VirtualInputManager = game:GetService("VirtualInputManager")
             
@@ -7311,8 +7251,6 @@ do
             task.wait(0.05)
             VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, false, game, 0)
             
-            print("[Smart Card] Card selected successfully!")
-            
             getgenv().SmartCardLastPromptId = currentPromptId
             
             task.wait(0.3)
@@ -7320,9 +7258,6 @@ do
             task.wait(0.2)
             
             table.insert(getgenv().SmartCardPicked, bestCard.name)
-            
-            print("[Smart Card] ========== SELECTED:", bestCard.name, "| Value:", math.floor(bestValue), "| Wave:", currentWave, "==========")
-            print("[Smart Card] Picked cards this round:", table.concat(getgenv().SmartCardPicked, ", "))
             return true
         end)
         
