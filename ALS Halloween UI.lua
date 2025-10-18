@@ -5450,8 +5450,6 @@ task.spawn(function()
     local newGameDetected = false
     local lastEndGameUIState = false
     
-    print("[Auto Actions] System initialized")
-    
     while true do
         task.wait(0.2)
         
@@ -5462,7 +5460,6 @@ task.spawn(function()
             local currentEndGameUIState = endGameUI and endGameUI.Enabled or false
             
             if lastEndGameUIState and not currentEndGameUIState then
-                print("[Auto Actions] EndGameUI removed - New game detected!")
                 newGameDetected = true
                 hasProcessedCurrentUI = false
                 lastEndGameUIInstance = nil
@@ -5479,11 +5476,14 @@ task.spawn(function()
                 getgenv().MacroStatusText = "New Game Started"
                 getgenv().MacroPlaybackActive = false
                 
+                getgenv().SmartCardPicked = {}
+                getgenv().SmartCardLastPromptId = nil
+                getgenv().SlowerCardPicked = {}
+                getgenv().SlowerCardLastPromptId = nil
+                
                 if getgenv().UpdateMacroStatus then
                     getgenv().UpdateMacroStatus()
                 end
-                
-                print("[Auto Actions] Game state reset for new round")
             end
             
             lastEndGameUIState = currentEndGameUIState
@@ -5503,7 +5503,6 @@ task.spawn(function()
             if not buttons then return end
             
             if lastEndGameUIInstance and endGameUI ~= lastEndGameUIInstance then
-                print("[Auto Actions] New EndGameUI instance detected")
                 hasProcessedCurrentUI = false
                 lastEndGameUIInstance = endGameUI
                 endGameUIDetectedTime = tick()
@@ -5513,7 +5512,6 @@ task.spawn(function()
             if not lastEndGameUIInstance then
                 lastEndGameUIInstance = endGameUI
                 endGameUIDetectedTime = tick()
-                print("[Auto Actions] EndGameUI first detected at " .. endGameUIDetectedTime)
             end
             
             if hasProcessedCurrentUI then
@@ -5616,10 +5614,20 @@ task.spawn(function()
             end
             
             if buttonToPress then
-                print("[Auto " .. actionName .. "] Button detected, preparing to press...")
-                
                 if getgenv().WebhookEnabled then
-                    print("[Auto " .. actionName .. "] Webhook enabled, waiting for webhook to complete...")
+                    print("[Auto " .. actionName .. "] Waiting for webhook to start and complete...")
+                    
+                    local startWait = 0
+                    while not getgenv().WebhookProcessing and startWait < 5 do
+                        task.wait(0.5)
+                        startWait = startWait + 0.5
+                    end
+                    
+                    if getgenv().WebhookProcessing then
+                        print("[Auto " .. actionName .. "] Webhook started, waiting for completion...")
+                    else
+                        print("[Auto " .. actionName .. "] Webhook didn't start, continuing anyway...")
+                    end
                     
                     local maxWait = 0
                     local maxWaitTime = 35
@@ -5629,27 +5637,24 @@ task.spawn(function()
                         maxWait = maxWait + 0.5
                         
                         if maxWait % 5 == 0 then
-                            print("[Auto " .. actionName .. "] Still waiting for webhook... (" .. maxWait .. "s/" .. maxWaitTime .. "s)")
+                            print("[Auto " .. actionName .. "] Still waiting... (" .. maxWait .. "s)")
                         end
                     end
                     
                     if getgenv().WebhookProcessing then
-                        warn("[Auto " .. actionName .. "] Webhook still processing after " .. maxWaitTime .. "s, continuing anyway")
+                        warn("[Auto " .. actionName .. "] Webhook timeout, forcing continue")
                         getgenv().WebhookProcessing = false
                     else
-                        print("[Auto " .. actionName .. "] Webhook completed successfully")
+                        print("[Auto " .. actionName .. "] ✅ Webhook completed")
                     end
                     
                     task.wait(1)
                 else
-                    print("[Auto " .. actionName .. "] Webhook disabled, proceeding immediately")
                     task.wait(0.5)
                 end
                 
                 hasProcessedCurrentUI = true
                 lastActionTime = tick()
-                
-                print("[Auto " .. actionName .. "] Executing button press...")
                 
                 local pressSuccess = pcall(function()
                     if not buttonToPress or not buttonToPress.Parent then
@@ -7323,10 +7328,11 @@ do
         local success, err = pcall(function()
             if not getgenv().WebhookEnabled then 
                 print("[Webhook] Webhook disabled, skipping")
+                getgenv().WebhookProcessing = false
                 return 
             end
             
-            if isProcessing then 
+            if isProcessing and not getgenv().WebhookProcessing then 
                 print("[Webhook] Already processing, skipping duplicate call")
                 return 
             end
@@ -7334,11 +7340,13 @@ do
             local currentTime = tick()
             if currentTime - lastWebhookTime < WEBHOOK_COOLDOWN then 
                 print("[Webhook] Cooldown active, skipping (" .. (WEBHOOK_COOLDOWN - (currentTime - lastWebhookTime)) .. "s remaining)")
+                getgenv().WebhookProcessing = false
                 return 
             end
             
             if getgenv()._webhookLock and (currentTime - getgenv()._webhookLock) < 8 then 
                 print("[Webhook] Lock active, skipping")
+                getgenv().WebhookProcessing = false
                 return 
             end
             
@@ -7346,7 +7354,9 @@ do
             getgenv()._webhookLock = currentTime
             lastWebhookTime = currentTime
             isProcessing = true
-            getgenv().WebhookProcessing = true
+            if not getgenv().WebhookProcessing then
+                getgenv().WebhookProcessing = true
+            end
             
             
             local rewards = getRewards()
@@ -7566,7 +7576,9 @@ do
     
     LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
         if child.Name == "EndGameUI" and getgenv().WebhookEnabled then
-            print("[Webhook] EndGameUI detected, waiting 2s before sending...")
+            print("[Webhook] EndGameUI detected, setting processing flag...")
+            getgenv().WebhookProcessing = true
+            print("[Webhook] Waiting 2s before sending...")
             task.wait(2)
             sendWebhook()
         end
@@ -7933,33 +7945,104 @@ do
     end
     
     local function pressConfirm()
-        local ok, confirmButton = pcall(function()
+        local confirmButton = nil
+        
+        pcall(function()
             local prompt = LocalPlayer.PlayerGui:FindFirstChild("Prompt")
-            if not prompt then return nil end
+            if not prompt then return end
             local frame = prompt:FindFirstChild("Frame")
-            if not frame then return nil end
+            if not frame then return end
             local inner = frame:FindFirstChild("Frame")
-            if not inner then return nil end
+            if not inner then return end
             local children = inner:GetChildren()
-            if #children < 5 then return nil end
+            if #children < 5 then return end
             local button = children[5]:FindFirstChild("TextButton")
-            if not button then return nil end
+            if not button then return end
             local label = button:FindFirstChild("TextLabel")
-            if label and label.Text == "Confirm" then return button end
-            return nil
+            if label and label.Text == "Confirm" then 
+                confirmButton = button 
+            end
         end)
-        if ok and confirmButton then
-            local events = {"Activated","MouseButton1Click","MouseButton1Down","MouseButton1Up"}
-            for _, ev in ipairs(events) do
+        
+        if not confirmButton then
+            return false
+        end
+        
+        local anySuccess = false
+        
+        pcall(function()
+            local GuiService = game:GetService("GuiService")
+            GuiService.SelectedObject = nil
+            task.wait(0.05)
+            
+            GuiService.SelectedObject = confirmButton
+            
+            local lockConnection
+            lockConnection = RunService.Heartbeat:Connect(function()
                 pcall(function()
-                    for _, conn in ipairs(getconnections(confirmButton[ev])) do
-                        conn:Fire()
+                    if confirmButton and confirmButton.Parent and GuiService.SelectedObject ~= confirmButton then
+                        GuiService.SelectedObject = confirmButton
                     end
                 end)
+            end)
+            
+            task.wait(0.25)
+            
+            if GuiService.SelectedObject == confirmButton then
+                VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
+                task.wait(0.05)
+                VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
+                anySuccess = true
             end
-            return true
-        end
-        return false
+            
+            if lockConnection then
+                lockConnection:Disconnect()
+            end
+            
+            GuiService.SelectedObject = nil
+        end)
+        
+        task.wait(0.1)
+        
+        pcall(function()
+            if getconnections then
+                local events = {"Activated", "MouseButton1Click", "MouseButton1Down", "MouseButton1Up"}
+                for _, ev in ipairs(events) do
+                    pcall(function()
+                        local connections = getconnections(confirmButton[ev])
+                        if connections then
+                            for _, conn in ipairs(connections) do
+                                if conn and conn.Fire then
+                                    conn:Fire()
+                                    anySuccess = true
+                                end
+                            end
+                        end
+                    end)
+                end
+            end
+        end)
+        
+        task.wait(0.1)
+        
+        pcall(function()
+            local VirtualInputManager = game:GetService("VirtualInputManager")
+            local absPos = confirmButton.AbsolutePosition
+            local absSize = confirmButton.AbsoluteSize
+            if absPos and absSize then
+                local centerX = absPos.X + (absSize.X / 2)
+                local centerY = absPos.Y + (absSize.Y / 2)
+                
+                VirtualInputManager:SendMouseMoveEvent(centerX, centerY, game)
+                task.wait(0.1)
+                VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, true, game, 0)
+                task.wait(0.05)
+                VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, false, game, 0)
+                anySuccess = true
+            end
+        end)
+        
+        return anySuccess
     end
     
     local function selectCard()
@@ -8037,7 +8120,7 @@ do
             end
             
             local bestCard = nil
-            local bestValue = -99999
+            local bestValue = -999999
             
             local alreadyPicked = {}
             for _, pickedName in ipairs(getgenv().SlowerCardPicked or {}) do
@@ -8050,7 +8133,7 @@ do
                 if not alreadyPicked[nm] then
                     local value = calculateCardValue(nm, currentWave)
                     
-                    if value > 0 and value > bestValue then
+                    if value > bestValue then
                         bestValue = value
                         bestCard = list[i]
                     end
@@ -8061,29 +8144,30 @@ do
                 return false
             end
             
-            print("[Slower Card] Selected:", bestCard.name, "| Value:", math.floor(bestValue))
-            
             local GuiService = game:GetService("GuiService")
             
             GuiService.SelectedObject = nil
-            task.wait(0.2)
+            task.wait(0.25)
             
             GuiService.SelectedObject = bestCard.button
             
             local lockConnection
             lockConnection = RunService.Heartbeat:Connect(function()
-                if GuiService.SelectedObject ~= bestCard.button then
-                    GuiService.SelectedObject = bestCard.button
-                end
+                pcall(function()
+                    if bestCard.button and bestCard.button.Parent and GuiService.SelectedObject ~= bestCard.button then
+                        GuiService.SelectedObject = bestCard.button
+                    end
+                end)
             end)
             
-            task.wait(0.5)
+            task.wait(0.6)
             
+            local cardSelected = false
             if GuiService.SelectedObject == bestCard.button then
-                local VIM = game:GetService("VirtualInputManager")
                 VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
                 task.wait(0.05)
                 VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
+                cardSelected = true
                 
                 if lockConnection then
                     lockConnection:Disconnect()
@@ -8099,7 +8183,7 @@ do
             
             getgenv().SlowerCardLastPromptId = currentSignature
             
-            task.wait(0.5)
+            task.wait(0.6)
             
             local confirmButton = nil
             pcall(function()
@@ -8118,21 +8202,22 @@ do
             
             if confirmButton then
                 GuiService.SelectedObject = nil
-                task.wait(0.1)
+                task.wait(0.15)
                 
                 GuiService.SelectedObject = confirmButton
                 
                 local confirmLock
                 confirmLock = RunService.Heartbeat:Connect(function()
-                    if GuiService.SelectedObject ~= confirmButton then
-                        GuiService.SelectedObject = confirmButton
-                    end
+                    pcall(function()
+                        if confirmButton and confirmButton.Parent and GuiService.SelectedObject ~= confirmButton then
+                            GuiService.SelectedObject = confirmButton
+                        end
+                    end)
                 end)
                 
-                task.wait(0.3)
+                task.wait(0.4)
                 
                 if GuiService.SelectedObject == confirmButton then
-                    local VIM = game:GetService("VirtualInputManager")
                     VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
                     task.wait(0.05)
                     VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
@@ -8152,7 +8237,7 @@ do
             task.wait(0.5)
             
             local waitTime = 0
-            while waitTime < 2 do
+            while waitTime < 3 do
                 local promptStillOpen = false
                 pcall(function()
                     local prompt = LocalPlayer.PlayerGui:FindFirstChild("Prompt")
@@ -8171,12 +8256,13 @@ do
                 getgenv().SlowerCardPicked = {}
             end
             table.insert(getgenv().SlowerCardPicked, bestCard.name)
+            print("[Slower Card] 📝 " .. bestCard.name .. " (Total: " .. #getgenv().SlowerCardPicked .. ")")
             
             return true
         end)
         
         if not ok then
-            warn("[Slower Card] Error:", result)
+            warn("[Slower Card] ❌ Error:", result)
         end
         
         return ok and result
@@ -8286,19 +8372,16 @@ do
     
     local function selectCardSmart()
         if not getgenv().SmartCardSelectionEnabled then 
-            print("[Smart Card] Smart selection is disabled")
             return false 
         end
         
         local ok, result = pcall(function()
             local currentSignature = getPromptSignature()
             if not currentSignature then
-                print("[Smart Card] No prompt signature found")
                 return false
             end
             
             if getgenv().SmartCardLastPromptId == currentSignature then
-                print("[Smart Card] Already processed this prompt")
                 return false
             end
             
@@ -8310,18 +8393,16 @@ do
                 end
             end)
             
-            print("[Smart Card] Current wave: " .. currentWave)
             
             local list = getAvailableCards()
             if not list or #list == 0 then 
-                print("[Smart Card] No cards available")
                 return false 
             end
             
-            print("[Smart Card] Found " .. #list .. " cards")
-            
             local bestCard = nil
-            local bestValue = 0
+            local bestValue = -999999
+            local secondBestCard = nil
+            local secondBestValue = -999999
             
             local alreadyPicked = {}
             for _, pickedName in ipairs(getgenv().SmartCardPicked) do
@@ -8331,75 +8412,63 @@ do
             for i=1,#list do
                 local nm = list[i].name
                 
-                if alreadyPicked[nm] then
-                    print("[Smart Card] Skipping already picked: " .. nm)
-                else
+                if not alreadyPicked[nm] then
                     local value = calculateCardValue(nm, currentWave)
-                    print("[Smart Card] Card: " .. nm .. " | Value: " .. value)
                     
-                    if value > 0 and value > bestValue then
+                    if value > bestValue then
+                        secondBestValue = bestValue
+                        secondBestCard = bestCard
                         bestValue = value
                         bestCard = list[i]
+                    elseif value > secondBestValue then
+                        secondBestValue = value
+                        secondBestCard = list[i]
                     end
                 end
             end
             
             if not bestCard or bestValue <= 0 or not bestCard.button then
-                print("[Smart Card] No valid candy cards available (bestValue: " .. bestValue .. ")")
                 return false
             end
             
-            print("[Smart Card] Selected:", bestCard.name, "| Value:", math.floor(bestValue))
+            print("[Smart Card] ✅ " .. bestCard.name .. " | Value: " .. math.floor(bestValue))
+
             
-            local VirtualInputManager = game:GetService("VirtualInputManager")
+            local GuiService = game:GetService("GuiService")
+            local button = bestCard.button
             
-            local absPos = bestCard.button.AbsolutePosition
-            local absSize = bestCard.button.AbsoluteSize
-            if not absPos or not absSize then return end
-            local centerX = absPos.X + (absSize.X / 2)
-            local centerY = absPos.Y + (absSize.Y * 0.7)
+            if not button:IsDescendantOf(LocalPlayer.PlayerGui) then
+                return false
+            end
             
-            VirtualInputManager:SendMouseMoveEvent(centerX, centerY, game)
-            task.wait(0.1)
-            VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, true, game, 0)
+            GuiService.SelectedObject = nil
             task.wait(0.05)
-            VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, false, game, 0)
+            
+            GuiService.SelectedObject = button
+            task.wait(0.15)
+            
+            VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
+            task.wait(0.05)
+            VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
             
             getgenv().SmartCardLastPromptId = currentSignature
             
             task.wait(0.3)
             pressConfirm()
-            task.wait(0.5)
-            
-            local waitTime = 0
-            while waitTime < 2 do
-                local promptStillOpen = false
-                pcall(function()
-                    local prompt = LocalPlayer.PlayerGui:FindFirstChild("Prompt")
-                    promptStillOpen = prompt and prompt.Enabled
-                end)
-                
-                if not promptStillOpen then
-                    break
-                end
-                
-                task.wait(0.1)
-                waitTime = waitTime + 0.1
-            end
+            task.wait(0.3)
             
             table.insert(getgenv().SmartCardPicked, bestCard.name)
+            print("[Smart Card] 📝 " .. bestCard.name .. " (Total: " .. #getgenv().SmartCardPicked .. ")")
+            
             return true
         end)
-        
-        if not ok then
-            warn("[Smart Card] Error:", result)
-        end
+
         
         return ok and result
     end
     
     while true do
-        task.wait(1.5)
+        task.wait(1)
         
         local promptVisible = false
         pcall(function()
@@ -8410,7 +8479,7 @@ do
         end)
         
         if not promptVisible then
-            task.wait(0.5)
+            task.wait(0.3)
             continue
         end
         
