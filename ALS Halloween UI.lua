@@ -4161,11 +4161,11 @@ Sections.MacroLeft:Button({
             return
         end
         
-        local equipRemote = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("EquipEvent")
+        local equipRemote = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("Equip")
         if not equipRemote then
             Window:Notify({
                 Title = "Equip Macro Units",
-                Description = "EquipEvent remote not found!",
+                Description = "Equip remote not found!",
                 Lifetime = 3
             })
             return
