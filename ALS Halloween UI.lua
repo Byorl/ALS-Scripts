@@ -5506,15 +5506,35 @@ task.spawn(function()
                 end
             end)
             
-            if isFinalExpedition and getgenv().AutoLeaveEnabled and leaveButton and leaveButton.Visible and not (nextButton and nextButton.Visible) then
-                print("[Auto Leave] Waiting for Next button in Final Expedition...")
-                task.wait(2)
-
-                pcall(function()
-                    if buttons then
-                        nextButton = buttons:FindFirstChild("Next")
+            if isFinalExpedition and leaveButton and leaveButton.Visible and not (nextButton and nextButton.Visible) then
+                print("[Final Expedition] Waiting for Next button to appear...")
+                local waitTime = 0
+                while waitTime < 5 do
+                    task.wait(0.5)
+                    waitTime = waitTime + 0.5
+                    
+                    pcall(function()
+                        if buttons then
+                            nextButton = buttons:FindFirstChild("Next")
+                            if not nextButton then
+                                for _, button in pairs(buttons:GetChildren()) do
+                                    if button:IsA("TextButton") or button:IsA("ImageButton") then
+                                        local textLabel = button:FindFirstChildWhichIsA("TextLabel", true)
+                                        if textLabel and textLabel.Text:lower():find("next") then
+                                            nextButton = button
+                                            break
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end)
+                    
+                    if nextButton and nextButton.Visible then
+                        print("[Final Expedition] Next button found!")
+                        break
                     end
-                end)
+                end
             end
             
             if getgenv().AutoNextEnabled and nextButton and nextButton.Visible then
@@ -5524,8 +5544,13 @@ task.spawn(function()
                 buttonToPress = retryButton
                 actionName = "Retry"
             elseif getgenv().AutoLeaveEnabled and leaveButton and leaveButton.Visible then
-                buttonToPress = leaveButton
-                actionName = "Leave"
+                if isFinalExpedition and nextButton and nextButton.Visible then
+                    buttonToPress = nextButton
+                    actionName = "Next"
+                else
+                    buttonToPress = leaveButton
+                    actionName = "Leave"
+                end
             elseif getgenv().AutoSmartEnabled then
                 if nextButton and nextButton.Visible then
                     buttonToPress = nextButton
@@ -5534,8 +5559,13 @@ task.spawn(function()
                     buttonToPress = retryButton
                     actionName = "Retry"
                 elseif leaveButton and leaveButton.Visible then
-                    buttonToPress = leaveButton
-                    actionName = "Leave"
+                    if isFinalExpedition and nextButton and nextButton.Visible then
+                        buttonToPress = nextButton
+                        actionName = "Next"
+                    else
+                        buttonToPress = leaveButton
+                        actionName = "Leave"
+                    end
                 end
             end
             
@@ -5589,7 +5619,9 @@ task.spawn(function()
                     
                     local GuiService = game:GetService("GuiService")
                     
-                    GuiService.SelectedObject = nil
+                    pcall(function()
+                        GuiService.SelectedObject = nil
+                    end)
                     task.wait(0.1)
                     
                     if not buttonToPress or not buttonToPress.Parent or not buttonToPress:IsDescendantOf(LocalPlayer.PlayerGui) then
@@ -5597,7 +5629,14 @@ task.spawn(function()
                         return
                     end
                     
-                    GuiService.SelectedObject = buttonToPress
+                    local setSuccess = pcall(function()
+                        GuiService.SelectedObject = buttonToPress
+                    end)
+                    
+                    if not setSuccess then
+                        warn("[Auto Retry] Failed to set SelectedObject, button may have been destroyed")
+                        return
+                    end
                     
                     local lockConnection
                     lockConnection = RunService.Heartbeat:Connect(function()
