@@ -3776,6 +3776,7 @@ getgenv().AutoPlayConfig = getgenv().AutoPlayConfig or {
     autoUpgrade = false,
     focusFarm = false,
     hologram = false,
+    placeBeforeUpgrade = false,
     pathPercentage = 1,
     distanceFromPath = 0,
     placeCaps = {1, 1, 1, 1, 1, 1},
@@ -3786,6 +3787,7 @@ getgenv().AutoPlayConfig.autoPlace = getgenv().Config.toggles.AutoPlayPlace or f
 getgenv().AutoPlayConfig.autoUpgrade = getgenv().Config.toggles.AutoPlayUpgrade or false
 getgenv().AutoPlayConfig.focusFarm = getgenv().Config.toggles.AutoPlayFocusFarm or false
 getgenv().AutoPlayConfig.hologram = getgenv().Config.toggles.AutoPlayHologram or false
+getgenv().AutoPlayConfig.placeBeforeUpgrade = getgenv().Config.toggles.AutoPlayPlaceBeforeUpgrade or false
 getgenv().AutoPlayConfig.pathPercentage = tonumber(getgenv().Config.inputs.AutoPlayPathPercentage) or 1
 getgenv().AutoPlayConfig.distanceFromPath = tonumber(getgenv().Config.inputs.AutoPlayDistanceFromPath) or 0
 
@@ -3844,6 +3846,16 @@ createToggle(
         getgenv().AutoPlayConfig.hologram = value
     end,
     getgenv().AutoPlayConfig.hologram
+)
+
+createToggle(
+    Sections.AutoPlayLeft,
+    "Place Units before Upgrading",
+    "AutoPlayPlaceBeforeUpgrade",
+    function(value)
+        getgenv().AutoPlayConfig.placeBeforeUpgrade = value
+    end,
+    getgenv().AutoPlayConfig.placeBeforeUpgrade
 )
 
 Sections.AutoPlayLeft:Divider()
@@ -5410,27 +5422,29 @@ task.spawn(function()
                 return
             end
             
-            local nextButton = buttons:FindFirstChild("Next")
-            local retryButton = buttons:FindFirstChild("Retry")
-            local leaveButton = buttons:FindFirstChild("Leave")
+            local nextButton = nil
+            local retryButton = nil
+            local leaveButton = nil
             
-            if not retryButton or not nextButton or not leaveButton then
-                for _, button in pairs(buttons:GetChildren()) do
-                    if button:IsA("TextButton") or button:IsA("ImageButton") then
-                        local textLabel = button:FindFirstChildWhichIsA("TextLabel", true)
-                        if textLabel then
-                            local text = textLabel.Text:lower()
-                            if text:find("retry") and not retryButton then
-                                retryButton = button
-                            elseif text:find("next") and not nextButton then
-                                nextButton = button
-                            elseif text:find("leave") and not leaveButton then
-                                leaveButton = button
-                            end
+            for _, button in pairs(buttons:GetChildren()) do
+                if button:IsA("TextButton") or button:IsA("ImageButton") then
+                    local textLabel = button:FindFirstChildWhichIsA("TextLabel", true)
+                    if textLabel then
+                        local text = textLabel.Text:lower()
+                        if text:find("retry") and not retryButton then
+                            retryButton = button
+                        elseif text:find("next") and not nextButton then
+                            nextButton = button
+                        elseif text:find("leave") and not leaveButton then
+                            leaveButton = button
                         end
                     end
                 end
             end
+            
+            if not nextButton then nextButton = buttons:FindFirstChild("Next") end
+            if not retryButton then retryButton = buttons:FindFirstChild("Retry") end
+            if not leaveButton then leaveButton = buttons:FindFirstChild("Leave") end
             
             local buttonToPress, actionName = nil, ""
             
@@ -7298,15 +7312,11 @@ do
             }
             
             local webhookContent = ""
-            if hasUnitDrop then
-                
-                if getgenv().PingOnSecretDrop and getgenv().DiscordUserID and getgenv().DiscordUserID ~= "" then
-                    webhookContent = "<@" .. getgenv().DiscordUserID .. "> 🎉 **SECRET UNIT DROP: " .. unitDropName .. "**"
-                else
-                end
+            if hasUnitDrop and getgenv().PingOnSecretDrop and getgenv().DiscordUserID and getgenv().DiscordUserID ~= "" then
+                webhookContent = "<@" .. getgenv().DiscordUserID .. "> 🎉 **SECRET UNIT DROP: " .. unitDropName .. "**"
             end
             
-            local webhookHash = LocalPlayer.Name .. "_" .. matchTime .. "_" .. matchWave .. "_" .. rewardsText
+            local webhookHash = LocalPlayer.Name .. "_" .. matchTime .. "_" .. matchWave .. "_" .. rewardsText .. "_" .. (hasUnitDrop and unitDropName or "")
             if webhookHash == lastWebhookHash then
                 isProcessing = false
                 getgenv().WebhookProcessing = false
@@ -8983,6 +8993,28 @@ if not isInLobby then
                 
                 local clientData = getClientData()
                 if not clientData or not clientData.Slots then continue end
+                
+                if getgenv().AutoPlayConfig.placeBeforeUpgrade and getgenv().AutoPlayConfig.autoPlace then
+                    local allUnitsPlaced = true
+                    local sortedSlots = {"Slot1", "Slot2", "Slot3", "Slot4", "Slot5", "Slot6"}
+                    
+                    for slotNum = 1, 6 do
+                        local slotData = clientData.Slots[sortedSlots[slotNum]]
+                        if slotData and slotData.Value then
+                            local placeCap = math.floor(getgenv().AutoPlayConfig.placeCaps[slotNum] or 0)
+                            local currentCount = getPlacedTowerCount(slotNum)
+                            
+                            if placeCap > 0 and currentCount < placeCap then
+                                allUnitsPlaced = false
+                                break
+                            end
+                        end
+                    end
+                    
+                    if not allUnitsPlaced then
+                        continue
+                    end
+                end
                 
                 local towersFolder = workspace:FindFirstChild("Towers")
                 if not towersFolder then continue end
