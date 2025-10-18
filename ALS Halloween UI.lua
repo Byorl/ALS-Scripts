@@ -5015,11 +5015,11 @@ task.spawn(function()
                         maxWait = maxWait + 0.5
                     end
                     
-                    task.wait(1)
-                    
                     if getgenv().WebhookProcessing then
                         warn("[Auto Retry] Webhook still processing after 15s, continuing anyway")
                     end
+                    
+                    task.wait(3)
                 end
                 
                 task.wait(0.3)
