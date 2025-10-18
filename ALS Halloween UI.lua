@@ -6,50 +6,7 @@ if getgenv().ALSScriptLoaded then
 end
 getgenv().ALSScriptLoaded = true
 
-local httpGet = game.HttpGet or game.httpGet or syn and syn.request or http and http.request or request
-if not httpGet then
-    error("[ALS] Your executor does not support HTTP requests!\n\nThis executor (Zenith) may not be compatible.\nPlease try:\n- Wave\n- Solara\n- Electron\n- Delta")
-    return
-end
-
-local MacLib
-local loadSuccess, loadError = pcall(function()
-    local url = "https://github.com/biggaboy212/Maclib/releases/latest/download/maclib.txt"
-    
-    local response
-    local httpSuccess = pcall(function()
-        if game.HttpGet then
-            response = game:HttpGet(url)
-        elseif httpGet then
-            local result = httpGet({
-                Url = url,
-                Method = "GET"
-            })
-            response = result.Body or result
-        end
-    end)
-    
-    if not httpSuccess or not response or response == "" then
-        error("Failed to download MacLib. Your executor may not support HttpGet or GitHub is blocked.")
-    end
-    
-    local loadFunc, loadErr = loadstring(response)
-    if not loadFunc then
-        error("Failed to compile MacLib: " .. tostring(loadErr))
-    end
-    
-    MacLib = loadFunc()
-end)
-
-if not loadSuccess then
-    error("[ALS] Failed to load MacLib library: " .. tostring(loadError) .. "\n\nZenith Executor Issue:\nZenith may have compatibility issues with this script.\n\nRecommended executors:\n- Wave (Best)\n- Solara\n- Electron\n- Delta")
-    return
-end
-
-if not MacLib then
-    error("[ALS] MacLib loaded but returned nil.\n\nZenith Compatibility Issue:\nThis executor may not fully support the required features.\n\nPlease switch to:\n- Wave\n- Solara\n- Electron")
-    return
-end
+local MacLib = loadstring(game:HttpGet("https://github.com/biggaboy212/Maclib/releases/latest/download/maclib.txt"))()
 
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
@@ -117,6 +74,48 @@ getgenv().Config.autoJoin = getgenv().Config.autoJoin or {}
 
 getgenv().SaveConfig = saveConfig
 getgenv().LoadConfig = loadConfig
+
+local remoteCallTimes = {}
+local RATE_LIMIT_DELAY = 0.05
+
+local function rateLimitedRemoteCall(remote, method, ...)
+    local remoteName = tostring(remote)
+    local now = tick()
+    local lastCall = remoteCallTimes[remoteName] or 0
+    
+    if now - lastCall < RATE_LIMIT_DELAY then
+        task.wait(RATE_LIMIT_DELAY - (now - lastCall))
+    end
+    
+    remoteCallTimes[remoteName] = tick()
+    
+    if method == "InvokeServer" then
+        return remote:InvokeServer(...)
+    else
+        return remote:FireServer(...)
+    end
+end
+
+getgenv().RateLimitedRemoteCall = rateLimitedRemoteCall
+
+local connections = {}
+local function addConnection(name, connection)
+    if connections[name] then
+        pcall(function() connections[name]:Disconnect() end)
+    end
+    connections[name] = connection
+    return connection
+end
+
+local function cleanupConnections()
+    for name, conn in pairs(connections) do
+        pcall(function() conn:Disconnect() end)
+    end
+    connections = {}
+end
+
+getgenv().AddConnection = addConnection
+getgenv().CleanupConnections = cleanupConnections
 
 local defaultWidth = 720
 local defaultHeight = 480
@@ -377,16 +376,6 @@ local function cleanupBeforeTeleport()
         end
     end)
     
-    pcall(function()
-        if getconnections then
-            for _, service in pairs({RunService.Heartbeat, RunService.RenderStepped, RunService.Stepped}) do
-                for _, connection in pairs(getconnections(service)) do
-                    if connection.Disable then connection:Disable() end
-                    if connection.Disconnect then connection:Disconnect() end
-                end
-            end
-        end
-    end)
     
     pcall(function()
         getgenv().MacroTowerInfoCache = nil
@@ -1280,8 +1269,8 @@ end
 
 task.spawn(function()
     while true do
-        task.wait(0.1)
-        updateGameState()
+        task.wait(0.5)
+        pcall(updateGameState)
     end
 end)
 
@@ -1573,10 +1562,10 @@ local function setupRecordingHook()
         local lastTowerCount = {}
         
         while true do
-            task.wait(0.1)
+            task.wait(0.3) 
             
             if not getgenv().MacroRecordingV2 then
-                task.wait(0.5)
+                task.wait(1) 
                 continue
             end
             
@@ -2170,7 +2159,7 @@ task.spawn(function()
     local lastEndGameUIState = false
     
     while true do
-        task.wait(0.3)
+        task.wait(0.5) 
         
         local currentEndGameUIState = false
         pcall(function()
@@ -4898,7 +4887,7 @@ task.spawn(function()
     local endGameUIWasPresent = false
     
     while true do
-        task.wait(0.2)
+        task.wait(0.5) 
         
         local success, errorMsg = pcall(function()
             if not LocalPlayer or not LocalPlayer.PlayerGui then return end
@@ -6138,7 +6127,7 @@ task.spawn(function()
     local isProcessing = false
     
     while true do
-        task.wait(0.5)
+        task.wait(1) 
         
         if getgenv().PortalConfig.autoPickReward and not isProcessing then
             local success, err = pcall(function()
@@ -6780,11 +6769,13 @@ if isInLobby then
                     if UseStampEvent then
                         for i=1,25 do 
                             UseStampEvent:FireServer()
+                            task.wait(0.05)
                         end
                     end
                     if ClaimRewardEvent then
                         for i=1,25 do 
                             ClaimRewardEvent:InvokeServer(i)
+                            task.wait(0.05) 
                         end
                     end
                     if CompleteBoardEvent then 
