@@ -132,9 +132,9 @@ local Window = MacLib:Window({
     Size = UDim2.fromOffset(customWidth, customHeight),
     DragStyle = 1,
     DisabledWindowControls = {},
-    ShowUserInfo = true,
+    ShowUserInfo = false,
     Keybind = Enum.KeyCode.LeftControl,
-    AcrylicBlur = true,
+    AcrylicBlur = false,
 })
 
 if not Window then
@@ -3382,6 +3382,10 @@ local function buildAutoAbilityUI()
     
     local anyBuilt = false
     local success, err = pcall(function()
+        if not Tabs or not Tabs.Abilities then
+            warn("[Ability UI] Tabs.Abilities not found!")
+            return
+        end
         local unitsToShow = {}
         
         local sortedSlots = {"Slot1", "Slot2", "Slot3", "Slot4", "Slot5", "Slot6"}
@@ -3678,6 +3682,15 @@ local function buildAutoAbilityUI()
         end
     end)
     
+    if not success then
+        warn("[Ability UI] Build failed:", err)
+        Window:Notify({
+            Title = "Auto Ability Error",
+            Description = "Failed to build UI. Check console for details.",
+            Lifetime = 5
+        })
+    end
+    
     getgenv()._AbilityUIBuilt = anyBuilt
     getgenv()._AbilityUIBuilding = false
 end
@@ -3704,6 +3717,19 @@ task.spawn(function()
         
         if getgenv()._AbilityUIBuilt then break end
         task.wait(retryDelay)
+    end
+    
+    if not getgenv()._AbilityUIBuilt then
+        pcall(function()
+            local fallbackSection = Tabs.Abilities:Section({ Side = "Left" })
+            fallbackSection:Header({ Text = "⚠️ No Units Found" })
+            fallbackSection:SubLabel({ Text = "Make sure you have units equipped in your slots." })
+            fallbackSection:Divider()
+            fallbackSection:SubLabel({ Text = "If you do have units equipped, try:" })
+            fallbackSection:SubLabel({ Text = "1. Rejoining the game" })
+            fallbackSection:SubLabel({ Text = "2. Reloading the script" })
+            fallbackSection:SubLabel({ Text = "3. Checking console for errors (F9)" })
+        end)
     end
 end)
 
@@ -5332,6 +5358,55 @@ end
 
 
 
+local function processAbility(tower, unitName, abilityName, cfg, currentWave, hasBoss)
+    local infoName = getTowerInfoName(tower)
+    local towerLevel = getUpgradeLevel(tower)
+    local savedCfg = getgenv().Config.abilities[unitName] and getgenv().Config.abilities[unitName][abilityName]
+    
+    if savedCfg then
+        cfg.enabled = savedCfg.enabled
+        cfg.onlyOnBoss = savedCfg.onlyOnBoss or false
+        cfg.useOnWave = savedCfg.useOnWave or false
+        cfg.specificWave = savedCfg.specificWave
+        cfg.requireBossInRange = savedCfg.requireBossInRange or false
+    end
+    
+    if not cfg.enabled then return end
+    
+    local shouldUse = true
+    
+    if not hasAbilityBeenUnlocked(infoName, abilityName, towerLevel) then
+        return
+    end
+    
+    if isOnCooldown(infoName, abilityName) then
+        return
+    end
+    
+    if cfg.useOnWave and cfg.specificWave then
+        if currentWave ~= cfg.specificWave then
+            return
+        end
+    end
+    
+    if cfg.onlyOnBoss then
+        if not hasBoss or not bossReadyForAbilities() then
+            return
+        end
+    end
+    
+    if cfg.requireBossInRange then
+        if not hasBoss or not checkBossInRangeForDuration(tower, 0) then
+            return
+        end
+    end
+    
+    if not isOnCooldown(infoName, abilityName) then
+        useAbility(tower, abilityName)
+        setAbilityUsed(infoName, abilityName)
+    end
+end
+
 task.spawn(function()
     while true do
         task.wait(1)
@@ -5360,79 +5435,8 @@ task.spawn(function()
             for unitName, abilitiesConfig in pairs(getgenv().UnitAbilities) do
                 local tower = Towers:FindFirstChild(unitName)
                 if tower then
-                    local infoName = getTowerInfoName(tower)
-                    local towerLevel = getUpgradeLevel(tower)
-                    
                     for abilityName, cfg in pairs(abilitiesConfig) do
-                        local savedCfg = getgenv().Config.abilities[unitName] and getgenv().Config.abilities[unitName][abilityName]
-                        if savedCfg then
-                            cfg.enabled = savedCfg.enabled
-                            cfg.onlyOnBoss = savedCfg.onlyOnBoss or false
-                            cfg.useOnWave = savedCfg.useOnWave or false
-                            cfg.specificWave = savedCfg.specificWave
-                            cfg.requireBossInRange = savedCfg.requireBossInRange or false
-                        end
-                        
-                        if cfg.enabled then
-                            local shouldUse = true
-                            local debugInfo = {}
-                            
-                            
-                            if not hasAbilityBeenUnlocked(infoName, abilityName, towerLevel) then
-                                shouldUse = false
-                                table.insert(debugInfo, "not unlocked (level " .. towerLevel .. ")")
-                            end
-                            
-                            if shouldUse and isOnCooldown(infoName, abilityName) then
-                                shouldUse = false
-                                table.insert(debugInfo, "on cooldown")
-                            end
-                            
-                            if shouldUse and cfg.useOnWave and cfg.specificWave then
-                                if currentWave ~= cfg.specificWave then
-                                    shouldUse = false
-                                    table.insert(debugInfo, "wrong wave (current: " .. currentWave .. ", need: " .. cfg.specificWave .. ")")
-                                else
-                                    table.insert(debugInfo, "wave OK (" .. currentWave .. ")")
-                                end
-                            end
-                            
-                            if shouldUse and cfg.onlyOnBoss then
-                                if not hasBoss then
-                                    shouldUse = false
-                                    table.insert(debugInfo, "no boss")
-                                elseif not bossReadyForAbilities() then
-                                    shouldUse = false
-                                    table.insert(debugInfo, "boss not ready")
-                                else
-                                    table.insert(debugInfo, "boss OK")
-                                    print("[Auto Ability] ✓", unitName, abilityName, "- boss condition met")
-                                end
-                            end
-                            
-                            if shouldUse and cfg.requireBossInRange then
-                                local inRange = checkBossInRangeForDuration(tower, 0)
-                                if not hasBoss or not inRange then
-                                    shouldUse = false
-                                    table.insert(debugInfo, "boss not in range")
-                                else
-                                    table.insert(debugInfo, "boss in range")
-                                    print("[Auto Ability] ✓", unitName, abilityName, "- boss in range condition met")
-                                end
-                            end
-                            
-                            if shouldUse then
-                                if not isOnCooldown(infoName, abilityName) then
-                                    useAbility(tower, abilityName)
-                                    setAbilityUsed(infoName, abilityName)
-                                    
-                                    if unitName == "AsuraEvo" and abilityName == "Lines of Sanzu" then
-                                    end
-                                else
-                                    print("[Auto Ability] ✗", unitName, abilityName, "- FINAL COOLDOWN CHECK FAILED")
-                                end
-                            end
-                        end
+                        processAbility(tower, unitName, abilityName, cfg, currentWave, hasBoss)
                     end
                 end
             end
@@ -7024,10 +7028,19 @@ do
                 local d = descendants[i]
                 if d:IsA("TextLabel") and d.Parent and d.Parent:IsA("Frame") then
                     local text = d.Text
-                    if getgenv().CardPriority and getgenv().CardPriority[text] then
+                    if text and text ~= "" and text ~= "Confirm" then
                         local button = d.Parent.Parent
                         if button:IsA("GuiButton") or button:IsA("TextButton") or button:IsA("ImageButton") then
-                            table.insert(cardButtons, {text=text, button=button})
+                            local alreadyAdded = false
+                            for _, existing in ipairs(cardButtons) do
+                                if existing.text == text and existing.button == button then
+                                    alreadyAdded = true
+                                    break
+                                end
+                            end
+                            if not alreadyAdded then
+                                table.insert(cardButtons, {text=text, button=button})
+                            end
                         end
                     end
                 end
