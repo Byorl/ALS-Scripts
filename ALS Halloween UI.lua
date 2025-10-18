@@ -6542,8 +6542,8 @@ do
             
             
             local function formatStats()
-                local stats = "<:jewel:1217525743408648253> " .. formatNumber(clientData.Gold or 0)
-                stats = stats .. "\n<:gold:1265957290251522089> " .. formatNumber(clientData.Jewels or 0)
+                local stats = "<:gold:1265957290251522089> " .. formatNumber(clientData.Jewels or 0)
+                stats = stats .. "\n<:jewel:1217525743408648253> " .. formatNumber(clientData.Gold or 0)
                 stats = stats .. "\n<:emerald:1389165843966984192> " .. formatNumber(clientData.Emeralds or 0)
                 stats = stats .. "\n<:rerollshard:1426315987019501598> " .. formatNumber(clientData.Rerolls or 0)
                 stats = stats .. "\n<:candybasket:1426304615284084827> " .. formatNumber(clientData.CandyBasket or 0)
@@ -7362,8 +7362,14 @@ do
         
         if cardData.type == "wave" then
             candyValue = cardData.value * wavesRemaining
+            if candyValue == 0 then
+                candyValue = 1
+            end
         elseif cardData.type == "kill" then
             candyValue = cardData.value * enemiesRemaining
+            if candyValue == 0 then
+                candyValue = 1
+            end
         elseif cardData.type == "special" and cardName == "Trick or Treat Coin Flip" then
             if wavesRemaining >= 40 then
                 candyValue = 3000
