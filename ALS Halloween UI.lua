@@ -40,15 +40,6 @@ local loadSuccess, loadError = pcall(function()
     MacLib = loadFunc()
 end)
 
-if not loadSuccess then
-    error("[ALS] Failed to load MacLib library: " .. tostring(loadError) .. "\n\nZenith Executor Issue:\nZenith may have compatibility issues with this script.\n\nRecommended executors:\n- Wave (Best)\n- Solara\n- Electron\n- Delta")
-    return
-end
-
-if not MacLib then
-    error("[ALS] MacLib loaded but returned nil.\n\nZenith Compatibility Issue:\nThis executor may not fully support the required features.\n\nPlease switch to:\n- Wave\n- Solara\n- Electron")
-    return
-end
 
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
@@ -1034,7 +1025,10 @@ local function cacheTowerInfo()
     if next(getgenv().MacroTowerInfoCache) then return end
     
     pcall(function()
-        local towerInfoPath = RS:WaitForChild("Modules"):WaitForChild("TowerInfo")
+        local modules = RS:FindFirstChild("Modules")
+        if not modules then return end
+        local towerInfoPath = modules:FindFirstChild("TowerInfo")
+        if not towerInfoPath then return end
         for _, mod in pairs(towerInfoPath:GetChildren()) do
             if mod:IsA("ModuleScript") then
                 local ok, data = pcall(function() 
@@ -1051,7 +1045,9 @@ end
 
 local function getClientData()
     local ok, data = pcall(function()
-        local modulePath = RS:WaitForChild("Modules"):WaitForChild("ClientData")
+        local modules = RS:FindFirstChild("Modules")
+        if not modules then return nil end
+        local modulePath = modules:FindFirstChild("ClientData")
         if modulePath and modulePath:IsA("ModuleScript") then
             return require(modulePath)
         end
@@ -1062,7 +1058,10 @@ end
 
 local function getTowerInfo(unitName)
     local ok, data = pcall(function()
-        local towerInfoPath = RS:WaitForChild("Modules"):WaitForChild("TowerInfo")
+        local modules = RS:FindFirstChild("Modules")
+        if not modules then return nil end
+        local towerInfoPath = modules:FindFirstChild("TowerInfo")
+        if not towerInfoPath then return nil end
         local towerModule = towerInfoPath:FindFirstChild(unitName)
         if towerModule and towerModule:IsA("ModuleScript") then
             return require(towerModule)
@@ -1182,12 +1181,14 @@ end
 if getgenv().SeamlessFixEnabled then
     task.spawn(function()
         task.wait(2)
-        pcall(function()
-            local remotes = RS:FindFirstChild("Remotes")
-            local setSettings = remotes and remotes:FindFirstChild("SetSettings")
-            if setSettings then 
-                setSettings:InvokeServer("SeamlessRetry")
-            end
+        task.spawn(function()
+            pcall(function()
+                local remotes = RS:FindFirstChild("Remotes")
+                local setSettings = remotes and remotes:FindFirstChild("SetSettings")
+                if setSettings then 
+                    setSettings:InvokeServer("SeamlessRetry")
+                end
+            end)
         end)
     end)
 end
@@ -1460,19 +1461,20 @@ task.spawn(function()
         task.spawn(function()
             for attempt = 1, 10 do
                 task.wait(0.1)
-                if tower:FindFirstChild("Owner") then
-                    if tower.Owner.Value == LocalPlayer then
-                        setupTowerUpgradeListener(tower)
-                    end
+                local owner = tower:FindFirstChild("Owner")
+                if owner and owner.Value == LocalPlayer then
+                    setupTowerUpgradeListener(tower)
                     return
                 end
+                if owner then return end
             end
         end)
     end)
     
     task.wait(0.5)
     for _, tower in pairs(workspace.Towers:GetChildren()) do
-        if tower:FindFirstChild("Owner") and tower.Owner.Value == LocalPlayer then
+        local owner = tower:FindFirstChild("Owner")
+        if owner and owner.Value == LocalPlayer then
             setupTowerUpgradeListener(tower)
         end
     end
@@ -1500,7 +1502,8 @@ local function processRemoteCall(remoteName, method, args)
             local countAfter = 0
             
             for _, tower in pairs(workspace.Towers:GetChildren()) do
-                if tower.Name == towerName and tower:FindFirstChild("Owner") and tower.Owner.Value == LocalPlayer then
+                local owner = tower:FindFirstChild("Owner")
+                if tower.Name == towerName and owner and owner.Value == LocalPlayer then
                     countAfter = countAfter + 1
                 end
             end
@@ -1649,7 +1652,8 @@ local function setupRecordingHook()
                 local currentCounts = {}
                 
                 for _, tower in pairs(workspace.Towers:GetChildren()) do
-                    if tower:FindFirstChild("Owner") and tower.Owner.Value == LocalPlayer then
+                    local owner = tower:FindFirstChild("Owner")
+                    if owner and owner.Value == LocalPlayer then
                         local towerName = tower.Name
                         currentCounts[towerName] = (currentCounts[towerName] or 0) + 1
                     end
@@ -1663,8 +1667,10 @@ local function setupRecordingHook()
                         
                         local newestTower = nil
                         for _, tower in pairs(workspace.Towers:GetChildren()) do
-                            if tower.Name == towerName and tower:FindFirstChild("Owner") and tower.Owner.Value == LocalPlayer then
-                                if not newestTower or (tower:FindFirstChild("Upgrade") and tower.Upgrade.Value == 0) then
+                            local owner = tower:FindFirstChild("Owner")
+                            if tower.Name == towerName and owner and owner.Value == LocalPlayer then
+                                local upgrade = tower:FindFirstChild("Upgrade")
+                                if not newestTower or (upgrade and upgrade.Value == 0) then
                                     newestTower = tower
                                 end
                             end
@@ -1789,10 +1795,13 @@ local function executeAction(action)
         local allTowers = {}
         
         for _, t in pairs(workspace.Towers:GetChildren()) do
-            if t.Name == action.TowerName and t:FindFirstChild("Owner") and t.Owner.Value == LocalPlayer then
+            local owner = t:FindFirstChild("Owner")
+            if t.Name == action.TowerName and owner and owner.Value == LocalPlayer then
                 table.insert(allTowers, t)
-                local currentLevel = t:FindFirstChild("Upgrade") and t.Upgrade.Value or 0
-                local maxLevel = t:FindFirstChild("MaxUpgrade") and t.MaxUpgrade.Value or 999
+                local upgrade = t:FindFirstChild("Upgrade")
+                local maxUpgrade = t:FindFirstChild("MaxUpgrade")
+                local currentLevel = upgrade and upgrade.Value or 0
+                local maxLevel = maxUpgrade and maxUpgrade.Value or 999
                 if currentLevel < maxLevel then
                     table.insert(towers, {tower = t, level = currentLevel})
                 end
@@ -1886,9 +1895,11 @@ local function detectMacroProgress(macroData)
     local towerStates = {}
     
     for _, tower in pairs(workspace.Towers:GetChildren()) do
-        if tower:FindFirstChild("Owner") and tower.Owner.Value == LocalPlayer then
+        local owner = tower:FindFirstChild("Owner")
+        if owner and owner.Value == LocalPlayer then
             local towerName = tower.Name
-            local level = tower:FindFirstChild("Upgrade") and tower.Upgrade.Value or 0
+            local upgrade = tower:FindFirstChild("Upgrade")
+            local level = upgrade and upgrade.Value or 0
             
             if not towerStates[towerName] then
                 towerStates[towerName] = {count = 0, maxLevel = 0}
@@ -5014,7 +5025,6 @@ Sections.SettingsRight:Button({
             Lifetime = 3
         })
         task.spawn(function()
-            task.wait(1)
             pcall(function()
                 if getgenv().MacroEnabled then
                     getgenv().MacroEnabled = false
@@ -5023,6 +5033,11 @@ Sections.SettingsRight:Button({
                     getgenv().AutoJoinEnabled = false
                 end
             end)
+            
+            task.wait(1)
+            cleanupBeforeTeleport()
+            task.wait(1)
+            
             local ok, err = pcall(function()
                 TeleportService:Teleport(game.PlaceId, LocalPlayer)
             end)
@@ -5440,6 +5455,8 @@ end)
 
 local GuiService = game:GetService("GuiService")
 
+getgenv()._isTeleporting = false
+
 task.spawn(function()
     local lastEndGameUIInstance = nil
     local hasProcessedCurrentUI = false
@@ -5464,6 +5481,7 @@ task.spawn(function()
                 hasProcessedCurrentUI = false
                 lastEndGameUIInstance = nil
                 endGameUIWasPresent = false
+                getgenv()._isTeleporting = false
                 
                 getgenv().MacroGameState.hasStartButton = false
                 getgenv().MacroGameState.currentWave = 0
@@ -5614,6 +5632,10 @@ task.spawn(function()
             end
             
             if buttonToPress then
+                if getgenv()._isTeleporting then
+                    return
+                end
+                
                 if getgenv().WebhookEnabled then
                     print("[Auto " .. actionName .. "] Waiting for webhook to start and complete...")
                     
@@ -5658,17 +5680,14 @@ task.spawn(function()
                 
                 local pressSuccess = pcall(function()
                     if not buttonToPress or not buttonToPress.Parent then
-                        warn("[Auto " .. actionName .. "] Button is nil or has no parent")
                         return
                     end
                     
                     if not buttonToPress:IsDescendantOf(game) then
-                        warn("[Auto " .. actionName .. "] Button is not in the game hierarchy")
                         return
                     end
                     
                     if not buttonToPress:IsDescendantOf(LocalPlayer.PlayerGui) then
-                        warn("[Auto " .. actionName .. "] Button is not a descendant of PlayerGui")
                         return
                     end
                     
@@ -5680,7 +5699,6 @@ task.spawn(function()
                     task.wait(0.1)
                     
                     if not buttonToPress or not buttonToPress.Parent or not buttonToPress:IsDescendantOf(LocalPlayer.PlayerGui) then
-                        warn("[Auto " .. actionName .. "] Button became invalid before setting SelectedObject")
                         return
                     end
                     
@@ -5689,7 +5707,6 @@ task.spawn(function()
                     end)
                     
                     if not setSuccess then
-                        warn("[Auto " .. actionName .. "] Failed to set SelectedObject, button may have been destroyed")
                         return
                     end
                     
@@ -5712,29 +5729,21 @@ task.spawn(function()
                         
                         print("[Auto " .. actionName .. "] ✅ Button pressed successfully!")
                         
+                        getgenv()._isTeleporting = true
+                        
                         if lockConnection then
                             lockConnection:Disconnect()
                         end
                         
                         GuiService.SelectedObject = nil
                     else
-                        warn("[Auto " .. actionName .. "] Failed to maintain button selection")
                         if lockConnection then
                             lockConnection:Disconnect()
                         end
                     end
                 end)
-                
-                if not pressSuccess then
-                    warn("[Auto " .. actionName .. "] ❌ UI navigation failed")
-                    hasProcessedCurrentUI = false
-                end
             end
         end)
-        
-        if not success then
-            warn("[Auto Actions] Error in loop: " .. tostring(errorMsg))
-        end
     end
 end)
 
@@ -6162,7 +6171,8 @@ task.spawn(function()
             
             for unitName, abilitiesConfig in pairs(getgenv().UnitAbilities) do
                 for _, tower in pairs(Towers:GetChildren()) do
-                    if tower.Name == unitName and tower:FindFirstChild("Owner") and tower.Owner.Value == LocalPlayer then
+                    local owner = tower:FindFirstChild("Owner")
+                    if tower.Name == unitName and owner and owner.Value == LocalPlayer then
                         for abilityName, cfg in pairs(abilitiesConfig) do
                             processAbility(tower, unitName, abilityName, cfg, currentWave, hasBoss)
                         end
@@ -6187,7 +6197,8 @@ do
                 
                 local bulma = nil
                 for _, tower in pairs(towers:GetChildren()) do
-                    if tower.Name == "Bulma" and tower:FindFirstChild("Owner") and tower.Owner.Value == LocalPlayer then
+                    local owner = tower:FindFirstChild("Owner")
+                    if tower.Name == "Bulma" and owner and owner.Value == LocalPlayer then
                         bulma = tower
                         break
                     end
@@ -6266,7 +6277,8 @@ do
         if not Towers then return nil end
         
         for _, tower in ipairs(Towers:GetChildren()) do
-            if tower.Name == "JinMoriGodly" and tower:IsA("Model") and tower:FindFirstChild("Owner") and tower.Owner.Value == LocalPlayer then
+            local owner = tower:FindFirstChild("Owner")
+            if tower.Name == "JinMoriGodly" and tower:IsA("Model") and owner and owner.Value == LocalPlayer then
                 return tower
             end
         end
@@ -6279,7 +6291,8 @@ do
         
         local clones = {}
         for _, tower in ipairs(Towers:GetChildren()) do
-            if tower.Name == "JinMoriGodlyClone" and tower:IsA("Model") and tower:FindFirstChild("Owner") and tower.Owner.Value == LocalPlayer then
+            local owner = tower:FindFirstChild("Owner")
+            if tower.Name == "JinMoriGodlyClone" and tower:IsA("Model") and owner and owner.Value == LocalPlayer then
                 table.insert(clones, tower)
             end
         end
@@ -8548,13 +8561,14 @@ if not isInLobby then
         end
         
         local function setSeamlessRetry()
-            pcall(function()
-                local remotes = RS:FindFirstChild("Remotes")
-                local setSettings = remotes and remotes:FindFirstChild("SetSettings")
-                if setSettings then 
-                    setSettings:InvokeServer("SeamlessRetry")
-                    print("[Seamless Fix] Toggled SeamlessRetry")
-                end
+            task.spawn(function()
+                pcall(function()
+                    local remotes = RS:FindFirstChild("Remotes")
+                    local setSettings = remotes and remotes:FindFirstChild("SetSettings")
+                    if setSettings then 
+                        setSettings:InvokeServer("SeamlessRetry")
+                    end
+                end)
             end)
         end
         
