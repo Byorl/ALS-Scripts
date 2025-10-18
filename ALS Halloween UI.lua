@@ -1079,13 +1079,17 @@ local function getAllAbilities(unitName)
     local towerInfo = getTowerInfo(towerNameToCheck)
     if not towerInfo then return {} end
     local abilities = {}
+    local seenAbilities = {}
     
     for level = 0, 50 do
         if towerInfo[level] then
             if towerInfo[level].Ability then
                 local a = towerInfo[level].Ability
                 local nm = a.Name
-                if not abilities[nm] then
+                
+                if not seenAbilities[nm] then
+                    seenAbilities[nm] = true
+                    
                     local hasRealAttribute = false
                     if a.AttributeRequired and type(a.AttributeRequired) == "table" then
                         if a.AttributeRequired.Name ~= "JUST_TO_DISPLAY_IN_LOBBY" then
@@ -1105,9 +1109,12 @@ local function getAllAbilities(unitName)
             end
             
             if towerInfo[level].Abilities then
-                for _, a in pairs(towerInfo[level].Abilities) do
+                for idx, a in pairs(towerInfo[level].Abilities) do
                     local nm = a.Name
-                    if not abilities[nm] then
+                    
+                    if not seenAbilities[nm] then
+                        seenAbilities[nm] = true
+                        
                         local hasRealAttribute = false
                         if a.AttributeRequired and type(a.AttributeRequired) == "table" then
                             if a.AttributeRequired.Name ~= "JUST_TO_DISPLAY_IN_LOBBY" then
@@ -3773,17 +3780,20 @@ getgenv().AutoPlayConfig = getgenv().AutoPlayConfig or {
     enabled = false,
     autoPlace = false,
     autoUpgrade = false,
+    autoUpgradePriority = false,
     focusFarm = false,
     hologram = false,
     placeBeforeUpgrade = false,
     pathPercentage = 1,
     distanceFromPath = 0,
     placeCaps = {1, 1, 1, 1, 1, 1},
-    upgradeCaps = {0, 0, 0, 0, 0, 0}
+    upgradeCaps = {0, 0, 0, 0, 0, 0},
+    upgradePriorities = {1, 2, 3, 4, 5, 6}
 }
 
 getgenv().AutoPlayConfig.autoPlace = getgenv().Config.toggles.AutoPlayPlace or false
 getgenv().AutoPlayConfig.autoUpgrade = getgenv().Config.toggles.AutoPlayUpgrade or false
+getgenv().AutoPlayConfig.autoUpgradePriority = getgenv().Config.toggles.AutoPlayUpgradePriority or false
 getgenv().AutoPlayConfig.focusFarm = getgenv().Config.toggles.AutoPlayFocusFarm or false
 getgenv().AutoPlayConfig.hologram = getgenv().Config.toggles.AutoPlayHologram or false
 getgenv().AutoPlayConfig.placeBeforeUpgrade = getgenv().Config.toggles.AutoPlayPlaceBeforeUpgrade or false
@@ -3804,6 +3814,13 @@ for i = 1, 6 do
     end
 end
 
+for i = 1, 6 do
+    local savedPriority = tonumber(getgenv().Config.inputs["AutoPlayUpgradePriority" .. i])
+    if savedPriority then
+        getgenv().AutoPlayConfig.upgradePriorities[i] = savedPriority
+    end
+end
+
 Sections.AutoPlayLeft:Header({ Text = "🤖 Auto Play" })
 Sections.AutoPlayLeft:SubLabel({ Text = "Automated tower placement and upgrades" })
 
@@ -3817,14 +3834,42 @@ createToggle(
     getgenv().AutoPlayConfig.autoPlace
 )
 
-createToggle(
+local autoUpgradeToggle, autoUpgradePriorityToggle
+
+autoUpgradeToggle = createToggle(
     Sections.AutoPlayLeft,
     "Enable Auto Upgrade",
     "AutoPlayUpgrade",
     function(value)
         getgenv().AutoPlayConfig.autoUpgrade = value
+        if value and getgenv().AutoPlayConfig.autoUpgradePriority then
+            getgenv().AutoPlayConfig.autoUpgradePriority = false
+            getgenv().Config.toggles.AutoPlayUpgradePriority = false
+            saveConfig(getgenv().Config)
+            if autoUpgradePriorityToggle then
+                pcall(function() autoUpgradePriorityToggle:UpdateState(false) end)
+            end
+        end
     end,
     getgenv().AutoPlayConfig.autoUpgrade
+)
+
+autoUpgradePriorityToggle = createToggle(
+    Sections.AutoPlayLeft,
+    "Auto Upgrade Priority",
+    "AutoPlayUpgradePriority",
+    function(value)
+        getgenv().AutoPlayConfig.autoUpgradePriority = value
+        if value and getgenv().AutoPlayConfig.autoUpgrade then
+            getgenv().AutoPlayConfig.autoUpgrade = false
+            getgenv().Config.toggles.AutoPlayUpgrade = false
+            saveConfig(getgenv().Config)
+            if autoUpgradeToggle then
+                pcall(function() autoUpgradeToggle:UpdateState(false) end)
+            end
+        end
+    end,
+    getgenv().AutoPlayConfig.autoUpgradePriority
 )
 
 createToggle(
@@ -3926,22 +3971,6 @@ getgenv().AutoPlaySliders = {
     upgradeCaps = {}
 }
 
-local function updateAutoPlaySliders()
-    local clientData = getClientData()
-    if not clientData or not clientData.Slots then return end
-    
-    local sortedSlots = {"Slot1", "Slot2", "Slot3", "Slot4", "Slot5", "Slot6"}
-    for i = 1, 6 do
-        local slotData = clientData.Slots[sortedSlots[i]]
-        local unitName = slotData and slotData.Value or nil
-        
-        if getgenv().AutoPlaySliders.upgradeCaps[i] then
-            pcall(function()
-                getgenv().AutoPlaySliders.upgradeCaps[i]:UpdateName("Upgrade Cap " .. i .. (unitName and " (" .. unitName .. ")" or ""))
-            end)
-        end
-    end
-end
 
 for i = 1, 6 do
     getgenv().AutoPlaySliders.placeCaps[i] = createSlider(
@@ -3980,10 +4009,31 @@ for i = 1, 6 do
     )
 end
 
-task.spawn(function()
-    task.wait(3)
-    updateAutoPlaySliders()
-end)
+Sections.AutoPlayRight:Divider()
+
+for i = 1, 6 do
+    if not getgenv().AutoPlayConfig.upgradePriorities then
+        getgenv().AutoPlayConfig.upgradePriorities = {1, 2, 3, 4, 5, 6}
+    end
+    
+    local savedPriority = getgenv().Config.inputs["AutoPlayUpgradePriority" .. i]
+    local defaultPriority = savedPriority and tonumber(savedPriority) or i
+    
+    createSlider(
+        Sections.AutoPlayRight,
+        "Upgrade Priority " .. i,
+        "AutoPlayUpgradePriority" .. i,
+        1,
+        6,
+        defaultPriority,
+        function(value)
+            getgenv().AutoPlayConfig.upgradePriorities[i] = math.floor(value)
+        end,
+        "Default",
+        1
+    )
+end
+
 
 
 Sections.MacroLeft:Header({ Text = "📁 Macro Management" })
@@ -5520,18 +5570,40 @@ task.spawn(function()
                 hasProcessedCurrentUI = true
                 
                 local success = pcall(function()
+                    if not buttonToPress or not buttonToPress.Parent then
+                        warn("[Auto Retry] Button is nil or has no parent")
+                        return
+                    end
+                    
+                    if not buttonToPress:IsDescendantOf(game) then
+                        warn("[Auto Retry] Button is not in the game hierarchy")
+                        return
+                    end
+                    
+                    if not buttonToPress:IsDescendantOf(LocalPlayer.PlayerGui) then
+                        warn("[Auto Retry] Button is not a descendant of PlayerGui")
+                        return
+                    end
+                    
                     local GuiService = game:GetService("GuiService")
                     
                     GuiService.SelectedObject = nil
                     task.wait(0.1)
                     
+                    if not buttonToPress or not buttonToPress.Parent or not buttonToPress:IsDescendantOf(LocalPlayer.PlayerGui) then
+                        warn("[Auto Retry] Button became invalid before setting SelectedObject")
+                        return
+                    end
+                    
                     GuiService.SelectedObject = buttonToPress
                     
                     local lockConnection
                     lockConnection = RunService.Heartbeat:Connect(function()
-                        if GuiService.SelectedObject ~= buttonToPress then
-                            GuiService.SelectedObject = buttonToPress
-                        end
+                        pcall(function()
+                            if buttonToPress and buttonToPress.Parent and GuiService.SelectedObject ~= buttonToPress then
+                                GuiService.SelectedObject = buttonToPress
+                            end
+                        end)
                     end)
                     
                     task.wait(0.3)
@@ -8093,14 +8165,20 @@ do
     end
     
     local function selectCardSmart()
-        if not getgenv().SmartCardSelectionEnabled then return false end
+        if not getgenv().SmartCardSelectionEnabled then 
+            print("[Smart Card] Smart selection is disabled")
+            return false 
+        end
+        
         local ok, result = pcall(function()
             local currentSignature = getPromptSignature()
             if not currentSignature then
+                print("[Smart Card] No prompt signature found")
                 return false
             end
             
             if getgenv().SmartCardLastPromptId == currentSignature then
+                print("[Smart Card] Already processed this prompt")
                 return false
             end
             
@@ -8112,11 +8190,15 @@ do
                 end
             end)
             
+            print("[Smart Card] Current wave: " .. currentWave)
             
             local list = getAvailableCards()
             if not list or #list == 0 then 
+                print("[Smart Card] No cards available")
                 return false 
             end
+            
+            print("[Smart Card] Found " .. #list .. " cards")
             
             local bestCard = nil
             local bestValue = 0
@@ -8130,9 +8212,10 @@ do
                 local nm = list[i].name
                 
                 if alreadyPicked[nm] then
-                    -- Card already picked, skip it
+                    print("[Smart Card] Skipping already picked: " .. nm)
                 else
                     local value = calculateCardValue(nm, currentWave)
+                    print("[Smart Card] Card: " .. nm .. " | Value: " .. value)
                     
                     if value > 0 and value > bestValue then
                         bestValue = value
@@ -8142,7 +8225,7 @@ do
             end
             
             if not bestCard or bestValue <= 0 or not bestCard.button then
-                print("[Smart Card] No valid candy cards available, skipping selection")
+                print("[Smart Card] No valid candy cards available (bestValue: " .. bestValue .. ")")
                 return false
             end
             
@@ -8987,7 +9070,7 @@ if not isInLobby then
             while true do
                 task.wait(0.5)
                 
-                if not getgenv().AutoPlayConfig.autoUpgrade then continue end
+                if not getgenv().AutoPlayConfig.autoUpgrade and not getgenv().AutoPlayConfig.autoUpgradePriority then continue end
                 
                 local clientData = getClientData()
                 if not clientData or not clientData.Slots then continue end
@@ -9021,6 +9104,8 @@ if not isInLobby then
                 local normalUnits = {}
                 
                 local slotUpgradeCaps = {}
+                local slotPriorities = {}
+                local unitToSlot = {}
                 local sortedSlots = {"Slot1", "Slot2", "Slot3", "Slot4", "Slot5", "Slot6"}
                 for slotNum = 1, 6 do
                     local slotData = clientData.Slots[sortedSlots[slotNum]]
@@ -9028,6 +9113,8 @@ if not isInLobby then
                         local unitName = slotData.Value
                         local upgradeCap = math.floor(getgenv().AutoPlayConfig.upgradeCaps[slotNum] or 0)
                         slotUpgradeCaps[unitName] = upgradeCap
+                        slotPriorities[unitName] = getgenv().AutoPlayConfig.upgradePriorities[slotNum] or slotNum
+                        unitToSlot[unitName] = slotNum
                     end
                 end
                 
@@ -9049,18 +9136,34 @@ if not isInLobby then
                         
                         if level < effectiveCap then
                             local upgradeCost = getgenv().GetUpgradeCost and getgenv().GetUpgradeCost(unitName, level) or 999999999
+                            local priority = slotPriorities[unitName] or 999
                             
                             if isFarmUnit(unitName) then
-                                table.insert(farmUnits, {tower = tower, level = level, cap = effectiveCap, unitName = unitName, cost = upgradeCost})
+                                table.insert(farmUnits, {tower = tower, level = level, cap = effectiveCap, unitName = unitName, cost = upgradeCost, priority = priority})
                             else
-                                table.insert(normalUnits, {tower = tower, level = level, cap = effectiveCap, unitName = unitName, cost = upgradeCost})
+                                table.insert(normalUnits, {tower = tower, level = level, cap = effectiveCap, unitName = unitName, cost = upgradeCost, priority = priority})
                             end
                         end
                     end
                 end
                 
-                table.sort(farmUnits, function(a, b) return a.cost < b.cost end)
-                table.sort(normalUnits, function(a, b) return a.cost < b.cost end)
+                if getgenv().AutoPlayConfig.autoUpgradePriority then
+                    table.sort(farmUnits, function(a, b)
+                        if a.priority ~= b.priority then
+                            return a.priority < b.priority
+                        end
+                        return a.cost < b.cost
+                    end)
+                    table.sort(normalUnits, function(a, b)
+                        if a.priority ~= b.priority then
+                            return a.priority < b.priority
+                        end
+                        return a.cost < b.cost
+                    end)
+                else
+                    table.sort(farmUnits, function(a, b) return a.cost < b.cost end)
+                    table.sort(normalUnits, function(a, b) return a.cost < b.cost end)
+                end
                 
                 local currentCash = tonumber(getgenv().MacroCurrentCash) or 0
                 
