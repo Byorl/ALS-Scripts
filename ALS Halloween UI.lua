@@ -8046,7 +8046,7 @@ do
             end
             
             local bestCard = nil
-            local bestValue = -99999
+            local bestValue = 0
             
             local alreadyPicked = {}
             for _, pickedName in ipairs(getgenv().SmartCardPicked) do
@@ -8069,6 +8069,7 @@ do
             end
             
             if not bestCard or bestValue <= 0 or not bestCard.button then
+                print("[Smart Card] No valid candy cards available, skipping selection")
                 return false
             end
             
@@ -8904,10 +8905,10 @@ if not isInLobby then
         end
         
         local function autoUpgradeLoop()
-            task.wait(3)
+            task.wait(2)
             
             while true do
-                task.wait(1)
+                task.wait(0.5)
                 
                 if not getgenv().AutoPlayConfig.autoUpgrade then continue end
                 
@@ -8975,7 +8976,7 @@ if not isInLobby then
                             print("[AutoUpgrade] [FARM PRIORITY] Upgrading " .. data.unitName .. " from level " .. data.level .. " (Cost: $" .. data.cost .. ")")
                             if upgradeTower(data.tower) then
                                 upgraded = true
-                                task.wait(0.5)
+                                task.wait(0.2)
                             end
                         end
                     end
@@ -8989,7 +8990,7 @@ if not isInLobby then
                                 print("[AutoUpgrade] Upgrading " .. data.unitName .. " from level " .. data.level .. " (Cost: $" .. data.cost .. ")")
                                 if upgradeTower(data.tower) then
                                     upgraded = true
-                                    task.wait(0.5)
+                                    task.wait(0.2)
                                 end
                             end
                         end
@@ -9003,7 +9004,7 @@ if not isInLobby then
                             print("[AutoUpgrade] Upgrading " .. data.unitName .. " from level " .. data.level .. " (Cost: $" .. data.cost .. ")")
                             if upgradeTower(data.tower) then
                                 upgraded = true
-                                task.wait(0.5)
+                                task.wait(0.2)
                             end
                         end
                     end
@@ -9017,7 +9018,7 @@ if not isInLobby then
                                 print("[AutoUpgrade] Upgrading " .. data.unitName .. " from level " .. data.level .. " (Cost: $" .. data.cost .. ")")
                                 if upgradeTower(data.tower) then
                                     upgraded = true
-                                    task.wait(0.5)
+                                    task.wait(0.2)
                                 end
                             end
                         end
