@@ -1250,7 +1250,9 @@ getgenv().MacroGameState = {
     gameEnded = false,
     lastWaveChange = 0,
     matchStartTime = 0,
-    lastGameEndedState = false
+    lastGameEndedState = false,
+    lastEndGameUIState = false,
+    seamlessTransition = false
 }
 
 local function updateGameState()
@@ -1260,6 +1262,14 @@ local function updateGameState()
             local newWave = wave.Value
             if newWave ~= getgenv().MacroGameState.currentWave then
                 getgenv().MacroGameState.lastWaveChange = tick()
+                
+                if getgenv().MacroGameState.currentWave > 10 and newWave <= 5 then
+                    print("[Game State] New game detected via wave reset (" .. getgenv().MacroGameState.currentWave .. " -> " .. newWave .. ")")
+                    getgenv().MacroGameState.seamlessTransition = true
+                    getgenv().MacroGameState.gameEnded = false
+                    getgenv().MacroGameState.matchStartTime = tick()
+                end
+                
                 getgenv().MacroGameState.currentWave = newWave
             end
         end
@@ -1287,13 +1297,25 @@ local function updateGameState()
         getgenv().MacroGameState.hasStartButton = hasStart
         
         local endGameUI = LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
-        getgenv().MacroGameState.hasEndGameUI = endGameUI and endGameUI.Enabled or false
+        local currentEndGameUIState = endGameUI and endGameUI.Enabled or false
+        
+        if getgenv().MacroGameState.lastEndGameUIState and not currentEndGameUIState then
+            print("[Game State] EndGameUI removed - seamless transition or new game starting")
+            getgenv().MacroGameState.seamlessTransition = true
+            getgenv().MacroGameState.gameEnded = false
+            getgenv().MacroGameState.hasEndGameUI = false
+        end
+        
+        getgenv().MacroGameState.hasEndGameUI = currentEndGameUIState
+        getgenv().MacroGameState.lastEndGameUIState = currentEndGameUIState
         
         local gameEndedValue = RS:FindFirstChild("GameEnded")
         local currentGameEnded = gameEndedValue and gameEndedValue.Value or false
         
         if currentGameEnded and not getgenv().MacroGameState.lastGameEndedState then
+            print("[Game State] Game ended detected")
             getgenv().MacroGameState.gameEnded = true
+            getgenv().MacroGameState.seamlessTransition = false
             
             getgenv().BulmaWishUsedThisRound = false
             getgenv().WukongTrackedClones = {}
@@ -1304,14 +1326,26 @@ local function updateGameState()
             getgenv().SlowerCardLastPromptId = nil
         end
         
+        if not currentGameEnded and getgenv().MacroGameState.lastGameEndedState then
+            print("[Game State] New game started (GameEnded: true -> false)")
+            getgenv().MacroGameState.seamlessTransition = true
+            getgenv().MacroGameState.matchStartTime = tick()
+        end
+        
         getgenv().MacroGameState.lastGameEndedState = currentGameEnded
         getgenv().MacroGameState.isInGame = not getgenv().MacroGameState.hasStartButton and not getgenv().MacroGameState.hasEndGameUI and not currentGameEnded
+        
+        if getgenv().MacroGameState.seamlessTransition and getgenv().MacroGameState.isInGame then
+            task.delay(2, function()
+                getgenv().MacroGameState.seamlessTransition = false
+            end)
+        end
     end)
 end
 
 task.spawn(function()
     while true do
-        task.wait(0.5)
+        task.wait(0.3)
         updateGameState()
     end
 end)
@@ -5411,6 +5445,12 @@ task.spawn(function()
     local hasProcessedCurrentUI = false
     local endGameUIDetectedTime = 0
     local endGameUIWasPresent = false
+    local lastActionTime = 0
+    local ACTION_TIMEOUT = 45
+    local newGameDetected = false
+    local lastEndGameUIState = false
+    
+    print("[Auto Actions] System initialized")
     
     while true do
         task.wait(0.2)
@@ -5419,36 +5459,40 @@ task.spawn(function()
             if not LocalPlayer or not LocalPlayer.PlayerGui then return end
             
             local endGameUI = LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
+            local currentEndGameUIState = endGameUI and endGameUI.Enabled or false
             
-            if endGameUIWasPresent and not endGameUI then
+            if lastEndGameUIState and not currentEndGameUIState then
+                print("[Auto Actions] EndGameUI removed - New game detected!")
+                newGameDetected = true
                 hasProcessedCurrentUI = false
                 lastEndGameUIInstance = nil
                 endGameUIWasPresent = false
                 
-                getgenv().MacroGameState = {
-                    hasStartButton = false,
-                    currentWave = 0,
-                    gameEnded = false
-                }
+                getgenv().MacroGameState.hasStartButton = false
+                getgenv().MacroGameState.currentWave = 0
+                getgenv().MacroGameState.gameEnded = false
+                getgenv().MacroGameState.hasEndGameUI = false
                 getgenv().MacroCurrentStep = 1
                 getgenv().MacroActionText = ""
                 getgenv().MacroUnitText = ""
                 getgenv().MacroWaitingText = ""
-                getgenv().MacroStatusText = "Idle"
+                getgenv().MacroStatusText = "New Game Started"
                 getgenv().MacroPlaybackActive = false
                 
                 if getgenv().UpdateMacroStatus then
                     getgenv().UpdateMacroStatus()
                 end
-
-                return
+                
+                print("[Auto Actions] Game state reset for new round")
             end
+            
+            lastEndGameUIState = currentEndGameUIState
             
             if endGameUI then
                 endGameUIWasPresent = true
             end
             
-            if not endGameUI then 
+            if not endGameUI or not endGameUI.Enabled then 
                 return 
             end
             
@@ -5459,21 +5503,23 @@ task.spawn(function()
             if not buttons then return end
             
             if lastEndGameUIInstance and endGameUI ~= lastEndGameUIInstance then
+                print("[Auto Actions] New EndGameUI instance detected")
                 hasProcessedCurrentUI = false
                 lastEndGameUIInstance = endGameUI
                 endGameUIDetectedTime = tick()
+                newGameDetected = false
             end
             
             if not lastEndGameUIInstance then
                 lastEndGameUIInstance = endGameUI
                 endGameUIDetectedTime = tick()
+                print("[Auto Actions] EndGameUI first detected at " .. endGameUIDetectedTime)
             end
             
             if hasProcessedCurrentUI then
                 return
             end
             
-            local nextButton = nil
             local nextButton = buttons:FindFirstChild("Next")
             local retryButton = buttons:FindFirstChild("Retry")
             local leaveButton = buttons:FindFirstChild("Leave")
@@ -5570,50 +5616,54 @@ task.spawn(function()
             end
             
             if buttonToPress then
+                print("[Auto " .. actionName .. "] Button detected, preparing to press...")
                 
                 if getgenv().WebhookEnabled then
-                    local isFinalExpedition = false
-                    pcall(function()
-                        local gamemode = RS:FindFirstChild("Gamemode")
-                        if gamemode and gamemode.Value == "FinalExpedition" then
-                            isFinalExpedition = true
-                        end
-                    end)
-                    
-                    if isFinalExpedition and actionName == "Next" then
-                        print("[Auto Next] Waiting for webhook in Final Expedition...")
-                        task.wait(2)
-                    end
+                    print("[Auto " .. actionName .. "] Webhook enabled, waiting for webhook to complete...")
                     
                     local maxWait = 0
-                    while getgenv().WebhookProcessing and maxWait < 15 do
+                    local maxWaitTime = 35
+                    
+                    while getgenv().WebhookProcessing and maxWait < maxWaitTime do
                         task.wait(0.5)
                         maxWait = maxWait + 0.5
+                        
+                        if maxWait % 5 == 0 then
+                            print("[Auto " .. actionName .. "] Still waiting for webhook... (" .. maxWait .. "s/" .. maxWaitTime .. "s)")
+                        end
                     end
                     
                     if getgenv().WebhookProcessing then
-                        warn("[Auto Retry] Webhook still processing after 15s, continuing anyway")
+                        warn("[Auto " .. actionName .. "] Webhook still processing after " .. maxWaitTime .. "s, continuing anyway")
+                        getgenv().WebhookProcessing = false
+                    else
+                        print("[Auto " .. actionName .. "] Webhook completed successfully")
                     end
                     
-                    task.wait(3)
+                    task.wait(1)
+                else
+                    print("[Auto " .. actionName .. "] Webhook disabled, proceeding immediately")
+                    task.wait(0.5)
                 end
                 
-                task.wait(0.3)
                 hasProcessedCurrentUI = true
+                lastActionTime = tick()
                 
-                local success = pcall(function()
+                print("[Auto " .. actionName .. "] Executing button press...")
+                
+                local pressSuccess = pcall(function()
                     if not buttonToPress or not buttonToPress.Parent then
-                        warn("[Auto Retry] Button is nil or has no parent")
+                        warn("[Auto " .. actionName .. "] Button is nil or has no parent")
                         return
                     end
                     
                     if not buttonToPress:IsDescendantOf(game) then
-                        warn("[Auto Retry] Button is not in the game hierarchy")
+                        warn("[Auto " .. actionName .. "] Button is not in the game hierarchy")
                         return
                     end
                     
                     if not buttonToPress:IsDescendantOf(LocalPlayer.PlayerGui) then
-                        warn("[Auto Retry] Button is not a descendant of PlayerGui")
+                        warn("[Auto " .. actionName .. "] Button is not a descendant of PlayerGui")
                         return
                     end
                     
@@ -5625,7 +5675,7 @@ task.spawn(function()
                     task.wait(0.1)
                     
                     if not buttonToPress or not buttonToPress.Parent or not buttonToPress:IsDescendantOf(LocalPlayer.PlayerGui) then
-                        warn("[Auto Retry] Button became invalid before setting SelectedObject")
+                        warn("[Auto " .. actionName .. "] Button became invalid before setting SelectedObject")
                         return
                     end
                     
@@ -5634,7 +5684,7 @@ task.spawn(function()
                     end)
                     
                     if not setSuccess then
-                        warn("[Auto Retry] Failed to set SelectedObject, button may have been destroyed")
+                        warn("[Auto " .. actionName .. "] Failed to set SelectedObject, button may have been destroyed")
                         return
                     end
                     
@@ -5655,26 +5705,30 @@ task.spawn(function()
                         VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
                         task.wait(0.2)
                         
+                        print("[Auto " .. actionName .. "] ✅ Button pressed successfully!")
+                        
                         if lockConnection then
                             lockConnection:Disconnect()
                         end
                         
                         GuiService.SelectedObject = nil
                     else
+                        warn("[Auto " .. actionName .. "] Failed to maintain button selection")
                         if lockConnection then
                             lockConnection:Disconnect()
                         end
                     end
                 end)
                 
-                if not success then
-                    warn("[Auto Retry] UI navigation failed")
+                if not pressSuccess then
+                    warn("[Auto " .. actionName .. "] ❌ UI navigation failed")
+                    hasProcessedCurrentUI = false
                 end
             end
         end)
         
         if not success then
-            warn("[Auto Leave/Replay] Error in loop: " .. tostring(errorMsg))
+            warn("[Auto Actions] Error in loop: " .. tostring(errorMsg))
         end
     end
 end)
@@ -7268,22 +7322,27 @@ do
     local function sendWebhook()
         local success, err = pcall(function()
             if not getgenv().WebhookEnabled then 
+                print("[Webhook] Webhook disabled, skipping")
                 return 
             end
             
             if isProcessing then 
+                print("[Webhook] Already processing, skipping duplicate call")
                 return 
             end
             
             local currentTime = tick()
             if currentTime - lastWebhookTime < WEBHOOK_COOLDOWN then 
+                print("[Webhook] Cooldown active, skipping (" .. (WEBHOOK_COOLDOWN - (currentTime - lastWebhookTime)) .. "s remaining)")
                 return 
             end
             
             if getgenv()._webhookLock and (currentTime - getgenv()._webhookLock) < 8 then 
+                print("[Webhook] Lock active, skipping")
                 return 
             end
             
+            print("[Webhook] Starting webhook send process...")
             getgenv()._webhookLock = currentTime
             lastWebhookTime = currentTime
             isProcessing = true
@@ -7303,6 +7362,7 @@ do
             
             if not matchWave or matchWave == "0" or matchWave == "" then
                 warn("[Webhook] Invalid wave data, skipping send")
+                task.wait(0.5)
                 isProcessing = false
                 getgenv().WebhookProcessing = false
                 return
@@ -7310,6 +7370,7 @@ do
             
             if not matchResult or matchResult == "Unknown" or matchResult == "" then
                 warn("[Webhook] Invalid match result, skipping send")
+                task.wait(0.5)
                 isProcessing = false
                 getgenv().WebhookProcessing = false
                 return
@@ -7317,10 +7378,13 @@ do
             
             if not matchTime or matchTime == "00:00:00" or matchTime == "" then
                 warn("[Webhook] Invalid match time, skipping send")
+                task.wait(0.5)
                 isProcessing = false
                 getgenv().WebhookProcessing = false
                 return
             end
+            
+            print("[Webhook] Data validated - Wave: " .. matchWave .. ", Result: " .. matchResult .. ", Time: " .. matchTime)
             
             
             local function formatStats()
@@ -7429,11 +7493,14 @@ do
             
             local webhookHash = LocalPlayer.Name .. "_" .. matchTime .. "_" .. matchWave .. "_" .. rewardsText .. "_" .. (hasUnitDrop and unitDropName or "")
             if webhookHash == lastWebhookHash then
+                print("[Webhook] Duplicate webhook detected, skipping send")
+                task.wait(0.5)
                 isProcessing = false
                 getgenv().WebhookProcessing = false
                 return
             end
             lastWebhookHash = webhookHash
+            print("[Webhook] Sending webhook to Discord...")
             
             local sendSuccess = false
             local sendAttempts = 0
@@ -7452,6 +7519,7 @@ do
                 
                 if ok and result then
                     sendSuccess = true
+                    print("[Webhook] ✅ Webhook sent successfully!")
                     
                     Window:Notify({
                         Title = "Webhook Sent",
@@ -7465,13 +7533,14 @@ do
                     end
                     
                     if sendAttempts < maxAttempts then
+                        print("[Webhook] Retrying in 1 second...")
                         task.wait(1)
                     end
                 end
             end
             
             if not sendSuccess then
-                warn("[Webhook] Failed to send after " .. maxAttempts .. " attempts")
+                warn("[Webhook] ❌ Failed to send after " .. maxAttempts .. " attempts")
                 Window:Notify({
                     Title = "Webhook Failed",
                     Description = "Failed to send webhook. Check URL and try again.",
@@ -7479,20 +7548,25 @@ do
                 })
             end
             
+            print("[Webhook] Cleaning up and releasing lock...")
             task.wait(0.5)
             isProcessing = false
             getgenv().WebhookProcessing = false
+            print("[Webhook] Process complete, ready for next action")
         end)
         
         if not success then
-            warn("[Webhook] Error in sendWebhook: " .. tostring(err))
+            warn("[Webhook] ❌ Critical error in sendWebhook: " .. tostring(err))
+            task.wait(0.5)
             isProcessing = false
             getgenv().WebhookProcessing = false
+            print("[Webhook] Error recovery complete, flags cleared")
         end
     end
     
     LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
         if child.Name == "EndGameUI" and getgenv().WebhookEnabled then
+            print("[Webhook] EndGameUI detected, waiting 2s before sending...")
             task.wait(2)
             sendWebhook()
         end
@@ -7500,8 +7574,12 @@ do
     
     LocalPlayer.PlayerGui.ChildRemoved:Connect(function(child)
         if child.Name == "EndGameUI" then
-            task.wait(2)
-            getgenv().WebhookProcessing = false
+            print("[Webhook] EndGameUI removed, clearing processing flag...")
+            task.wait(1)
+            if getgenv().WebhookProcessing then
+                warn("[Webhook] Force clearing WebhookProcessing flag due to UI removal")
+                getgenv().WebhookProcessing = false
+            end
         end
     end)
     
@@ -7510,6 +7588,7 @@ do
         if getgenv().WebhookEnabled then
             local endGameUI = LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
             if endGameUI and endGameUI.Enabled and not getgenv().WebhookProcessing then
+                print("[Webhook] EndGameUI already present on load, sending webhook...")
                 task.wait(1)
                 sendWebhook()
             end
@@ -8367,7 +8446,10 @@ if not isInLobby then
         local hasRun = false
         local lastEndgameTime = 0
         local DEBOUNCE_TIME = 3
+        local lastEndGameUIState = false
+        local newGameStartDetected = false
         
+        print("[Seamless Fix] Initializing system...")
         print("[Seamless Fix] Waiting for Settings GUI...")
         local maxWait = 0
         repeat 
@@ -8414,13 +8496,13 @@ if not isInLobby then
             if endgameCount < maxRounds then
                 if not getSeamlessValue() then
                     setSeamlessRetry()
-                    print("[Seamless Fix] Enabled Seamless Retry (" .. endgameCount .. "/" .. maxRounds .. ")")
+                    print("[Seamless Fix] ✅ Enabled Seamless Retry (" .. endgameCount .. "/" .. maxRounds .. ")")
                     task.wait(0.5)
                 end
             elseif endgameCount >= maxRounds then
                 if getSeamlessValue() then
                     setSeamlessRetry()
-                    print("[Seamless Fix] Disabled Seamless Retry - Max rounds reached (" .. endgameCount .. "/" .. maxRounds .. ")")
+                    print("[Seamless Fix] ⏸️ Disabled Seamless Retry - Max rounds reached (" .. endgameCount .. "/" .. maxRounds .. ")")
                     task.wait(0.5)
                 end
             end
@@ -8436,6 +8518,29 @@ if not isInLobby then
                 if getgenv().SeamlessFixEnabled then
                     enableSeamlessIfNeeded()
                 end
+            end
+        end)
+        
+        task.spawn(function()
+            while true do
+                task.wait(0.3)
+                pcall(function()
+                    local endGameUI = LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
+                    local currentEndGameUIState = endGameUI and endGameUI.Enabled or false
+                    
+                    if lastEndGameUIState and not currentEndGameUIState then
+                        print("[Seamless Fix] 🎮 EndGameUI removed - New game started!")
+                        newGameStartDetected = true
+                        hasRun = false
+                        
+                        if getgenv().SeamlessFixEnabled and endgameCount < (getgenv().SeamlessRounds or 4) then
+                            task.wait(2)
+                            enableSeamlessIfNeeded()
+                        end
+                    end
+                    
+                    lastEndGameUIState = currentEndGameUIState
+                end)
             end
         end)
         
@@ -8457,15 +8562,15 @@ if not isInLobby then
                     lastEndgameTime = currentTime
                     endgameCount = endgameCount + 1
                     local maxRounds = getgenv().SeamlessRounds or 4
-                    print("[Seamless Fix] Endgame detected. Current seamless rounds: " .. endgameCount .. "/" .. maxRounds)
+                    print("[Seamless Fix] 🏁 Endgame detected. Current seamless rounds: " .. endgameCount .. "/" .. maxRounds)
                     
                     if endgameCount >= maxRounds and getgenv().SeamlessFixEnabled then
                         maxRoundsReached = true
-                        print("[Seamless Fix] Max rounds reached, disabling seamless retry to restart match...")
+                        print("[Seamless Fix] 🔄 Max rounds reached, disabling seamless retry to restart match...")
                         task.wait(0.5)
                         if getSeamlessValue() then
                             setSeamlessRetry()
-                            print("[Seamless Fix] Disabled Seamless Retry")
+                            print("[Seamless Fix] ⏸️ Disabled Seamless Retry")
                             task.wait(0.5)
                         else
                             print("[Seamless Fix] Seamless already disabled")
@@ -8487,19 +8592,19 @@ if not isInLobby then
                                 local restartEvent = remotes and remotes:FindFirstChild("RestartMatch")
                                 if restartEvent then
                                     restartEvent:FireServer()
-                                    print("[Seamless Fix] Restart signal sent")
+                                    print("[Seamless Fix] ✅ Restart signal sent")
                                     task.wait(3)
                                     endgameCount = 0
                                     maxRoundsReached = false
                                     hasRun = false
                                     enableSeamlessIfNeeded()
                                 else
-                                    warn("[Seamless Fix] RestartMatch remote not found")
+                                    warn("[Seamless Fix] ❌ RestartMatch remote not found")
                                 end
                             end)
                             
                             if not success then
-                                warn("[Seamless Fix] Restart failed:", err)
+                                warn("[Seamless Fix] ❌ Restart failed:", err)
                             end
                         end)
                     else
@@ -8513,6 +8618,7 @@ if not isInLobby then
         
         LocalPlayer.PlayerGui.ChildRemoved:Connect(function(child) 
             if child.Name == "EndGameUI" then 
+                print("[Seamless Fix] EndGameUI removed event triggered")
                 task.wait(3) 
                 hasRun = false 
             end 
@@ -8520,7 +8626,7 @@ if not isInLobby then
         
         LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
             if child.Name == "TeleportUI" and maxRoundsReached then
-                print("[Seamless Fix] Teleport detected after max rounds, resetting counter...")
+                print("[Seamless Fix] 🚀 Teleport detected after max rounds, resetting counter...")
                 endgameCount = 0
                 maxRoundsReached = false
                 task.wait(2)
