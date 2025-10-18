@@ -1280,7 +1280,7 @@ end
 
 task.spawn(function()
     while true do
-        task.wait(0.1)
+        task.wait(0.5)
         updateGameState()
     end
 end)
@@ -1573,7 +1573,7 @@ local function setupRecordingHook()
         local lastTowerCount = {}
         
         while true do
-            task.wait(0.1)
+            task.wait(0.3)
             
             if not getgenv().MacroRecordingV2 then
                 task.wait(0.5)
@@ -6776,17 +6776,19 @@ if isInLobby then
         
         
         while true do
-            task.wait(0.1)
+            task.wait(0.5)
             if getgenv().BingoEnabled then
                 pcall(function()
                     if UseStampEvent then
                         for i=1,25 do 
                             UseStampEvent:FireServer()
+                            task.wait()
                         end
                     end
                     if ClaimRewardEvent then
                         for i=1,25 do 
                             ClaimRewardEvent:InvokeServer(i)
+                            task.wait()
                         end
                     end
                     if CompleteBoardEvent then 
@@ -6845,7 +6847,7 @@ if isInLobby then
         end
         
         while true do
-            task.wait(0.1)
+            task.wait(0.5)
             if getgenv().CapsuleEnabled then
                 local clientData = getClientData()
                 if clientData then
@@ -7807,7 +7809,7 @@ end
 if not isInLobby then
     task.spawn(function()
         while true do
-            task.wait(10)
+            task.wait(15)
             if getgenv().FPSBoostEnabled then
                 pcall(function()
                     local lighting = game:GetService("Lighting")
@@ -7826,42 +7828,48 @@ if not isInLobby then
                     lighting.ClockTime = 12
                     lighting.GeographicLatitude = 0
                     
-                    for _, obj in ipairs(game.Workspace:GetDescendants()) do
-                        pcall(function()
-                            if not obj or not obj.Parent then return end
-                            
-                            if obj:IsA("BasePart") then
-                                if obj:IsA("Part") or obj:IsA("MeshPart") or obj:IsA("WedgePart") or obj:IsA("CornerWedgePart") then
-                                    pcall(function() obj.Material = Enum.Material.SmoothPlastic end)
-                                    pcall(function() obj.CastShadow = false end)
-                                    if obj:FindFirstChildOfClass("Texture") then
-                                        for _, t in ipairs(obj:GetChildren()) do
-                                            if t:IsA("Texture") then
-                                                pcall(function() t:Destroy() end)
+                    local descendants = game.Workspace:GetDescendants()
+                    local batchSize = 100
+                    for i = 1, #descendants, batchSize do
+                        for j = i, math.min(i + batchSize - 1, #descendants) do
+                            local obj = descendants[j]
+                            pcall(function()
+                                if not obj or not obj.Parent then return end
+                                
+                                if obj:IsA("BasePart") then
+                                    if obj:IsA("Part") or obj:IsA("MeshPart") or obj:IsA("WedgePart") or obj:IsA("CornerWedgePart") then
+                                        pcall(function() obj.Material = Enum.Material.SmoothPlastic end)
+                                        pcall(function() obj.CastShadow = false end)
+                                        if obj:FindFirstChildOfClass("Texture") then
+                                            for _, t in ipairs(obj:GetChildren()) do
+                                                if t:IsA("Texture") then
+                                                    pcall(function() t:Destroy() end)
+                                                end
                                             end
                                         end
+                                        if obj:IsA("MeshPart") then
+                                            pcall(function() obj.TextureID = "" end)
+                                        end
                                     end
-                                    if obj:IsA("MeshPart") then
-                                        pcall(function() obj.TextureID = "" end)
+                                    if obj:IsA("Decal") then
+                                        pcall(function() obj:Destroy() end)
                                     end
                                 end
-                                if obj:IsA("Decal") then
+                                if obj:IsA("SurfaceAppearance") then
                                     pcall(function() obj:Destroy() end)
                                 end
-                            end
-                            if obj:IsA("SurfaceAppearance") then
-                                pcall(function() obj:Destroy() end)
-                            end
-                            if obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Beam") then
-                                pcall(function() obj.Enabled = false end)
-                            end
-                            if obj:IsA("Sound") then
-                                pcall(function() 
-                                    obj.Volume = 0
-                                    obj:Stop()
-                                end)
-                            end
-                        end)
+                                if obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Beam") then
+                                    pcall(function() obj.Enabled = false end)
+                                end
+                                if obj:IsA("Sound") then
+                                    pcall(function() 
+                                        obj.Volume = 0
+                                        obj:Stop()
+                                    end)
+                                end
+                            end)
+                        end
+                        task.wait()
                     end
                     
                     local mapPath = game.Workspace:FindFirstChild("Map") and game.Workspace.Map:FindFirstChild("Map")
