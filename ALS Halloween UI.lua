@@ -5568,13 +5568,15 @@ task.spawn(function()
                 end
             end)
             
-            if isFinalExpedition and leaveButton and leaveButton.Visible and not (nextButton and nextButton.Visible) then
-                print("[Final Expedition] Waiting for Next button to appear...")
+            -- For Final Expedition, ALWAYS wait for Next button before proceeding
+            if isFinalExpedition then
+                print("[Final Expedition] Detected - waiting for Next button...")
                 local waitTime = 0
-                while waitTime < 5 do
-                    task.wait(0.5)
-                    waitTime = waitTime + 0.5
-                    
+                local maxWaitTime = 10
+                
+                while waitTime < maxWaitTime do
+                    -- Check if Next button exists and is visible
+                    local foundNext = false
                     pcall(function()
                         if buttons then
                             nextButton = buttons:FindFirstChild("Next")
@@ -5589,13 +5591,24 @@ task.spawn(function()
                                     end
                                 end
                             end
+                            
+                            if nextButton and nextButton.Visible then
+                                foundNext = true
+                            end
                         end
                     end)
                     
-                    if nextButton and nextButton.Visible then
-                        print("[Final Expedition] Next button found!")
+                    if foundNext then
+                        print("[Final Expedition] Next button found and visible!")
                         break
                     end
+                    
+                    task.wait(0.5)
+                    waitTime = waitTime + 0.5
+                end
+                
+                if waitTime >= maxWaitTime then
+                    print("[Final Expedition] Timeout waiting for Next button")
                 end
             end
             
