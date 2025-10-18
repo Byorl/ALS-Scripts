@@ -8,7 +8,6 @@ getgenv().ALSScriptLoaded = true
 
 local httpGet = game.HttpGet or game.httpGet or syn and syn.request or http and http.request or request
 if not httpGet then
-    error("[ALS] Your executor does not support HTTP requests!\n\nThis executor (Zenith) may not be compatible.\nPlease try:\n- Wave\n- Solara\n- Electron\n- Delta")
     return
 end
 
