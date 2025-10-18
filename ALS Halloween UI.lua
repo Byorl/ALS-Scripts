@@ -425,6 +425,10 @@ local Tabs = {
         Name = "Main", 
         Image = "rbxassetid://10734950309" 
     }),
+    AutoPlay = TabGroup1:Tab({ 
+        Name = "Auto Play", 
+        Image = "rbxassetid://10723407389" 
+    }),
     Macro = TabGroup1:Tab({ 
         Name = "Macro", 
         Image = "rbxassetid://10734923549" 
@@ -510,6 +514,9 @@ ToggleButton.MouseButton1Click:Connect(toggleUI)
 local Sections = {
     MainLeft = Tabs.Main:Section({ Side = "Left" }),
     MainRight = Tabs.Main:Section({ Side = "Right" }),
+    
+    AutoPlayLeft = Tabs.AutoPlay:Section({ Side = "Left" }),
+    AutoPlayRight = Tabs.AutoPlay:Section({ Side = "Right" }),
     
     MacroLeft = Tabs.Macro:Section({ Side = "Left" }),
     MacroRight = Tabs.Macro:Section({ Side = "Right" }),
@@ -671,12 +678,13 @@ local function createDropdown(section, name, flag, options, multi, callback, def
     }, flag)
 end
 
-local function createSlider(section, name, flag, minimum, maximum, default, callback, displayMethod)
+local function createSlider(section, name, flag, minimum, maximum, default, callback, displayMethod, precision)
     name = tostring(name or "Slider")
     minimum = minimum or 0
     maximum = maximum or 100
     default = default or minimum
     displayMethod = displayMethod or "Default"
+    precision = precision or nil
     
     local savedValue = getgenv().Config.inputs[flag]
     if savedValue ~= nil then
@@ -686,7 +694,7 @@ local function createSlider(section, name, flag, minimum, maximum, default, call
         end
     end
     
-    return section:Slider({
+    local sliderConfig = {
         Name = name,
         Minimum = minimum,
         Maximum = maximum,
@@ -699,7 +707,13 @@ local function createSlider(section, name, flag, minimum, maximum, default, call
                 callback(value) 
             end
         end,
-    }, flag)
+    }
+    
+    if precision then
+        sliderConfig.Precision = precision
+    end
+    
+    return section:Slider(sliderConfig, flag)
 end
 
 local function createMutuallyExclusiveToggle(section, name, flag, otherToggle, otherFlag, callback, default)
@@ -1803,8 +1817,15 @@ local function executeAction(action)
         
     elseif action.ActionType == "Place" then
         local args = {action.Args[1]}
-        if action.Args[2] and type(action.Args[2]) == "table" then
-            args[2] = CFrame.new(unpack(action.Args[2]))
+        if action.Args[2] and type(action.Args[2]) == "table" and #action.Args[2] >= 3 then
+            local success, cframe = pcall(function()
+                return CFrame.new(unpack(action.Args[2]))
+            end)
+            if success and cframe then
+                args[2] = cframe
+            else
+                return false, "Invalid position data"
+            end
         end
         
         if remote:IsA("RemoteFunction") then
@@ -2715,7 +2736,9 @@ getgenv().PortalConfig = {
     selectedMap = savedPortalConfig.selectedMap or "",
     tier = savedPortalConfig.tier or 1,
     useBestPortal = savedPortalConfig.useBestPortal or false,
+    useSelectedTier = savedPortalConfig.useSelectedTier or false,
     pickPortal = savedPortalConfig.pickPortal or false,
+    autoPickReward = savedPortalConfig.autoPickReward or false,
     priorities = savedPortalConfig.priorities or {
         ["Tower Limit"] = 0,
         ["Immunity"] = 0,
@@ -3425,7 +3448,7 @@ local function buildAutoAbilityUI()
             local abilities = getAllAbilities(unitName)
             
             if next(abilities) then
-                local tabSide = (unitInfo.slotIndex <= 3) and "Left" or "Right"
+                local tabSide = "Right"
                 local sideKey = tabSide
                 
                 local displayName = getUnitDisplayName(unitName)
@@ -3742,6 +3765,226 @@ task.spawn(function()
     end
 end)
 
+
+getgenv().AutoPlayConfig = getgenv().AutoPlayConfig or {
+    enabled = false,
+    autoPlace = false,
+    autoUpgrade = false,
+    focusFarm = false,
+    hologram = false,
+    pathPercentage = 1,
+    distanceFromPath = 0,
+    placeCaps = {1, 1, 1, 1, 1, 1},
+    upgradeCaps = {0, 0, 0, 0, 0, 0}
+}
+
+getgenv().AutoPlayConfig.autoPlace = getgenv().Config.toggles.AutoPlayPlace or false
+getgenv().AutoPlayConfig.autoUpgrade = getgenv().Config.toggles.AutoPlayUpgrade or false
+getgenv().AutoPlayConfig.focusFarm = getgenv().Config.toggles.AutoPlayFocusFarm or false
+getgenv().AutoPlayConfig.hologram = getgenv().Config.toggles.AutoPlayHologram or false
+getgenv().AutoPlayConfig.pathPercentage = tonumber(getgenv().Config.inputs.AutoPlayPathPercentage) or 1
+getgenv().AutoPlayConfig.distanceFromPath = tonumber(getgenv().Config.inputs.AutoPlayDistanceFromPath) or 0
+
+for i = 1, 6 do
+    local savedCap = tonumber(getgenv().Config.inputs["AutoPlayPlaceCap" .. i])
+    if savedCap then
+        getgenv().AutoPlayConfig.placeCaps[i] = savedCap
+    end
+end
+
+for i = 1, 6 do
+    local savedCap = tonumber(getgenv().Config.inputs["AutoPlayUpgradeCap" .. i])
+    if savedCap then
+        getgenv().AutoPlayConfig.upgradeCaps[i] = savedCap
+    end
+end
+
+Sections.AutoPlayLeft:Header({ Text = "🤖 Auto Play" })
+Sections.AutoPlayLeft:SubLabel({ Text = "Automated tower placement and upgrades" })
+
+createToggle(
+    Sections.AutoPlayLeft,
+    "Enable Auto Place",
+    "AutoPlayPlace",
+    function(value)
+        getgenv().AutoPlayConfig.autoPlace = value
+    end,
+    getgenv().AutoPlayConfig.autoPlace
+)
+
+createToggle(
+    Sections.AutoPlayLeft,
+    "Enable Auto Upgrade",
+    "AutoPlayUpgrade",
+    function(value)
+        getgenv().AutoPlayConfig.autoUpgrade = value
+    end,
+    getgenv().AutoPlayConfig.autoUpgrade
+)
+
+createToggle(
+    Sections.AutoPlayLeft,
+    "Focus Farm Units",
+    "AutoPlayFocusFarm",
+    function(value)
+        getgenv().AutoPlayConfig.focusFarm = value
+    end,
+    getgenv().AutoPlayConfig.focusFarm
+)
+
+createToggle(
+    Sections.AutoPlayLeft,
+    "Enable Hologram",
+    "AutoPlayHologram",
+    function(value)
+        getgenv().AutoPlayConfig.hologram = value
+    end,
+    getgenv().AutoPlayConfig.hologram
+)
+
+Sections.AutoPlayLeft:Divider()
+
+local pathSlider
+local function updatePathSliderMax()
+    local waypoints = {}
+    pcall(function()
+        local waypointsFolder = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Waypoints")
+        if waypointsFolder then
+            for _, wp in pairs(waypointsFolder:GetChildren()) do
+                if wp:IsA("BasePart") then
+                    local num = tonumber(wp.Name)
+                    if num and num >= 3 then
+                        table.insert(waypoints, num)
+                    end
+                end
+            end
+        end
+    end)
+    
+    local maxWaypoint = #waypoints > 0 and math.max(table.unpack(waypoints)) or 50
+    
+    if pathSlider then
+        pcall(function()
+            pathSlider:UpdateValue(math.min(getgenv().AutoPlayConfig.pathPercentage or 1, maxWaypoint))
+        end)
+    end
+end
+
+pathSlider = createSlider(
+    Sections.AutoPlayLeft,
+    "Path Waypoint",
+    "AutoPlayPathPercentage",
+    1,
+    50,
+    getgenv().AutoPlayConfig.pathPercentage,
+    function(value)
+        getgenv().AutoPlayConfig.pathPercentage = math.floor(value)
+    end,
+    "Default",
+    0
+)
+
+task.spawn(function()
+    task.wait(2)
+    updatePathSliderMax()
+end)
+
+createSlider(
+    Sections.AutoPlayLeft,
+    "Distance from Path",
+    "AutoPlayDistanceFromPath",
+    0,
+    100,
+    getgenv().AutoPlayConfig.distanceFromPath,
+    function(value)
+        getgenv().AutoPlayConfig.distanceFromPath = math.floor(value)
+    end,
+    "Default",
+    0
+)
+
+Sections.AutoPlayRight:Header({ Text = "⚙️ Auto Place & Upgrade Settings" })
+Sections.AutoPlayRight:SubLabel({ Text = "Configure placement and upgrade caps per slot" })
+
+getgenv().AutoPlaySliders = {
+    placeCaps = {},
+    upgradeCaps = {}
+}
+
+local function getUnitMaxLevel(unitName)
+    if not unitName then return 20 end
+    local towerInfo = getTowerInfo(unitName)
+    if not towerInfo then return 20 end
+    
+    local maxLevel = 0
+    for level, data in pairs(towerInfo) do
+        if type(level) == "number" and level > 0 and level > maxLevel then
+            maxLevel = level
+        end
+    end
+    
+    return maxLevel > 0 and maxLevel or 20
+end
+
+local function updateAutoPlaySliders()
+    local clientData = getClientData()
+    if not clientData or not clientData.Slots then return end
+    
+    local sortedSlots = {"Slot1", "Slot2", "Slot3", "Slot4", "Slot5", "Slot6"}
+    for i = 1, 6 do
+        local slotData = clientData.Slots[sortedSlots[i]]
+        local unitName = slotData and slotData.Value or nil
+        local maxLevel = getUnitMaxLevel(unitName)
+        
+        if getgenv().AutoPlaySliders.upgradeCaps[i] then
+            pcall(function()
+                getgenv().AutoPlaySliders.upgradeCaps[i]:UpdateName("Upgrade Cap " .. i .. (unitName and " (" .. unitName .. ")" or ""))
+            end)
+        end
+    end
+end
+
+for i = 1, 6 do
+    getgenv().AutoPlaySliders.placeCaps[i] = createSlider(
+        Sections.AutoPlayRight,
+        "Place Cap " .. i,
+        "AutoPlayPlaceCap" .. i,
+        0,
+        5,
+        getgenv().AutoPlayConfig.placeCaps[i],
+        function(value)
+            getgenv().AutoPlayConfig.placeCaps[i] = math.floor(value)
+        end,
+        "Default",
+        0
+    )
+end
+
+Sections.AutoPlayRight:Divider()
+
+for i = 1, 6 do
+    local savedValue = getgenv().Config.inputs["AutoPlayUpgradeCap" .. i]
+    local defaultValue = savedValue and tonumber(savedValue) or 0
+    
+    getgenv().AutoPlaySliders.upgradeCaps[i] = createSlider(
+        Sections.AutoPlayRight,
+        "Upgrade Cap " .. i,
+        "AutoPlayUpgradeCap" .. i,
+        0,
+        20,
+        defaultValue,
+        function(value)
+            getgenv().AutoPlayConfig.upgradeCaps[i] = math.floor(value)
+        end,
+        "Default",
+        0
+    )
+end
+
+task.spawn(function()
+    task.wait(3)
+    updateAutoPlaySliders()
+end)
 
 
 Sections.MacroLeft:Header({ Text = "📁 Macro Management" })
@@ -5282,12 +5525,16 @@ end
 local state = getgenv()._AbilityState
 local helpers1 = getgenv()._AbilityHelpers1
 
-local function isOnCooldown(towerName, abilityName)
-    local d = helpers1.getAbilityData(towerName, abilityName)
+local function isOnCooldown(towerUniqueId, abilityName, actualTowerName)
+    local nameForData = actualTowerName or towerUniqueId:match("^([^_]+)")
+    
+    local d = helpers1.getAbilityData(nameForData, abilityName)
     if not d or not d.cooldown then return false end
-    local key = towerName .. "_" .. abilityName
+    
+    local key = towerUniqueId .. "_" .. abilityName
     local last = state.abilityCooldowns[key]
     if not last then return false end
+    
     local scale = helpers1.getCurrentTimeScale()
     local effectiveCd = d.cooldown / scale
     local timeSinceUse = tick() - last
@@ -5295,8 +5542,8 @@ local function isOnCooldown(towerName, abilityName)
     return cooldownRemaining > 0.5
 end
 
-local function setAbilityUsed(towerName, abilityName)
-    state.abilityCooldowns[towerName.."_"..abilityName] = tick()
+local function setAbilityUsed(towerUniqueId, abilityName)
+    state.abilityCooldowns[towerUniqueId.."_"..abilityName] = tick()
 end
 
 local function bossExists()
@@ -5416,7 +5663,8 @@ end
 
 local function getTowerInfoName(tower)
     if not tower then return nil end
-    return tower.Name
+    local uniqueId = tostring(tower)
+    return tower.Name .. "_" .. uniqueId:sub(-8)
 end
 
 local function resetRoundTrackers()
@@ -5466,7 +5714,7 @@ local function checkGameEndedReset()
 end
 
 local function processAbility(tower, unitName, abilityName, cfg, currentWave, hasBoss)
-    local infoName = funcs.getTowerInfoName(tower)
+    local infoName = funcs.getTowerInfoName(tower) 
     local towerLevel = funcs.getUpgradeLevel(tower)
     local savedCfg = getgenv().Config.abilities[unitName] and getgenv().Config.abilities[unitName][abilityName]
     
@@ -5482,11 +5730,11 @@ local function processAbility(tower, unitName, abilityName, cfg, currentWave, ha
     
     local shouldUse = true
     
-    if not funcs.hasAbilityBeenUnlocked(infoName, abilityName, towerLevel) then
+    if not funcs.hasAbilityBeenUnlocked(unitName, abilityName, towerLevel) then
         return
     end
     
-    if funcs.isOnCooldown(infoName, abilityName) then
+    if funcs.isOnCooldown(infoName, abilityName, unitName) then
         return
     end
     
@@ -5508,7 +5756,7 @@ local function processAbility(tower, unitName, abilityName, cfg, currentWave, ha
         end
     end
     
-    if not funcs.isOnCooldown(infoName, abilityName) then
+    if not funcs.isOnCooldown(infoName, abilityName, unitName) then
         funcs.useAbility(tower, abilityName)
         funcs.setAbilityUsed(infoName, abilityName)
     end
@@ -5540,10 +5788,11 @@ task.spawn(function()
             if not getgenv().UnitAbilities or type(getgenv().UnitAbilities) ~= "table" then return end
             
             for unitName, abilitiesConfig in pairs(getgenv().UnitAbilities) do
-                local tower = Towers:FindFirstChild(unitName)
-                if tower then
-                    for abilityName, cfg in pairs(abilitiesConfig) do
-                        processAbility(tower, unitName, abilityName, cfg, currentWave, hasBoss)
+                for _, tower in pairs(Towers:GetChildren()) do
+                    if tower.Name == unitName and tower:FindFirstChild("Owner") and tower.Owner.Value == LocalPlayer then
+                        for abilityName, cfg in pairs(abilitiesConfig) do
+                            processAbility(tower, unitName, abilityName, cfg, currentWave, hasBoss)
+                        end
                     end
                 end
             end
@@ -5563,7 +5812,14 @@ do
                 local towers = workspace:FindFirstChild("Towers")
                 if not towers then return end
                 
-                local bulma = towers:FindFirstChild("Bulma")
+                local bulma = nil
+                for _, tower in pairs(towers:GetChildren()) do
+                    if tower.Name == "Bulma" and tower:FindFirstChild("Owner") and tower.Owner.Value == LocalPlayer then
+                        bulma = tower
+                        break
+                    end
+                end
+                
                 if not bulma then return end
                 
                 local meters = bulma:FindFirstChild("Meters")
@@ -5637,7 +5893,7 @@ do
         if not Towers then return nil end
         
         for _, tower in ipairs(Towers:GetChildren()) do
-            if tower.Name == "JinMoriGodly" and tower:IsA("Model") then
+            if tower.Name == "JinMoriGodly" and tower:IsA("Model") and tower:FindFirstChild("Owner") and tower.Owner.Value == LocalPlayer then
                 return tower
             end
         end
@@ -5650,7 +5906,7 @@ do
         
         local clones = {}
         for _, tower in ipairs(Towers:GetChildren()) do
-            if tower.Name == "JinMoriGodlyClone" and tower:IsA("Model") then
+            if tower.Name == "JinMoriGodlyClone" and tower:IsA("Model") and tower:FindFirstChild("Owner") and tower.Owner.Value == LocalPlayer then
                 table.insert(clones, tower)
             end
         end
@@ -5687,7 +5943,7 @@ do
         if cash < (tonumber(nextUpgradeCost) or 0) then return false end
         
         local success, err = pcall(function()
-            local UpgradeEvent = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("UpgradeEvent")
+            local UpgradeEvent = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("Upgrade")
             if UpgradeEvent then
                 UpgradeEvent:InvokeServer(cloneTower)
                 return true
@@ -6123,9 +6379,7 @@ local function activatePortalAndStart(portalID)
         print("[Portal] ❌ No portal ID provided")
         return false 
     end
-    
-    print("[Portal] 🎯 Attempting to activate portal: " .. portalID)
-    
+        
     local success, err = pcall(function()
         local remotes = RS:FindFirstChild("Remotes")
         if not remotes then
@@ -6143,18 +6397,11 @@ local function activatePortalAndStart(portalID)
             return false
         end
         
-        print("[Portal] 🔍 Contents of Portals folder:")
-        for _, child in ipairs(portalsFolder:GetChildren()) do
-            print("  - " .. child.Name .. " (" .. child.ClassName .. ")")
-        end
-        
         local activateEvent = portalsFolder:FindFirstChild("Activate")
         if not activateEvent then
-            print("[Portal] ❌ ActivateEvent not found in Portals folder")
             return false
         end
         
-        print("[Portal] ✓ Found ActivateEvent, calling InvokeServer(" .. portalID .. ")")
         local result = activateEvent:InvokeServer(portalID)
         print("[Portal] ✓ ActivateEvent returned:", tostring(result))
         
@@ -6179,72 +6426,150 @@ local function activatePortalAndStart(portalID)
     return success
 end
 
-local function fastSelectPortal()
-    print("[Portal Reward] Fast selecting portal...")
-    
-    local ok = pcall(function()
+local function fastSelectPortal()    
+    local ok, result = pcall(function()
         local prompt = LocalPlayer.PlayerGui:FindFirstChild("Prompt")
-        if not prompt then return false end
-        
-        local portalButton = nil
-        for _, descendant in ipairs(prompt:GetDescendants()) do
-            if descendant:IsA("TextButton") and descendant.Name == "TextButton" then
-                local hasConfirmText = false
-                for _, child in ipairs(descendant:GetChildren()) do
-                    if child:IsA("TextLabel") and (child.Text == "Choose a portal..." or child.Text == "Confirm") then
-                        hasConfirmText = true
-                        break
-                    end
-                end
-                
-                if not hasConfirmText then
-                    portalButton = descendant
-                    print("[Portal Reward] ✓ Found portal button")
-                    break
-                end
-            end
+        if not prompt then 
+            return false 
         end
         
-        if not portalButton then
-            print("[Portal Reward] ❌ No portal button found")
+        local frame1 = prompt:FindFirstChild("Frame")
+        if not frame1 then 
+            return false 
+        end
+        
+        local frame2 = frame1:FindFirstChild("Frame")
+        if not frame2 then 
+            return false 
+        end
+        
+        local children = frame2:GetChildren()
+        if #children < 4 then
             return false
         end
         
-        print("[Portal Reward] Clicking portal...")
-        for _, conn in ipairs(getconnections(portalButton.MouseButton1Click)) do
-            conn:Fire()
-        end
-        task.wait(0.5)
+        local fourthChild = children[4]
         
-        print("[Portal Reward] Looking for confirm button...")
+        local subChildren = fourthChild:GetChildren()
+        if #subChildren < 2 then
+            return false
+        end
+        
+        local secondSubChild = subChildren[2]
+        
+        local portalButton = secondSubChild:FindFirstChild("TextButton")
+        if not portalButton then
+            return false
+        end
+        
+        local GuiService = game:GetService("GuiService")
+        local VIM = game:GetService("VirtualInputManager")
+        
+        GuiService.SelectedObject = nil
+        task.wait(0.1)
+        
+        GuiService.SelectedObject = portalButton
+        
+        local lockConnection
+        lockConnection = RunService.Heartbeat:Connect(function()
+            if GuiService.SelectedObject ~= portalButton then
+                GuiService.SelectedObject = portalButton
+            end
+        end)
+        
+        task.wait(0.2)
+        
+        if GuiService.SelectedObject == portalButton then
+            print("[Portal Reward] Pressing Enter to select portal...")
+            VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
+            task.wait(0.02)
+            VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
+            
+            task.wait(0.3)
+            
+            if lockConnection then
+                lockConnection:Disconnect()
+            end
+            
+            GuiService.SelectedObject = nil
+        else
+            if lockConnection then
+                lockConnection:Disconnect()
+            end
+            print("[Portal Reward] ❌ Failed to select portal button")
+            return false
+        end
+        
+        task.wait(0.2)
+        
         local confirmButton = nil
-        for _, descendant in ipairs(prompt:GetDescendants()) do
-            if descendant:IsA("TextButton") then
-                for _, child in ipairs(descendant:GetChildren()) do
-                    if child:IsA("TextLabel") and (child.Text == "Choose a portal..." or child.Text == "Confirm") then
-                        confirmButton = descendant
+        
+        local frame1 = prompt:FindFirstChild("Frame")
+        if frame1 then
+            local frame2 = frame1:FindFirstChild("Frame")
+            if frame2 then
+                local children = frame2:GetChildren()
+                if #children >= 5 then
+                    local fifthChild = children[5]
+                    confirmButton = fifthChild:FindFirstChild("TextButton")
+                    if confirmButton then
                         print("[Portal Reward] ✓ Found confirm button")
-                        break
                     end
                 end
-                if confirmButton then break end
             end
         end
         
         if confirmButton then
-            print("[Portal Reward] Clicking confirm...")
-            for _, conn in ipairs(getconnections(confirmButton.MouseButton1Click)) do
-                conn:Fire()
+            print("[Portal Reward] Selecting confirm button...")
+            GuiService.SelectedObject = nil
+            task.wait(0.05)
+            
+            GuiService.SelectedObject = confirmButton
+            
+            local confirmLock
+            confirmLock = RunService.Heartbeat:Connect(function()
+                if GuiService.SelectedObject ~= confirmButton then
+                    GuiService.SelectedObject = confirmButton
+                end
+            end)
+            
+            task.wait(0.2)
+            
+            if GuiService.SelectedObject == confirmButton then
+                for i = 1, 3 do
+                    VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
+                    task.wait(0.02)
+                    VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
+                    task.wait(0.02)
+                end
+                
+                task.wait(0.1)
+                
+                if confirmLock then
+                    confirmLock:Disconnect()
+                end
+                
+                GuiService.SelectedObject = nil
+                print("[Portal Reward] ✅ Portal selected!")
+                return true
+            else
+                if confirmLock then
+                    confirmLock:Disconnect()
+                end
+                print("[Portal Reward] ❌ Failed to select confirm button")
+                return false
             end
-            print("[Portal Reward] ✅ Portal selected!")
-            return true
         else
             print("[Portal Reward] ❌ Confirm button not found")
             return false
         end
     end)
     
-    return ok
+    if not ok then
+        warn("[Portal Reward] Error:", result)
+    end
+    
+    return ok and result
 end
 
 task.spawn(function()
@@ -6282,7 +6607,6 @@ task.spawn(function()
                     if now - lastProcessedTime > 10 then
                         isProcessing = true
                         lastProcessedTime = now
-                        print("[Portal Reward] ========== Portal selection screen detected! ==========")
                         task.wait(1)
                         
                         local success = fastSelectPortal()
@@ -6291,7 +6615,6 @@ task.spawn(function()
                             task.wait(2)
                             for i = 1, 10 do
                                 if not LocalPlayer.PlayerGui:FindFirstChild("Prompt") then
-                                    print("[Portal Reward] ✓ Prompt closed, selection complete")
                                     break
                                 end
                                 task.wait(0.5)
@@ -6311,17 +6634,42 @@ task.spawn(function()
     end
 end)
 
-if isInLobby then
-    task.spawn(function()
-        local lastActivationTime = 0
+task.spawn(function()
+    local lastActivationTime = 0
+    
+    while true do
+        task.wait(2)
         
-        while true do
-            task.wait(2)
+        local shouldActivate = (getgenv().PortalConfig.useBestPortal == true) or 
+                               (getgenv().PortalConfig.useSelectedTier == true)
+        
+        if shouldActivate then
+            local currentlyInLobby = false
+            pcall(function()
+                local lobbyCheck = workspace:FindFirstChild("Lobby")
+                currentlyInLobby = lobbyCheck ~= nil
+            end)
             
-            local shouldActivate = (getgenv().PortalConfig.useBestPortal == true) or 
-                                   (getgenv().PortalConfig.useSelectedTier == true)
+            local canActivate = false
             
-            if shouldActivate then
+            if currentlyInLobby then
+                canActivate = true
+            else
+                local endGameUI = LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
+                if endGameUI then
+                    local gameHasEnded = false
+                    if endGameUI:FindFirstChild("Frame") then
+                        gameHasEnded = endGameUI.Frame.Visible
+                    elseif endGameUI:FindFirstChild("BG") then
+                        gameHasEnded = endGameUI.BG.Visible
+                    else
+                        gameHasEnded = endGameUI.Enabled
+                    end
+                    canActivate = gameHasEnded
+                end
+            end
+            
+            if canActivate then
                 local promptExists = LocalPlayer.PlayerGui:FindFirstChild("Prompt") ~= nil
                 
                 if not promptExists then
@@ -6340,6 +6688,14 @@ if isInLobby then
                     end
                 end
             end
+        end
+    end
+end)
+
+if isInLobby then
+    task.spawn(function()
+        while true do
+            task.wait(2)
         end
     end)
 end
@@ -6888,21 +7244,23 @@ if isInLobby then
         
         
         while true do
-            task.wait(0.5)
+            task.wait(2)
             if getgenv().BingoEnabled then
                 pcall(function()
                     if UseStampEvent then
                         for i=1,25 do 
                             UseStampEvent:FireServer()
-                            task.wait()
+                            task.wait(0.1)
                         end
                     end
+                    task.wait(0.5)
                     if ClaimRewardEvent then
                         for i=1,25 do 
                             ClaimRewardEvent:InvokeServer(i)
-                            task.wait()
+                            task.wait(0.1)
                         end
                     end
+                    task.wait(0.5)
                     if CompleteBoardEvent then 
                         CompleteBoardEvent:InvokeServer()
                     end
@@ -7153,7 +7511,11 @@ do
                     end
                 end
             end
-            table.sort(cardButtons, function(a,b) return a.button.AbsolutePosition.X < b.button.AbsolutePosition.X end)
+            table.sort(cardButtons, function(a,b) 
+                if not a.button or not a.button.AbsolutePosition then return false end
+                if not b.button or not b.button.AbsolutePosition then return true end
+                return a.button.AbsolutePosition.X < b.button.AbsolutePosition.X 
+            end)
             for i, c in ipairs(cardButtons) do
                 cards[i] = { name=c.text, button=c.button }
             end
@@ -7164,9 +7526,20 @@ do
     
     local function findBestCard(list)
         local bestIndex, bestPriority = nil, math.huge
+        
+        local isBossRush = false
+        pcall(function()
+            local gamemode = RS:FindFirstChild("Gamemode")
+            if gamemode and gamemode.Value == "BossRush" then
+                isBossRush = true
+            end
+        end)
+        
+        local priorityTable = isBossRush and getgenv().BossRushCardPriority or getgenv().CardPriority
+        
         for i=1,#list do
             local nm = list[i].name
-            local p = (getgenv().CardPriority and getgenv().CardPriority[nm]) or 999
+            local p = (priorityTable and priorityTable[nm]) or 999
             if p < bestPriority and p < 999 then
                 bestPriority = p
                 bestIndex = i
@@ -7565,6 +7938,7 @@ do
             
             local absPos = bestCard.button.AbsolutePosition
             local absSize = bestCard.button.AbsoluteSize
+            if not absPos or not absSize then return end
             local centerX = absPos.X + (absSize.X / 2)
             local centerY = absPos.Y + (absSize.Y * 0.7)
             
@@ -7609,12 +7983,25 @@ do
     
     while true do
         task.wait(1.5)
-        if getgenv().CardSelectionEnabled then
+        
+        local isBossRush = false
+        pcall(function()
+            local gamemode = RS:FindFirstChild("Gamemode")
+            if gamemode and gamemode.Value == "BossRush" then
+                isBossRush = true
+            end
+        end)
+        
+        if isBossRush and getgenv().BossRushEnabled then
             selectCard()
-        elseif getgenv().SlowerCardSelectionEnabled then
-            selectCardSlower()
-        elseif getgenv().SmartCardSelectionEnabled then
-            selectCardSmart()
+        elseif not isBossRush then
+            if getgenv().CardSelectionEnabled then
+                selectCard()
+            elseif getgenv().SlowerCardSelectionEnabled then
+                selectCardSlower()
+            elseif getgenv().SmartCardSelectionEnabled then
+                selectCardSmart()
+            end
         end
     end
     end)
@@ -8004,5 +8391,517 @@ if not isInLobby then
                 end)
             end
         end
+    end)
+end
+
+if not isInLobby then
+    task.spawn(function()
+        local placedTowers = {}
+        local hologramParts = {}
+        
+        local function getClientData()
+            local ok, data = pcall(function()
+                return require(RS:WaitForChild("Modules"):WaitForChild("ClientData"))
+            end)
+            return ok and data or nil
+        end
+        
+        local function getTowerInfo(unitName)
+            local ok, data = pcall(function()
+                local towerInfoPath = RS:WaitForChild("Modules"):WaitForChild("TowerInfo")
+                local towerModule = towerInfoPath:FindFirstChild(unitName)
+                if towerModule and towerModule:IsA("ModuleScript") then
+                    return require(towerModule)
+                end
+            end)
+            return ok and data or nil
+        end
+        
+        local function isFarmUnit(unitName)
+            local towerInfo = getTowerInfo(unitName)
+            if not towerInfo or not towerInfo[1] then return false end
+            return towerInfo[1].Attack == "Cash"
+        end
+        
+        local function getUnitMaxLevel(unitName)
+            if not unitName then return 20 end
+            local towerInfo = getTowerInfo(unitName)
+            if not towerInfo then return 20 end
+            
+            local maxLevel = 0
+            for level, data in pairs(towerInfo) do
+                if type(level) == "number" and level > 0 and level > maxLevel then
+                    maxLevel = level
+                end
+            end
+            
+            return maxLevel > 0 and maxLevel or 20
+        end
+        
+        local function getWaypoints()
+            local waypoints = {}
+            local waypointsFolder = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Waypoints")
+            if not waypointsFolder then return waypoints end
+            
+            for _, wp in pairs(waypointsFolder:GetChildren()) do
+                if wp:IsA("BasePart") then
+                    local num = tonumber(wp.Name)
+                    if num and num >= 3 then
+                        table.insert(waypoints, {number = num, part = wp})
+                    end
+                end
+            end
+            
+            table.sort(waypoints, function(a, b) return a.number < b.number end)
+            return waypoints
+        end
+        
+        local function isValidPlacement(position)
+            local rayParams = RaycastParams.new()
+            rayParams.FilterType = Enum.RaycastFilterType.Blacklist
+            local filterList = {}
+            if workspace:FindFirstChild("Towers") then table.insert(filterList, workspace.Towers) end
+            if workspace:FindFirstChild("Enemies") then table.insert(filterList, workspace.Enemies) end
+            rayParams.FilterDescendantsInstances = filterList
+            
+            local rayOrigin = position + Vector3.new(0, 10, 0)
+            local rayResult = workspace:Raycast(rayOrigin, Vector3.new(0, -20, 0), rayParams)
+            
+            if not rayResult then return false end
+            
+            local hitPart = rayResult.Instance
+            if not hitPart then return false end
+            
+            local partName = hitPart.Name:lower()
+            if partName:find("waypoint") or partName:find("path") or partName:find("rock") then
+                return false
+            end
+            
+            if hitPart.Parent and (hitPart.Parent.Name == "Waypoints" or hitPart.Parent.Name:lower():find("path")) then
+                return false
+            end
+            
+            return true
+        end
+        
+        local function getPlacementPosition(slotNum, waypointIndex, distance)
+            local waypoints = getWaypoints()
+            if #waypoints == 0 then return nil end
+            
+            local index = math.clamp(waypointIndex, 1, #waypoints)
+            local waypoint = waypoints[index].part
+            
+            if not waypoint or not waypoint.Position then return nil end
+            
+            if distance == 0 then distance = 10 end
+            
+            local baseAngle = (slotNum - 1) * 60
+            
+            for attempt = 1, 15 do
+                local angleVariation = math.random(-20, 20)
+                local angle = math.rad(baseAngle + angleVariation)
+                
+                local distVariation = distance + math.random(-3, 5)
+                
+                local offset = Vector3.new(
+                    math.cos(angle) * distVariation,
+                    0,
+                    math.sin(angle) * distVariation
+                )
+                
+                local pos = waypoint.Position + offset
+                local cframe = CFrame.new(pos.X, waypoint.Position.Y, pos.Z)
+                
+                if isValidPlacement(cframe.Position) then
+                    return cframe
+                end
+            end
+            
+            local fallbackAngle = math.rad(baseAngle)
+            local fallbackOffset = Vector3.new(
+                math.cos(fallbackAngle) * (distance + 5),
+                0,
+                math.sin(fallbackAngle) * (distance + 5)
+            )
+            local fallbackPos = waypoint.Position + fallbackOffset
+            return CFrame.new(fallbackPos.X, waypoint.Position.Y, fallbackPos.Z)
+        end
+        
+        local function createHologram(unitName, cframe, slotNum)
+            if not getgenv().AutoPlayConfig.hologram then return end
+            
+            local position = cframe.Position
+            
+            local part = Instance.new("Part")
+            part.Size = Vector3.new(0.5, 0.5, 0.5)
+            part.Position = position + Vector3.new(0, 2, 0)
+            part.Anchored = true
+            part.CanCollide = false
+            part.Transparency = 0.5
+            part.Color = Color3.fromRGB(0, 255, 100)
+            part.Material = Enum.Material.Neon
+            part.Shape = Enum.PartType.Ball
+            part.Parent = workspace
+            
+            local beam = Instance.new("Part")
+            beam.Size = Vector3.new(0.2, 4, 0.2)
+            beam.Position = position
+            beam.Anchored = true
+            beam.CanCollide = false
+            beam.Transparency = 0.6
+            beam.Color = Color3.fromRGB(0, 255, 100)
+            beam.Material = Enum.Material.Neon
+            beam.Parent = workspace
+            
+            local billboard = Instance.new("BillboardGui")
+            billboard.Size = UDim2.new(0, 120, 0, 30)
+            billboard.StudsOffset = Vector3.new(0, 3, 0)
+            billboard.AlwaysOnTop = true
+            billboard.Parent = part
+            
+            local label = Instance.new("TextLabel")
+            label.Size = UDim2.new(1, 0, 1, 0)
+            label.BackgroundTransparency = 0.3
+            label.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+            label.Text = unitName .. " (Slot " .. slotNum .. ")"
+            label.TextColor3 = Color3.fromRGB(0, 255, 100)
+            label.TextScaled = true
+            label.Font = Enum.Font.GothamBold
+            label.Parent = billboard
+            
+            local corner = Instance.new("UICorner")
+            corner.CornerRadius = UDim.new(0, 4)
+            corner.Parent = label
+            
+            table.insert(hologramParts, part)
+            table.insert(hologramParts, beam)
+            return part
+        end
+        
+        local function clearHolograms()
+            for _, part in pairs(hologramParts) do
+                if part and part.Parent then
+                    part:Destroy()
+                end
+            end
+            hologramParts = {}
+        end
+        
+        local function getPlacedTowerCount(slotNum)
+            local clientData = getClientData()
+            if not clientData or not clientData.Slots then return 0 end
+            
+            local sortedSlots = {"Slot1", "Slot2", "Slot3", "Slot4", "Slot5", "Slot6"}
+            local slotData = clientData.Slots[sortedSlots[slotNum]]
+            if not slotData or not slotData.Value then return 0 end
+            
+            local unitName = slotData.Value
+            local towersFolder = workspace:FindFirstChild("Towers")
+            if not towersFolder then return 0 end
+            
+            local count = 0
+            for _, tower in pairs(towersFolder:GetChildren()) do
+                if tower.Name == unitName then
+                    local owner = tower:FindFirstChild("Owner")
+                    if owner and owner.Value == Players.LocalPlayer then
+                        count = count + 1
+                    end
+                end
+            end
+            
+            return count
+        end
+        
+        local function placeTower(unitName, cframe, slotNum)
+            if not cframe then return false end
+            
+            local placeEvent = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("PlaceTower")
+            if not placeEvent then return false end
+            
+            local countBefore = getPlacedTowerCount(slotNum)
+            
+            local success, result = pcall(function()
+                return placeEvent:FireServer(unitName, cframe)
+            end)
+            
+            if not success then return false end
+            
+            task.wait(0.5)
+            
+            local countAfter = getPlacedTowerCount(slotNum)
+            if countAfter > countBefore then return true end
+            
+            return false
+        end
+        
+        local function upgradeTower(tower)
+            if not tower then return false end
+            
+            local upgradeEvent = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("Upgrade")
+            if not upgradeEvent then return false end
+            
+            local success, result = pcall(function()
+                return upgradeEvent:InvokeServer(tower)
+            end)
+            
+            if not success then return false end
+            
+            return true
+        end
+        
+        local function getTowerLevel(tower)
+            if not tower then return 0 end
+            local level = 0
+            pcall(function()
+                local upgradeValue = tower:FindFirstChild("Upgrade")
+                if upgradeValue then
+                    level = upgradeValue.Value or 0
+                end
+            end)
+            return level
+        end
+        
+        local function hologramLoop()
+            task.wait(3)
+            print("[AutoPlay] Hologram loop started")
+            
+            while true do
+                task.wait(1)
+                
+                if not getgenv().AutoPlayConfig.hologram then
+                    clearHolograms()
+                    task.wait(1)
+                    continue
+                end
+                
+                clearHolograms()
+                
+                local clientData = getClientData()
+                if not clientData or not clientData.Slots then continue end
+                
+                local pathIndex = math.floor(getgenv().AutoPlayConfig.pathPercentage or 1)
+                local distance = math.floor(getgenv().AutoPlayConfig.distanceFromPath or 10)
+                
+                local sortedSlots = {"Slot1", "Slot2", "Slot3", "Slot4", "Slot5", "Slot6"}
+                for slotNum = 1, 6 do
+                    local slotData = clientData.Slots[sortedSlots[slotNum]]
+                    if slotData and slotData.Value then
+                        local unitName = slotData.Value
+                        local placeCap = math.floor(getgenv().AutoPlayConfig.placeCaps[slotNum] or 1)
+                        local currentCount = getPlacedTowerCount(slotNum)
+                        
+                        if placeCap > 0 then
+                            for i = currentCount + 1, placeCap do
+                                local position = getPlacementPosition(slotNum, pathIndex, distance)
+                                if position then
+                                    createHologram(unitName, position, slotNum)
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        
+        local function autoPlaceLoop()
+            task.wait(3)
+            
+            while true do
+                task.wait(2)
+                
+                if not getgenv().AutoPlayConfig.autoPlace then
+                    task.wait(1)
+                    continue
+                end
+                
+                local clientData = getClientData()
+                if not clientData or not clientData.Slots then continue end
+                
+                local currentCash = tonumber(getgenv().MacroCurrentCash) or 0
+                
+                local pathIndex = math.floor(getgenv().AutoPlayConfig.pathPercentage or 1)
+                local distance = math.floor(getgenv().AutoPlayConfig.distanceFromPath or 10)
+                
+                local unitsToPlace = {}
+                local sortedSlots = {"Slot1", "Slot2", "Slot3", "Slot4", "Slot5", "Slot6"}
+                
+                for slotNum = 1, 6 do
+                    local slotData = clientData.Slots[sortedSlots[slotNum]]
+                    if slotData and slotData.Value then
+                        local unitName = slotData.Value
+                        local placeCap = math.floor(getgenv().AutoPlayConfig.placeCaps[slotNum] or 1)
+                        local currentCount = getPlacedTowerCount(slotNum)
+                        
+                        if placeCap > 0 and currentCount < placeCap then
+                            local cost = getgenv().GetPlaceCost and getgenv().GetPlaceCost(unitName) or 0
+                            local isFarm = isFarmUnit(unitName)
+                            
+                            table.insert(unitsToPlace, {
+                                slotNum = slotNum,
+                                unitName = unitName,
+                                cost = cost,
+                                isFarm = isFarm
+                            })
+                        end
+                    end
+                end
+                
+                if getgenv().AutoPlayConfig.focusFarm then
+                    table.sort(unitsToPlace, function(a, b)
+                        if a.isFarm ~= b.isFarm then
+                            return a.isFarm 
+                        end
+                        return a.slotNum < b.slotNum
+                    end)
+                else
+                    table.sort(unitsToPlace, function(a, b)
+                        return a.slotNum < b.slotNum
+                    end)
+                end
+                
+                for _, unitData in ipairs(unitsToPlace) do
+                    currentCash = tonumber(getgenv().MacroCurrentCash) or 0
+                    
+                    if currentCash >= unitData.cost then
+                        print("[AutoPlay] Attempting to place " .. unitData.unitName .. " (Slot " .. unitData.slotNum .. ")")
+                        
+                        local position = getPlacementPosition(unitData.slotNum, pathIndex, distance)
+                        if position then
+                            print("[AutoPlay] Placing tower at position")
+                            if placeTower(unitData.unitName, position, unitData.slotNum) then
+                                task.wait(1)
+                                break 
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        
+        local function autoUpgradeLoop()
+            task.wait(3)
+            
+            while true do
+                task.wait(1)
+                
+                if not getgenv().AutoPlayConfig.autoUpgrade then continue end
+                
+                local clientData = getClientData()
+                if not clientData or not clientData.Slots then continue end
+                
+                local towersFolder = workspace:FindFirstChild("Towers")
+                if not towersFolder then continue end
+                
+                local farmUnits = {}
+                local normalUnits = {}
+                
+                local sortedSlots = {"Slot1", "Slot2", "Slot3", "Slot4", "Slot5", "Slot6"}
+                for slotNum = 1, 6 do
+                    local slotData = clientData.Slots[sortedSlots[slotNum]]
+                    if slotData and slotData.Value then
+                        local unitName = slotData.Value
+                        local upgradeCap = math.floor(getgenv().AutoPlayConfig.upgradeCaps[slotNum] or 10)
+                        
+                        if upgradeCap > 0 then
+                            local maxLevel = getUnitMaxLevel(unitName)
+                            
+                            for _, tower in pairs(towersFolder:GetChildren()) do
+                                if tower.Name == unitName then
+                                    local owner = tower:FindFirstChild("Owner")
+                                    if owner and owner.Value == Players.LocalPlayer then
+                                        local level = getTowerLevel(tower)
+                                        local maxUpgrade = tower:FindFirstChild("MaxUpgrade")
+                                        local actualMaxLevel = maxUpgrade and maxUpgrade.Value or maxLevel
+                                        
+                                        local effectiveCap = math.min(upgradeCap, actualMaxLevel)
+                                        
+                                        if level < effectiveCap then
+                                            if isFarmUnit(unitName) then
+                                                table.insert(farmUnits, {tower = tower, level = level, cap = effectiveCap, unitName = unitName})
+                                            else
+                                                table.insert(normalUnits, {tower = tower, level = level, cap = effectiveCap, unitName = unitName})
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+                
+                table.sort(farmUnits, function(a, b) return a.level < b.level end)
+                table.sort(normalUnits, function(a, b) return a.level < b.level end)
+                
+                local currentCash = tonumber(getgenv().MacroCurrentCash) or 0
+                
+                local upgraded = false
+                
+                if getgenv().AutoPlayConfig.focusFarm then
+                    for _, data in ipairs(farmUnits) do
+                        if upgraded then break end
+                        currentCash = tonumber(getgenv().MacroCurrentCash) or 0
+                        local upgradeCost = getgenv().GetUpgradeCost and getgenv().GetUpgradeCost(data.unitName, data.level) or 0
+                        
+                        if upgradeCost > 0 and currentCash >= upgradeCost then
+                            print("[AutoUpgrade] [FARM PRIORITY] Upgrading " .. data.unitName .. " from level " .. data.level .. " (Cost: " .. upgradeCost .. ")")
+                            if upgradeTower(data.tower) then
+                                upgraded = true
+                                task.wait(0.5)
+                            end
+                        end
+                    end
+                    
+                    if not upgraded then
+                        for _, data in ipairs(normalUnits) do
+                            if upgraded then break end
+                            currentCash = tonumber(getgenv().MacroCurrentCash) or 0
+                            local upgradeCost = getgenv().GetUpgradeCost and getgenv().GetUpgradeCost(data.unitName, data.level) or 0
+                            
+                            if upgradeCost > 0 and currentCash >= upgradeCost then
+                                print("[AutoUpgrade] Upgrading " .. data.unitName .. " from level " .. data.level .. " (Cost: " .. upgradeCost .. ")")
+                                if upgradeTower(data.tower) then
+                                    upgraded = true
+                                    task.wait(0.5)
+                                end
+                            end
+                        end
+                    end
+                else
+                    for _, data in ipairs(normalUnits) do
+                        if upgraded then break end
+                        currentCash = tonumber(getgenv().MacroCurrentCash) or 0
+                        local upgradeCost = getgenv().GetUpgradeCost and getgenv().GetUpgradeCost(data.unitName, data.level) or 0
+                        
+                        if upgradeCost > 0 and currentCash >= upgradeCost then
+                            print("[AutoUpgrade] Upgrading " .. data.unitName .. " from level " .. data.level .. " (Cost: " .. upgradeCost .. ")")
+                            if upgradeTower(data.tower) then
+                                upgraded = true
+                                task.wait(0.5)
+                            end
+                        end
+                    end
+                    
+                    if not upgraded then
+                        for _, data in ipairs(farmUnits) do
+                            if upgraded then break end
+                            currentCash = tonumber(getgenv().MacroCurrentCash) or 0
+                            local upgradeCost = getgenv().GetUpgradeCost and getgenv().GetUpgradeCost(data.unitName, data.level) or 0
+                            
+                            if upgradeCost > 0 and currentCash >= upgradeCost then
+                                print("[AutoUpgrade] Upgrading " .. data.unitName .. " from level " .. data.level .. " (Cost: " .. upgradeCost .. ")")
+                                if upgradeTower(data.tower) then
+                                    upgraded = true
+                                    task.wait(0.5)
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        
+        task.spawn(hologramLoop)
+        task.spawn(autoPlaceLoop)
+        task.spawn(autoUpgradeLoop)
     end)
 end
