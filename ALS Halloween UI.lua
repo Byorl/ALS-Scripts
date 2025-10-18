@@ -5385,6 +5385,25 @@ task.spawn(function()
             
             local buttonToPress, actionName = nil, ""
             
+            local isFinalExpedition = false
+            pcall(function()
+                local gamemode = RS:FindFirstChild("Gamemode")
+                if gamemode and gamemode.Value == "FinalExpedition" then
+                    isFinalExpedition = true
+                end
+            end)
+            
+            if isFinalExpedition and getgenv().AutoLeaveEnabled and leaveButton and leaveButton.Visible and not (nextButton and nextButton.Visible) then
+                print("[Auto Leave] Waiting for Next button in Final Expedition...")
+                task.wait(2)
+
+                pcall(function()
+                    if buttons then
+                        nextButton = buttons:FindFirstChild("Next")
+                    end
+                end)
+            end
+            
             if getgenv().AutoNextEnabled and nextButton and nextButton.Visible then
                 buttonToPress = nextButton
                 actionName = "Next"
