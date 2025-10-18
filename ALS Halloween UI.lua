@@ -6,13 +6,31 @@ if getgenv().ALSScriptLoaded then
 end
 getgenv().ALSScriptLoaded = true
 
+local httpGet = game.HttpGet or game.httpGet or syn and syn.request or http and http.request or request
+if not httpGet then
+    error("[ALS] Your executor does not support HTTP requests!\n\nThis executor (Zenith) may not be compatible.\nPlease try:\n- Wave\n- Solara\n- Electron\n- Delta")
+    return
+end
+
 local MacLib
 local loadSuccess, loadError = pcall(function()
     local url = "https://github.com/biggaboy212/Maclib/releases/latest/download/maclib.txt"
-    local response = game:HttpGet(url)
     
-    if not response or response == "" then
-        error("Empty response from MacLib URL")
+    local response
+    local httpSuccess = pcall(function()
+        if game.HttpGet then
+            response = game:HttpGet(url)
+        elseif httpGet then
+            local result = httpGet({
+                Url = url,
+                Method = "GET"
+            })
+            response = result.Body or result
+        end
+    end)
+    
+    if not httpSuccess or not response or response == "" then
+        error("Failed to download MacLib. Your executor may not support HttpGet or GitHub is blocked.")
     end
     
     local loadFunc, loadErr = loadstring(response)
@@ -24,12 +42,12 @@ local loadSuccess, loadError = pcall(function()
 end)
 
 if not loadSuccess then
-    error("[ALS] Failed to load MacLib library: " .. tostring(loadError) .. "\n\nPlease check:\n1. Your internet connection\n2. Your executor supports HttpGet\n3. Try restarting Roblox")
+    error("[ALS] Failed to load MacLib library: " .. tostring(loadError) .. "\n\nZenith Executor Issue:\nZenith may have compatibility issues with this script.\n\nRecommended executors:\n- Wave (Best)\n- Solara\n- Electron\n- Delta")
     return
 end
 
 if not MacLib then
-    error("[ALS] MacLib loaded but returned nil. This may be an executor compatibility issue.\n\nTry:\n1. Using a different executor\n2. Restarting Roblox\n3. Checking if your executor is up to date")
+    error("[ALS] MacLib loaded but returned nil.\n\nZenith Compatibility Issue:\nThis executor may not fully support the required features.\n\nPlease switch to:\n- Wave\n- Solara\n- Electron")
     return
 end
 
