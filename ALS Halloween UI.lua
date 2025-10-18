@@ -1231,6 +1231,8 @@ local function updateGameState()
             getgenv()._WukongLastSynthesisTime = 0
             getgenv().SmartCardPicked = {}
             getgenv().SmartCardLastPromptId = nil
+            getgenv().SlowerCardPicked = {}
+            getgenv().SlowerCardLastPromptId = nil
         end
         
         getgenv().MacroGameState.lastGameEndedState = currentGameEnded
@@ -4967,13 +4969,17 @@ task.spawn(function()
             if buttonToPress then
                 
                 if getgenv().WebhookEnabled then
-                    task.wait(2)
                     local maxWait = 0
-                    while getgenv().WebhookProcessing and maxWait < 10 do
-                        task.wait(0.3)
-                        maxWait = maxWait + 0.3
+                    while getgenv().WebhookProcessing and maxWait < 15 do
+                        task.wait(0.5)
+                        maxWait = maxWait + 0.5
                     end
-                    task.wait(0.5)
+                    
+                    task.wait(1)
+                    
+                    if getgenv().WebhookProcessing then
+                        warn("[Auto Retry] Webhook still processing after 15s, continuing anyway")
+                    end
                 end
                 
                 task.wait(0.3)
@@ -5016,12 +5022,6 @@ task.spawn(function()
                 
                 if not success then
                     warn("[Auto Retry] UI navigation failed")
-                end
-                
-                task.wait(0.3)
-                
-                if LocalPlayer.PlayerGui:FindFirstChild("EndGameUI") then
-                    warn("[Auto Retry] EndGameUI still present - button may require server validation")
                 end
             end
         end)
@@ -6686,6 +6686,17 @@ do
             getgenv().WebhookProcessing = false
         end
     end)
+    
+    task.spawn(function()
+        task.wait(1)
+        if getgenv().WebhookEnabled then
+            local endGameUI = LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
+            if endGameUI and endGameUI.Enabled and not getgenv().WebhookProcessing then
+                task.wait(1)
+                sendWebhook()
+            end
+        end
+    end)
 end)
 
 
@@ -7061,57 +7072,173 @@ do
     
     local function selectCardSlower()
         if not getgenv().SlowerCardSelectionEnabled then return false end
-        local ok = pcall(function()
-            local list = getAvailableCards()
-            if not list then return false end
-            local _, best, priority = findBestCard(list)
-            if not best or not best.button or not priority then return false end
-            if priority >= 999 then return false end
+        local ok, result = pcall(function()
+            local currentSignature = getPromptSignature()
+            if not currentSignature then
+                return false
+            end
             
-            local VirtualInputManager = game:GetService("VirtualInputManager")
+            if getgenv().SlowerCardLastPromptId == currentSignature then
+                return false
+            end
             
-            local absPos = best.button.AbsolutePosition
-            local absSize = best.button.AbsoluteSize
-            local centerX = absPos.X + (absSize.X / 2)
-            local centerY = absPos.Y + (absSize.Y * 0.7)
-            
-            VirtualInputManager:SendMouseMoveEvent(centerX, centerY, game)
-            task.wait(0.1)
-            VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, true, game, 0)
-            task.wait(0.05)
-            VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, false, game, 0)
-            task.wait(0.5)
-            
-            local ok2, confirmButton = pcall(function()
-                local prompt = LocalPlayer.PlayerGui:FindFirstChild("Prompt")
-                if not prompt then return nil end
-                local frame = prompt:FindFirstChild("Frame")
-                if not frame or not frame:FindFirstChild("Frame") then return nil end
-                local inner = frame.Frame
-                local children = inner:GetChildren()
-                if #children < 5 then return nil end
-                local btn = children[5]:FindFirstChild("TextButton")
-                if btn and btn:FindFirstChild("TextLabel") and btn.TextLabel.Text == "Confirm" then
-                    return btn
+            local currentWave = 0
+            pcall(function()
+                local wave = RS:FindFirstChild("Wave")
+                if wave and wave.Value then
+                    currentWave = wave.Value
                 end
-                return nil
             end)
             
-            if ok2 and confirmButton then
-                local absPos2 = confirmButton.AbsolutePosition
-                local absSize2 = confirmButton.AbsoluteSize
-                local centerX2 = absPos2.X + (absSize2.X / 2)
-                local centerY2 = absPos2.Y + (absSize2.Y / 2)
-                
-                VirtualInputManager:SendMouseMoveEvent(centerX2, centerY2, game)
-                task.wait(0.1)
-                VirtualInputManager:SendMouseButtonEvent(centerX2, centerY2, 0, true, game, 0)
-                task.wait(0.05)
-                VirtualInputManager:SendMouseButtonEvent(centerX2, centerY2, 0, false, game, 0)
-                task.wait(0.5)
+            local list = getAvailableCards()
+            if not list or #list == 0 then 
+                return false 
             end
+            
+            local bestCard = nil
+            local bestValue = -99999
+            
+            local alreadyPicked = {}
+            for _, pickedName in ipairs(getgenv().SlowerCardPicked or {}) do
+                alreadyPicked[pickedName] = true
+            end
+            
+            for i=1,#list do
+                local nm = list[i].name
+                
+                if not alreadyPicked[nm] then
+                    local value = calculateCardValue(nm, currentWave)
+                    
+                    if value > 0 and value > bestValue then
+                        bestValue = value
+                        bestCard = list[i]
+                    end
+                end
+            end
+            
+            if not bestCard or bestValue <= 0 or not bestCard.button then
+                return false
+            end
+            
+            print("[Slower Card] Selected:", bestCard.name, "| Value:", math.floor(bestValue))
+            
+            local GuiService = game:GetService("GuiService")
+            
+            GuiService.SelectedObject = nil
+            task.wait(0.2)
+            
+            GuiService.SelectedObject = bestCard.button
+            
+            local lockConnection
+            lockConnection = RunService.Heartbeat:Connect(function()
+                if GuiService.SelectedObject ~= bestCard.button then
+                    GuiService.SelectedObject = bestCard.button
+                end
+            end)
+            
+            task.wait(0.5)
+            
+            if GuiService.SelectedObject == bestCard.button then
+                local VIM = game:GetService("VirtualInputManager")
+                VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
+                task.wait(0.05)
+                VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
+                
+                if lockConnection then
+                    lockConnection:Disconnect()
+                end
+                
+                GuiService.SelectedObject = nil
+            else
+                if lockConnection then
+                    lockConnection:Disconnect()
+                end
+                return false
+            end
+            
+            getgenv().SlowerCardLastPromptId = currentSignature
+            
+            task.wait(0.5)
+            
+            local confirmButton = nil
+            pcall(function()
+                local prompt = LocalPlayer.PlayerGui:FindFirstChild("Prompt")
+                if prompt and prompt:FindFirstChild("Frame") and prompt.Frame:FindFirstChild("Frame") then
+                    local inner = prompt.Frame.Frame
+                    local children = inner:GetChildren()
+                    if #children >= 5 then
+                        local btn = children[5]:FindFirstChild("TextButton")
+                        if btn and btn:FindFirstChild("TextLabel") and btn.TextLabel.Text == "Confirm" then
+                            confirmButton = btn
+                        end
+                    end
+                end
+            end)
+            
+            if confirmButton then
+                GuiService.SelectedObject = nil
+                task.wait(0.1)
+                
+                GuiService.SelectedObject = confirmButton
+                
+                local confirmLock
+                confirmLock = RunService.Heartbeat:Connect(function()
+                    if GuiService.SelectedObject ~= confirmButton then
+                        GuiService.SelectedObject = confirmButton
+                    end
+                end)
+                
+                task.wait(0.3)
+                
+                if GuiService.SelectedObject == confirmButton then
+                    local VIM = game:GetService("VirtualInputManager")
+                    VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
+                    task.wait(0.05)
+                    VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
+                    
+                    if confirmLock then
+                        confirmLock:Disconnect()
+                    end
+                    
+                    GuiService.SelectedObject = nil
+                else
+                    if confirmLock then
+                        confirmLock:Disconnect()
+                    end
+                end
+            end
+            
+            task.wait(0.5)
+            
+            local waitTime = 0
+            while waitTime < 2 do
+                local promptStillOpen = false
+                pcall(function()
+                    local prompt = LocalPlayer.PlayerGui:FindFirstChild("Prompt")
+                    promptStillOpen = prompt and prompt.Enabled
+                end)
+                
+                if not promptStillOpen then
+                    break
+                end
+                
+                task.wait(0.1)
+                waitTime = waitTime + 0.1
+            end
+            
+            if not getgenv().SlowerCardPicked then
+                getgenv().SlowerCardPicked = {}
+            end
+            table.insert(getgenv().SlowerCardPicked, bestCard.name)
+            
+            return true
         end)
-        return ok
+        
+        if not ok then
+            warn("[Slower Card] Error:", result)
+        end
+        
+        return ok and result
     end
     
     if not getgenv().SmartCardPicked then
@@ -7120,6 +7247,14 @@ do
     
     if not getgenv().SmartCardLastPromptId then
         getgenv().SmartCardLastPromptId = nil
+    end
+    
+    if not getgenv().SlowerCardPicked then
+        getgenv().SlowerCardPicked = {}
+    end
+    
+    if not getgenv().SlowerCardLastPromptId then
+        getgenv().SlowerCardLastPromptId = nil
     end
     
     local function getPromptSignature()
@@ -7566,18 +7701,22 @@ do
                     local children = enemies:GetChildren()
                     for i = 1, #children do
                         local enemy = children[i]
-                        if enemy:IsA("Model") and enemy.Name ~= "Boss" then
-                            enemy:Destroy()
-                        end
+                        pcall(function()
+                            if enemy and enemy.Parent and enemy:IsA("Model") and enemy.Name ~= "Boss" then
+                                enemy:Destroy()
+                            end
+                        end)
                     end
                 end
                 
                 local spawnedunits = workspace:FindFirstChild("SpawnedUnits")
                 if spawnedunits then
                     for _, su in pairs(spawnedunits:GetChildren()) do
-                        if su:IsA("Model") then
-                            su:Destroy()
-                        end
+                        pcall(function()
+                            if su and su.Parent and su:IsA("Model") then
+                                su:Destroy()
+                            end
+                        end)
                     end
                 end
             end)
@@ -7639,10 +7778,12 @@ if not isInLobby then
                     
                     for _, obj in ipairs(game.Workspace:GetDescendants()) do
                         pcall(function()
+                            if not obj or not obj.Parent then return end
+                            
                             if obj:IsA("BasePart") then
                                 if obj:IsA("Part") or obj:IsA("MeshPart") or obj:IsA("WedgePart") or obj:IsA("CornerWedgePart") then
-                                    obj.Material = Enum.Material.SmoothPlastic
-                                    obj.CastShadow = false
+                                    pcall(function() obj.Material = Enum.Material.SmoothPlastic end)
+                                    pcall(function() obj.CastShadow = false end)
                                     if obj:FindFirstChildOfClass("Texture") then
                                         for _, t in ipairs(obj:GetChildren()) do
                                             if t:IsA("Texture") then
@@ -7651,7 +7792,7 @@ if not isInLobby then
                                         end
                                     end
                                     if obj:IsA("MeshPart") then
-                                        obj.TextureID = ""
+                                        pcall(function() obj.TextureID = "" end)
                                     end
                                 end
                                 if obj:IsA("Decal") then
@@ -7662,11 +7803,13 @@ if not isInLobby then
                                 pcall(function() obj:Destroy() end)
                             end
                             if obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Beam") then
-                                obj.Enabled = false
+                                pcall(function() obj.Enabled = false end)
                             end
                             if obj:IsA("Sound") then
-                                obj.Volume = 0
-                                obj:Stop()
+                                pcall(function() 
+                                    obj.Volume = 0
+                                    obj:Stop()
+                                end)
                             end
                         end)
                     end
