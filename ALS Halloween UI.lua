@@ -7122,15 +7122,27 @@ do
         getgenv().SmartCardLastPromptId = nil
     end
     
-    local function getPromptId()
-        local ok, id = pcall(function()
+    local function getPromptSignature()
+        local ok, signature = pcall(function()
             local prompt = LocalPlayer.PlayerGui:FindFirstChild("Prompt")
-            if prompt and prompt:FindFirstChild("Frame") then
-                return prompt.Frame:GetDebugId()
+            if not prompt or not prompt.Enabled then
+                return nil
             end
-            return nil
+            
+            local list = getAvailableCards()
+            if not list or #list == 0 then
+                return nil
+            end
+            
+            local cardNames = {}
+            for _, card in ipairs(list) do
+                table.insert(cardNames, card.name)
+            end
+            table.sort(cardNames)
+            
+            return table.concat(cardNames, "|")
         end)
-        return ok and id or nil
+        return ok and signature or nil
     end
     
     local function calculateCardValue(cardName, currentWave)
@@ -7193,12 +7205,12 @@ do
     local function selectCardSmart()
         if not getgenv().SmartCardSelectionEnabled then return false end
         local ok, result = pcall(function()
-            local currentPromptId = getPromptId()
-            if not currentPromptId then
+            local currentSignature = getPromptSignature()
+            if not currentSignature then
                 return false
             end
             
-            if getgenv().SmartCardLastPromptId == currentPromptId then
+            if getgenv().SmartCardLastPromptId == currentSignature then
                 return false
             end
             
@@ -7219,10 +7231,17 @@ do
             local bestCard = nil
             local bestValue = -99999
             
+            local alreadyPicked = {}
+            for _, pickedName in ipairs(getgenv().SmartCardPicked) do
+                alreadyPicked[pickedName] = true
+            end
+            
             for i=1,#list do
                 local nm = list[i].name
                 
-                if nm ~= "Devil's Sacrifice" then
+                if alreadyPicked[nm] then
+                    -- Card already picked, skip it
+                else
                     local value = calculateCardValue(nm, currentWave)
                     
                     if value > 0 and value > bestValue then
@@ -7251,11 +7270,27 @@ do
             task.wait(0.05)
             VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, false, game, 0)
             
-            getgenv().SmartCardLastPromptId = currentPromptId
+            getgenv().SmartCardLastPromptId = currentSignature
             
             task.wait(0.3)
             pressConfirm()
-            task.wait(0.2)
+            task.wait(0.5)
+            
+            local waitTime = 0
+            while waitTime < 2 do
+                local promptStillOpen = false
+                pcall(function()
+                    local prompt = LocalPlayer.PlayerGui:FindFirstChild("Prompt")
+                    promptStillOpen = prompt and prompt.Enabled
+                end)
+                
+                if not promptStillOpen then
+                    break
+                end
+                
+                task.wait(0.1)
+                waitTime = waitTime + 0.1
+            end
             
             table.insert(getgenv().SmartCardPicked, bestCard.name)
             return true
