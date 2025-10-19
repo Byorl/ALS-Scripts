@@ -3680,6 +3680,17 @@ local function getUnitDisplayName(unitName)
     return unitName
 end
 
+local function getUnitFileName(displayName)
+    if UnitNames then
+        for fileName, displayNameInModule in pairs(UnitNames) do
+            if displayNameInModule == displayName then
+                return fileName
+            end
+        end
+    end
+    return displayName
+end
+
 
 getgenv().BulmaEnabled = getgenv().Config.toggles.BulmaToggle or false
 getgenv().BulmaWishType = getgenv().Config.dropdowns.BulmaWishType or "Power"
@@ -8054,6 +8065,55 @@ end
 
 
 do
+    if not getgenv()._WebhookInitialData then
+        getgenv()._WebhookInitialData = {}
+        task.spawn(function()
+            task.wait(2)
+            local clientData = getClientData()
+            if clientData then
+                getgenv()._WebhookInitialData = {
+                    Jewels = clientData.Jewels or 0,
+                    Gold = clientData.Gold or 0,
+                    Emeralds = clientData.Emeralds or 0,
+                    Rerolls = clientData.Rerolls or 0,
+                    CandyBasket = clientData.CandyBasket or 0,
+                    HeroTokens = clientData.HeroTokens or 0,
+                    EXP = clientData.EXP or 0,
+                    ItemData = {},
+                    ExperienceItemsData = {}
+                }
+                
+                if clientData.ItemData then
+                    for itemName, itemInfo in pairs(clientData.ItemData) do
+                        if itemInfo.Amount then
+                            getgenv()._WebhookInitialData.ItemData[itemName] = itemInfo.Amount
+                        end
+                    end
+                end
+                
+                if clientData.ExperienceItemsData then
+                    for itemName, itemInfo in pairs(clientData.ExperienceItemsData) do
+                        if itemInfo.Amount then
+                            getgenv()._WebhookInitialData.ExperienceItemsData[itemName] = itemInfo.Amount
+                        end
+                    end
+                end
+                
+                getgenv()._WebhookInitialData.UnitCounts = {}
+                if clientData.UnitData then
+                    for unitID, unitInfo in pairs(clientData.UnitData) do
+                        if unitInfo.UnitName then
+                            local unitName = unitInfo.UnitName
+                            getgenv()._WebhookInitialData.UnitCounts[unitName] = (getgenv()._WebhookInitialData.UnitCounts[unitName] or 0) + 1
+                        end
+                    end
+                end
+                
+                print("[Webhook] Initial data captured")
+            end
+        end)
+    end
+    
     task.spawn(function()
         local lastWebhookHash = ""
         local lastWebhookTime = 0
@@ -8152,24 +8212,58 @@ do
             local rewardsText = ""
             if #rewards > 0 then
                 for _, r in ipairs(rewards) do
-                    local total = 0
+                    local initialValue = 0
+                    local currentValue = 0
                     local itemName = r.name
+                    local itemKey = itemName:gsub(" ", "")
                     
-                    if clientData[itemName] and type(clientData[itemName]) == "number" then
-                        total = clientData[itemName]
-                    elseif clientData.ItemData and clientData.ItemData[itemName] and clientData.ItemData[itemName].Amount then
-                        total = clientData.ItemData[itemName].Amount
-                    elseif clientData.Items and clientData.Items[itemName] and clientData.Items[itemName].Amount then
-                        total = clientData.Items[itemName].Amount
-                    elseif itemName == "Candy Basket" and clientData.CandyBasket then
-                        total = clientData.CandyBasket
+                    if itemKey == "HeroCoins" then itemKey = "HeroTokens" end
+                    if itemKey == "PlayerEXP" then itemKey = "EXP" end
+                    
+                    if r.type == "Unit" then
+                        local unitFileName = getUnitFileName(itemName)
+                        initialValue = getgenv()._WebhookInitialData.UnitCounts[unitFileName] or 0
+                        
+                        currentValue = 0
+                        if clientData.UnitData then
+                            for unitID, unitInfo in pairs(clientData.UnitData) do
+                                if unitInfo.UnitName == unitFileName then
+                                    currentValue = currentValue + 1
+                                end
+                            end
+                        end
+                        
+                        local total = initialValue + r.amount
+                        rewardsText = rewardsText .. "+" .. formatNumber(r.amount) .. " " .. itemName .. " [ Total: " .. formatNumber(total) .. " ]\n"
+                    elseif clientData[itemKey] and type(clientData[itemKey]) == "number" then
+                        currentValue = clientData[itemKey]
+                        initialValue = getgenv()._WebhookInitialData[itemKey] or 0
+                        local total = initialValue + r.amount
+                        rewardsText = rewardsText .. "+" .. formatNumber(r.amount) .. " " .. itemName .. " [ Total: " .. formatNumber(total) .. " ]\n"
+                    elseif clientData.ItemData and clientData.ItemData[itemKey] then
+                        currentValue = clientData.ItemData[itemKey].Amount or 0
+                        initialValue = getgenv()._WebhookInitialData.ItemData[itemKey] or 0
+                        local total = initialValue + r.amount
+                        rewardsText = rewardsText .. "+" .. formatNumber(r.amount) .. " " .. itemName .. " [ Total: " .. formatNumber(total) .. " ]\n"
+                    elseif clientData.ExperienceItemsData and clientData.ExperienceItemsData[itemKey] then
+                        currentValue = clientData.ExperienceItemsData[itemKey].Amount or 0
+                        initialValue = getgenv()._WebhookInitialData.ExperienceItemsData[itemKey] or 0
+                        local total = initialValue + r.amount
+                        rewardsText = rewardsText .. "+" .. formatNumber(r.amount) .. " " .. itemName .. " [ Total: " .. formatNumber(total) .. " ]\n"
+                    elseif itemName:find("Candy Basket") then
+                        currentValue = clientData.CandyBasket or 0
+                        initialValue = getgenv()._WebhookInitialData.CandyBasket or 0
+                        local total = initialValue + r.amount
+                        rewardsText = rewardsText .. "+" .. formatNumber(r.amount) .. " " .. itemName .. " [ Total: " .. formatNumber(total) .. " ]\n"
                     elseif itemName:find("Bingo Stamp") and clientData.ItemData and clientData.ItemData.HallowenBingoStamp then
-                        total = clientData.ItemData.HallowenBingoStamp.Amount or 0
+                        currentValue = clientData.ItemData.HallowenBingoStamp.Amount or 0
+                        initialValue = getgenv()._WebhookInitialData.ItemData.HallowenBingoStamp or 0
+                        local total = initialValue + r.amount
+                        rewardsText = rewardsText .. "+" .. formatNumber(r.amount) .. " " .. itemName .. " [ Total: " .. formatNumber(total) .. " ]\n"
                     else
-                        total = r.amount
+                        local total = r.amount
+                        rewardsText = rewardsText .. "+" .. formatNumber(r.amount) .. " " .. itemName .. " [ Total: " .. formatNumber(total) .. " ]\n"
                     end
-                    
-                    rewardsText = rewardsText .. "+" .. formatNumber(r.amount) .. " " .. itemName .. " [ Total: " .. formatNumber(total) .. " ]\n"
                 end
             else
                 rewardsText = "No rewards found"
