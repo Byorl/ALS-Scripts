@@ -7609,20 +7609,24 @@ local function findBestPortalFromClientData()
     local matchingPortals = {}
     
     for portalID, portalInfo in pairs(clientData.PortalData) do
-        if type(portalInfo) == "table" and portalInfo.PortalData then
-            local portalData = portalInfo.PortalData
-            local mapMatch = (selectedMap == "" or portalData.Map == selectedMap)
-            
-            if mapMatch then
-                table.insert(matchingPortals, {
-                    id = portalID,
-                    tier = portalData.Tier or 0,
-                    challenge = portalData.Challenges or "",
-                    map = portalData.Map or ""
-                })
-                print("[Portal] Found: " .. portalData.Map .. " | Tier " .. portalData.Tier .. " | " .. portalData.Challenges)
+        pcall(function()
+            if type(portalInfo) == "table" and portalInfo.PortalData then
+                local portalData = portalInfo.PortalData
+                if not portalData or type(portalData) ~= "table" then return end
+                
+                local mapMatch = (selectedMap == "" or portalData.Map == selectedMap)
+                
+                if mapMatch then
+                    table.insert(matchingPortals, {
+                        id = portalID,
+                        tier = portalData.Tier or 0,
+                        challenge = portalData.Challenges or "",
+                        map = portalData.Map or ""
+                    })
+                    print("[Portal] Found: " .. (portalData.Map or "Unknown") .. " | Tier " .. (portalData.Tier or 0) .. " | " .. (portalData.Challenges or "None"))
+                end
             end
-        end
+        end)
     end
     
     if #matchingPortals == 0 then 
