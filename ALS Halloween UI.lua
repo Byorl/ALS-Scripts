@@ -720,13 +720,17 @@ local Tabs = {
         Name = "Final Expedition", 
         Image = "rbxassetid://10723407389" 
     }),
+    InfinityCastle = TabGroup2:Tab({ 
+        Name = "Infinity Castle", 
+        Image = "rbxassetid://10734923549" 
+    }),
     
     Webhook = TabGroup3:Tab({ 
         Name = "Webhook", 
         Image = "rbxassetid://10734952273" 
     }),
     SeamlessFix = TabGroup3:Tab({ 
-        Name = "Seamless Fix", 
+        Name = "Automation", 
         Image = "rbxassetid://10734923549" 
     }),
     Misc = TabGroup3:Tab({ 
@@ -794,6 +798,9 @@ local Sections = {
     
     FinalExpeditionLeft = Tabs.FinalExpedition:Section({ Side = "Left" }),
     FinalExpeditionRight = Tabs.FinalExpedition:Section({ Side = "Right" }),
+    
+    InfinityCastleLeft = Tabs.InfinityCastle:Section({ Side = "Left" }),
+    InfinityCastleRight = Tabs.InfinityCastle:Section({ Side = "Right" }),
     
     EventLeft = Tabs.Event:Section({ Side = "Left" }),
     EventRight = Tabs.Event:Section({ Side = "Right" }),
@@ -2697,6 +2704,15 @@ local modeSuccess, modeErr = pcall(function()
         end,
         modeDefault
     )
+    
+    if autoJoinModeDropdown and modeDefault then
+        task.spawn(function()
+            task.wait(0.1)
+            pcall(function()
+                autoJoinModeDropdown:UpdateSelection(modeDefault)
+            end)
+        end)
+    end
 end)
 if not modeSuccess then
     warn("[UI ERROR] Mode dropdown failed:", modeErr)
@@ -2900,6 +2916,55 @@ if not autoStartSuccess then
 end
 
 task.spawn(function()
+    while true do
+        task.wait(0.5)
+        
+        if getgenv().AutoJoinConfig and getgenv().AutoJoinConfig.enabled then
+            pcall(function()
+                local mode = getgenv().AutoJoinConfig.mode
+                if not mode then return end
+                
+                local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                if not hrp then return end
+                
+                local teleporterFolder = workspace:FindFirstChild("TeleporterFolder")
+                if not teleporterFolder then return end
+                
+                local doorFolder
+                
+                if mode == "Raid" then
+                    doorFolder = teleporterFolder:FindFirstChild("Raids")
+                elseif mode == "Siege" then
+                    doorFolder = teleporterFolder:FindFirstChild("Siege")
+                elseif mode == "Dungeon" then
+                    doorFolder = teleporterFolder:FindFirstChild("Dungeon")
+                elseif mode == "Survival" then
+                    doorFolder = teleporterFolder:FindFirstChild("Survival")
+                elseif mode == "Story" or mode == "Infinite" or mode == "LegendaryStages" then
+                    doorFolder = teleporterFolder:FindFirstChild("Story")
+                elseif mode == "Elemental Cavern" then
+                    doorFolder = teleporterFolder:FindFirstChild("ElementalCaverns")
+                elseif mode == "Challenge" then
+                    doorFolder = teleporterFolder:FindFirstChild("Challenge")
+                end
+                
+                if doorFolder then
+                    for _, teleporter in pairs(doorFolder:GetChildren()) do
+                        if teleporter:IsA("Model") and teleporter.Name == "Teleporter" then
+                            local door = teleporter:FindFirstChild("Door")
+                            if door and door:IsA("BasePart") then
+                                hrp.CFrame = door.CFrame
+                                return
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+    end
+end)
+
+task.spawn(function()
     while task.wait(2) do
         if not getgenv().AutoJoinConfig or not getgenv().AutoJoinConfig.enabled then
             continue
@@ -2917,11 +2982,11 @@ task.spawn(function()
             if not teleporter then return end
             
             if getgenv().AutoJoinConfig.friendsOnly then
-                teleporter.InteractEvent:FireServer("FriendsOnly")
+                teleporter.Interact:FireServer("FriendsOnly")
             end
             
             if mode == "Raid" then
-                teleporter.InteractEvent:FireServer("Select", map, act)
+                teleporter.Interact:FireServer("Select", map, act)
                 
             elseif mode == "Siege" then
                 local siegeDiff = difficulty
@@ -2930,61 +2995,41 @@ task.spawn(function()
                 elseif difficulty == "Normal" or difficulty == "Nightmare" then
                     siegeDiff = "Normal"
                 end
-                teleporter.SelectEvent:FireServer(map, siegeDiff)
+                teleporter.Select:FireServer(map, siegeDiff)
                 
             elseif mode == "Dungeon" then
-                teleporter.InteractEvent:FireServer("Select", map)
+                teleporter.Interact:FireServer("Select", map)
                 
             elseif mode == "Survival" then
-                teleporter.InteractEvent:FireServer("Select", map)
+                teleporter.Interact:FireServer("Select", map)
                 
             elseif mode == "Story" then
                 local storyDiff = difficulty
                 if difficulty == "Purgatory" or difficulty == "Insanity" then
                     storyDiff = "Nightmare"
                 end
-                teleporter.InteractEvent:FireServer("Select", map, act, storyDiff, "Story")
+                teleporter.Interact:FireServer("Select", map, act, storyDiff, "Story")
                 
             elseif mode == "Infinite" then
                 local infDiff = difficulty
                 if difficulty == "Purgatory" or difficulty == "Insanity" then
                     infDiff = "Nightmare"
                 end
-                teleporter.InteractEvent:FireServer("Select", map, act, infDiff, "Infinite")
+                teleporter.Interact:FireServer("Select", map, act, infDiff, "Infinite")
                 
             elseif mode == "Elemental Cavern" then
-                teleporter.InteractEvent:FireServer("Select", map, difficulty)
+                teleporter.Interact:FireServer("Select", map, difficulty)
                 
             elseif mode == "Challenge" then
-                teleporter.InteractEvent:FireServer("Select", "Challenge", act)
+                teleporter.Interact:FireServer("Select", "Challenge", act)
             end
             
             if getgenv().AutoJoinConfig.autoStart then
                 task.wait(0.5)
                 
-                local bottomGui = LocalPlayer.PlayerGui:FindFirstChild("Bottom")
-                if bottomGui then
-                    local frame = bottomGui:FindFirstChild("Frame")
-                    if frame then
-                        for _, child in ipairs(frame:GetChildren()) do
-                            if child:IsA("Frame") then
-                                for _, subChild in ipairs(child:GetChildren()) do
-                                    if subChild:IsA("TextButton") and subChild.Visible then
-                                        for _, element in ipairs(subChild:GetChildren()) do
-                                            if element:IsA("TextLabel") and element.Text == "Start" then
-                                                if getconnections then
-                                                    for _, conn in ipairs(getconnections(subChild.Activated)) do
-                                                        conn:Fire()
-                                                    end
-                                                end
-                                                return
-                                            end
-                                        end
-                                    end
-                                end
-                            end
-                        end
-                    end
+                local teleporter = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("Teleporter")
+                if teleporter and teleporter:FindFirstChild("Interact") then
+                    teleporter.Interact:FireServer("Skip")
                 end
             end
         end)
@@ -3153,6 +3198,19 @@ getgenv().BossRushGeneral = {
 }
 
 getgenv().BabyloniaCastle = {}
+
+pcall(function()
+    local babyloniaModule = RS:FindFirstChild("Modules"):FindFirstChild("CardHandler"):FindFirstChild("BossRushCards"):FindFirstChild("Babylonia Castle")
+    if babyloniaModule then
+        local cards = require(babyloniaModule)
+        for _, card in pairs(cards) do
+            if card.CardName then
+                getgenv().BabyloniaCastle[card.CardName] = card
+            end
+        end
+        print("[Boss Rush] Loaded " .. #cards .. " Babylonia Castle cards")
+    end
+end)
 
 local function initializeCardPriorities(sourceTable, targetTable, keyPrefix)
     if not sourceTable then return end
@@ -3443,6 +3501,84 @@ createInput(
     end,
     tostring(getgenv().PortalConfig.priorities["Short Range"])
 )
+
+
+Sections.InfinityCastleLeft:Header({ Text = "🏯 Auto Join Infinity Castle" })
+Sections.InfinityCastleLeft:SubLabel({ Text = "Automatically join Infinity Castle with your preferred difficulty" })
+
+if not getgenv().InfinityCastleAutoJoinEnabled then
+    getgenv().InfinityCastleAutoJoinEnabled = getgenv().Config.toggles.InfinityCastleAutoJoinToggle or false
+end
+
+if not getgenv().InfinityCastleDifficulty then
+    getgenv().InfinityCastleDifficulty = getgenv().Config.inputs.InfinityCastleDifficulty or "Easy"
+end
+
+createToggle(
+    Sections.InfinityCastleLeft,
+    "Auto Join Infinity Castle",
+    "InfinityCastleAutoJoinToggle",
+    function(value)
+        getgenv().InfinityCastleAutoJoinEnabled = value
+        Window:Notify({
+            Title = "Infinity Castle",
+            Description = value and "Auto Join Enabled" or "Auto Join Disabled",
+            Lifetime = 3
+        })
+    end,
+    getgenv().InfinityCastleAutoJoinEnabled
+)
+
+createDropdown(
+    Sections.InfinityCastleLeft,
+    "Difficulty",
+    "InfinityCastleDifficulty",
+    {"Easy", "Hard"},
+    false,
+    function(value)
+        getgenv().InfinityCastleDifficulty = value
+        Window:Notify({
+            Title = "Infinity Castle",
+            Description = "Difficulty set to: " .. value,
+            Lifetime = 3
+        })
+    end,
+    getgenv().InfinityCastleDifficulty
+)
+
+Sections.InfinityCastleLeft:SubLabel({
+    Text = "Select difficulty and enable auto join to automatically enter Infinity Castle"
+})
+
+task.spawn(function()
+    while true do
+        task.wait(2)
+        
+        if getgenv().InfinityCastleAutoJoinEnabled then
+            pcall(function()
+                local remotes = RS:FindFirstChild("Remotes")
+                local infinityCastleRemotes = remotes and remotes:FindFirstChild("InfinityCastle")
+                local enterEvent = infinityCastleRemotes and infinityCastleRemotes:FindFirstChild("Enter")
+                
+                if enterEvent then
+                    local isHardMode = getgenv().InfinityCastleDifficulty == "Hard"
+                    enterEvent:FireServer(isHardMode)
+                    print("[Infinity Castle] Joining " .. getgenv().InfinityCastleDifficulty .. " mode (Hard: " .. tostring(isHardMode) .. ")")
+                    
+                    Window:Notify({
+                        Title = "Infinity Castle",
+                        Description = "Joining " .. getgenv().InfinityCastleDifficulty .. " mode...",
+                        Lifetime = 3
+                    })
+                    
+                    task.wait(5)
+                else
+                    print("[Infinity Castle] EnterEvent remote not found")
+                end
+            end)
+        end
+    end
+end)
 
 
 Sections.EventLeft:Header({ Text = "🎃 Event Automation" })
@@ -3907,6 +4043,10 @@ local function buildAutoAbilityUI()
                 continue
             end
             
+            if unitName == "EtoEvo" then
+                continue
+            end
+            
             local abilities = getAllAbilities(unitName)
             
             if next(abilities) then
@@ -4075,6 +4215,143 @@ local function buildAutoAbilityUI()
                             end,
                             waveDefault
                         )
+                    end
+                    
+                    if unitName == "EscanorGodly" then
+                        pcall(function()
+                            local clientData = getClientData()
+                            if clientData and clientData.UnitData then
+                                for unitID, unitData in pairs(clientData.UnitData) do
+                                    if unitData.UnitName == "EscanorGodly" and unitData.EquippedSoul == "SoulOfTheScarredSun" then
+                                        local soulAbilityName = "Who Decided That?"
+                                        
+                                        if not getgenv().UnitAbilities[unitName][soulAbilityName] then
+                                            local saved = getgenv().Config.abilities and 
+                                                         getgenv().Config.abilities[unitName] and 
+                                                         getgenv().Config.abilities[unitName][soulAbilityName]
+                                            
+                                            local waveInputFlag = unitName .. "_" .. soulAbilityName .. "_Wave"
+                                            local savedWave = getgenv().Config.inputs[waveInputFlag]
+                                            if savedWave and savedWave ~= "" then
+                                                savedWave = tonumber(savedWave)
+                                            else
+                                                savedWave = nil
+                                            end
+                                            
+                                            getgenv().UnitAbilities[unitName][soulAbilityName] = {
+                                                enabled = (saved and saved.enabled) or false,
+                                                onlyOnBoss = (saved and saved.onlyOnBoss) or false,
+                                                specificWave = savedWave or (saved and saved.specificWave) or nil,
+                                                requireBossInRange = (saved and saved.requireBossInRange) or false,
+                                                useOnWave = (saved and saved.useOnWave) or false
+                                            }
+                                        end
+                                        
+                                        local cfg = getgenv().UnitAbilities[unitName][soulAbilityName]
+                                        
+                                        targetSection:Divider()
+                                        targetSection:SubLabel({ Text = "🔥 Soul Ability (SoulOfTheScarredSun)" })
+                                        
+                                        createToggle(
+                                            targetSection,
+                                            "⚡ Who Decided That? (CD: 999999s)",
+                                            unitName .. "_" .. soulAbilityName .. "_Toggle",
+                                            function(v)
+                                                cfg.enabled = v
+                                                getgenv().Config.abilities[unitName] = getgenv().Config.abilities[unitName] or {}
+                                                getgenv().Config.abilities[unitName][soulAbilityName] = getgenv().Config.abilities[unitName][soulAbilityName] or {}
+                                                getgenv().Config.abilities[unitName][soulAbilityName].enabled = v
+                                                getgenv().SaveConfig(getgenv().Config)
+                                                
+                                                Window:Notify({
+                                                    Title = "Auto Ability",
+                                                    Description = soulAbilityName .. " " .. (v and "Enabled" or "Disabled"),
+                                                    Lifetime = 2
+                                                })
+                                            end,
+                                            cfg.enabled
+                                        )
+                                        
+                                        local modifierKey = unitName .. "_" .. soulAbilityName .. "_Modifiers"
+                                        local savedDropdown = getgenv().Config.dropdowns[modifierKey]
+                                        local defaultValue
+                                        
+                                        if savedDropdown and type(savedDropdown) == "table" then
+                                            defaultValue = {}
+                                            for optionName, isSelected in pairs(savedDropdown) do
+                                                if isSelected == true then
+                                                    table.insert(defaultValue, optionName)
+                                                end
+                                            end
+                                        else
+                                            defaultValue = {}
+                                            if cfg.onlyOnBoss then table.insert(defaultValue, "Only On Boss") end
+                                            if cfg.requireBossInRange then table.insert(defaultValue, "Boss In Range") end
+                                            if cfg.useOnWave then table.insert(defaultValue, "On Wave") end
+                                        end
+                                        
+                                        createDropdown(
+                                            targetSection,
+                                            "  > Conditions",
+                                            modifierKey,
+                                            {"Only On Boss", "Boss In Range", "On Wave"},
+                                            true,
+                                            function(Value)
+                                                local selectedSet = {}
+                                                if type(Value) == "table" then
+                                                    for k, v in pairs(Value) do
+                                                        if v == true then
+                                                            selectedSet[k] = true
+                                                        end
+                                                    end
+                                                end
+                                                
+                                                cfg.onlyOnBoss = selectedSet["Only On Boss"] == true
+                                                cfg.requireBossInRange = selectedSet["Boss In Range"] == true
+                                                cfg.useOnWave = selectedSet["On Wave"] == true
+                                                
+                                                getgenv().Config.abilities[unitName] = getgenv().Config.abilities[unitName] or {}
+                                                local store = getgenv().Config.abilities[unitName]
+                                                store[soulAbilityName] = store[soulAbilityName] or {}
+                                                store[soulAbilityName].onlyOnBoss = cfg.onlyOnBoss
+                                                store[soulAbilityName].requireBossInRange = cfg.requireBossInRange
+                                                store[soulAbilityName].useOnWave = cfg.useOnWave
+                                                
+                                                getgenv().SaveConfig(getgenv().Config)
+                                            end,
+                                            defaultValue
+                                        )
+                                        
+                                        local waveFlag = unitName .. "_" .. soulAbilityName .. "_Wave"
+                                        local waveDefault = ""
+                                        if cfg.specificWave then
+                                            waveDefault = tostring(cfg.specificWave)
+                                        elseif getgenv().Config.inputs[waveFlag] and getgenv().Config.inputs[waveFlag] ~= "" then
+                                            waveDefault = tostring(getgenv().Config.inputs[waveFlag])
+                                        end
+                                        
+                                        createInput(
+                                            targetSection,
+                                            "  > Wave Number",
+                                            waveFlag,
+                                            "Required if 'On Wave' selected",
+                                            "Numeric",
+                                            function(text)
+                                                local num = tonumber(text)
+                                                cfg.specificWave = num
+                                                getgenv().Config.abilities[unitName] = getgenv().Config.abilities[unitName] or {}
+                                                getgenv().Config.abilities[unitName][soulAbilityName] = getgenv().Config.abilities[unitName][soulAbilityName] or {}
+                                                getgenv().Config.abilities[unitName][soulAbilityName].specificWave = num
+                                                getgenv().SaveConfig(getgenv().Config)
+                                            end,
+                                            waveDefault
+                                        )
+                                        
+                                        break
+                                    end
+                                end
+                            end
+                        end)
                     end
                 end
             end
@@ -5441,6 +5718,254 @@ createToggle(
     getgenv().AutoExecuteEnabled
 )
 
+Sections.MiscLeft:Divider()
+
+Sections.MiscLeft:Header({ Text = "🎯 Placement" })
+Sections.MiscLeft:SubLabel({ Text = "Advanced tower placement options" })
+
+if not getgenv().PlaceAnywhereEnabled then
+    getgenv().PlaceAnywhereEnabled = getgenv().Config.toggles.PlaceAnywhereToggle or false
+end
+
+createToggle(
+    Sections.MiscLeft,
+    "Place Anywhere",
+    "PlaceAnywhereToggle",
+    function(value)
+        getgenv().PlaceAnywhereEnabled = value
+        Window:Notify({
+            Title = "Place Anywhere",
+            Description = value and "Enabled - Click on units to place them" or "Disabled",
+            Lifetime = 3
+        })
+    end,
+    getgenv().PlaceAnywhereEnabled
+)
+
+Sections.MiscLeft:SubLabel({
+    Text = "Click on any unit preview in workspace to place it at that location"
+})
+
+if not isInLobby then
+    local Mouse = LocalPlayer:GetMouse()
+    local UIS = game:GetService("UserInputService")
+    
+    local function getUnitAtMouse()
+        local target = Mouse.Target
+        if not target then return nil end
+        
+        local current = target
+        while current and current ~= workspace do
+            if current:IsA("Model") and current.Parent == workspace then
+                local hrp = current:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    local towerInfo = RS:FindFirstChild("Modules") and RS.Modules:FindFirstChild("TowerInfo")
+                    if towerInfo and towerInfo:FindFirstChild(current.Name) then
+                        return current.Name, hrp.CFrame
+                    end
+                end
+            end
+            current = current.Parent
+        end
+        
+        return nil
+    end
+    
+    Mouse.Button1Down:Connect(function()
+        if not getgenv().PlaceAnywhereEnabled then return end
+        
+        pcall(function()
+            local unitName, unitCFrame = getUnitAtMouse()
+            if unitName and unitCFrame then
+                local placeRemote = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("PlaceTower")
+                if placeRemote then
+                    placeRemote:FireServer(unitName, unitCFrame)
+                    print("[Place Anywhere] Placed " .. unitName .. " at " .. tostring(unitCFrame.Position))
+                    
+                    Window:Notify({
+                        Title = "Place Anywhere",
+                        Description = "Placed " .. unitName,
+                        Lifetime = 2
+                    })
+                end
+            end
+        end)
+    end)
+    
+    UIS.TouchTap:Connect(function(touchPositions, gameProcessedEvent)
+        if not getgenv().PlaceAnywhereEnabled or gameProcessedEvent then return end
+        
+        pcall(function()
+            local unitName, unitCFrame = getUnitAtMouse()
+            if unitName and unitCFrame then
+                local placeRemote = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("PlaceTower")
+                if placeRemote then
+                    placeRemote:FireServer(unitName, unitCFrame)
+                    print("[Place Anywhere] Placed " .. unitName .. " at " .. tostring(unitCFrame.Position))
+                    
+                    Window:Notify({
+                        Title = "Place Anywhere",
+                        Description = "Placed " .. unitName,
+                        Lifetime = 2
+                    })
+                end
+            end
+        end)
+    end)
+end
+
+if not getgenv().AutoVolcanoEnabled then
+    getgenv().AutoVolcanoEnabled = getgenv().Config.toggles.AutoVolcanoToggle or false
+end
+
+createToggle(
+    Sections.MiscLeft,
+    "Auto Volcano",
+    "AutoVolcanoToggle",
+    function(value)
+        getgenv().AutoVolcanoEnabled = value
+        Window:Notify({
+            Title = "Auto Volcano",
+            Description = value and "Enabled - Auto-activating volcanoes" or "Disabled",
+            Lifetime = 3
+        })
+    end,
+    getgenv().AutoVolcanoEnabled
+)
+
+if not isInLobby then
+    task.spawn(function()
+        while true do
+            task.wait(2)
+            
+            if getgenv().AutoVolcanoEnabled then
+                pcall(function()
+                    local gamemode = RS:FindFirstChild("Gamemode")
+                    local mapName = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("MapName")
+                    
+                    if gamemode and gamemode.Value == "Dungeon" and mapName and mapName.Value == "Infernal Volcano" then
+                        local volcano = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Volcanoes") and workspace.Map.Volcanoes:FindFirstChild("Volcano")
+                        
+                        if volcano then
+                            local remotes = RS:FindFirstChild("Remotes")
+                            local volcanoRemote = remotes and remotes:FindFirstChild("VolcanoRemote")
+                            
+                            if volcanoRemote then
+                                volcanoRemote:FireServer(volcano)
+                                print("[Auto Volcano] Activated volcano")
+                            end
+                        end
+                    end
+                end)
+            end
+        end
+    end)
+end
+
+if not getgenv().AutoOrbEnabled then
+    getgenv().AutoOrbEnabled = getgenv().Config.toggles.AutoOrbToggle or false
+end
+
+createToggle(
+    Sections.MiscLeft,
+    "Auto Orb",
+    "AutoOrbToggle",
+    function(value)
+        getgenv().AutoOrbEnabled = value
+        Window:Notify({
+            Title = "Auto Orb",
+            Description = value and "Enabled - Auto-collecting orbs" or "Disabled",
+            Lifetime = 3
+        })
+    end,
+    getgenv().AutoOrbEnabled
+)
+
+if not isInLobby then
+    task.spawn(function()
+        while true do
+            task.wait(1)
+            
+            if getgenv().AutoOrbEnabled then
+                pcall(function()
+                    local gamemode = RS:FindFirstChild("Gamemode")
+                    local mapName = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("MapName")
+                    
+                    local shouldCollect = false
+                    
+                    if gamemode then
+                        if gamemode.Value == "BossRush" then
+                            shouldCollect = true
+                        elseif gamemode.Value == "Dungeon" and mapName and mapName.Value == "Warehouse" then
+                            shouldCollect = true
+                        end
+                    end
+                    
+                    if shouldCollect then
+                        local orb = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("ActiveOrbs") and workspace.Map.ActiveOrbs:FindFirstChild("Orb")
+                        
+                        if orb then
+                            local remotes = RS:FindFirstChild("Remotes")
+                            local interactEvent = remotes and remotes:FindFirstChild("Interact")
+                            
+                            if interactEvent then
+                                interactEvent:FireServer(orb)
+                                print("[Auto Orb] Collected orb")
+                            end
+                        end
+                    end
+                end)
+            end
+        end
+    end)
+end
+
+if not getgenv().AntiMagicZoneEnabled then
+    getgenv().AntiMagicZoneEnabled = getgenv().Config.toggles.AntiMagicZoneToggle or false
+end
+
+createToggle(
+    Sections.MiscLeft,
+    "Anti Magic Zone",
+    "AntiMagicZoneToggle",
+    function(value)
+        getgenv().AntiMagicZoneEnabled = value
+        Window:Notify({
+            Title = "Anti Magic Zone",
+            Description = value and "Enabled - Teleporting away from magic zones" or "Disabled",
+            Lifetime = 3
+        })
+    end,
+    getgenv().AntiMagicZoneEnabled
+)
+
+if not isInLobby then
+    task.spawn(function()
+        while true do
+            task.wait(10)
+            
+            if getgenv().AntiMagicZoneEnabled then
+                pcall(function()
+                    local gamemode = RS:FindFirstChild("Gamemode")
+                    
+                    if gamemode and gamemode.Value == "BossRush" then
+                        local zoneHitbox = workspace:FindFirstChild("EffectZones") and workspace.EffectZones:FindFirstChild("ZoneHitbox")
+                        
+                        if zoneHitbox and zoneHitbox:IsA("BasePart") then
+                            local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                            
+                            if hrp then
+                                hrp.CFrame = zoneHitbox.CFrame
+                                print("[Anti Magic Zone] Teleported to safe zone")
+                            end
+                        end
+                    end
+                end)
+            end
+        end
+    end)
+end
+
 
 Sections.MiscRight:Header({ Text = "ℹ️ Information" })
 Sections.MiscRight:SubLabel({ Text = "Important notes and warnings" })
@@ -5899,12 +6424,12 @@ Sections.FinalExpeditionRight:SubLabel({
 })
 
 
-Sections.SeamlessFixLeft:Header({ Text = "🔄 Seamless Fix" })
+Sections.SeamlessFixLeft:Header({ Text = "🔄 Automation Settings" })
 Sections.SeamlessFixLeft:Divider()
 
-Sections.SeamlessFixLeft:Header({ Text = "💡 What is Seamless Fix?" })
+Sections.SeamlessFixLeft:Header({ Text = "💡 Seamless Fix" })
 Sections.SeamlessFixLeft:SubLabel({
-    Text = "Seamless Fix ensures the script continues running smoothly when you teleport between game instances. No need to manually re-execute!"
+    Text = "Ensures the script continues running smoothly when you teleport between game instances"
 })
 
 Sections.SeamlessFixLeft:Divider()
@@ -8554,27 +9079,27 @@ do
                     elseif clientData[itemKey] and type(clientData[itemKey]) == "number" then
                         currentValue = clientData[itemKey]
                         initialValue = getgenv()._WebhookInitialData[itemKey] or 0
-                        local total = initialValue + r.amount
+                        local total = currentValue 
                         rewardsText = rewardsText .. "+" .. formatNumber(r.amount) .. " " .. itemName .. " [ Total: " .. formatNumber(total) .. " ]\n"
                     elseif clientData.ItemData and clientData.ItemData[itemKey] then
                         currentValue = clientData.ItemData[itemKey].Amount or 0
                         initialValue = getgenv()._WebhookInitialData.ItemData[itemKey] or 0
-                        local total = initialValue + r.amount
+                        local total = currentValue 
                         rewardsText = rewardsText .. "+" .. formatNumber(r.amount) .. " " .. itemName .. " [ Total: " .. formatNumber(total) .. " ]\n"
                     elseif clientData.ExperienceItemsData and clientData.ExperienceItemsData[itemKey] then
                         currentValue = clientData.ExperienceItemsData[itemKey].Amount or 0
                         initialValue = getgenv()._WebhookInitialData.ExperienceItemsData[itemKey] or 0
-                        local total = initialValue + r.amount
+                        local total = currentValue 
                         rewardsText = rewardsText .. "+" .. formatNumber(r.amount) .. " " .. itemName .. " [ Total: " .. formatNumber(total) .. " ]\n"
                     elseif itemName:find("Candy Basket") then
                         currentValue = clientData.CandyBasket or 0
                         initialValue = getgenv()._WebhookInitialData.CandyBasket or 0
-                        local total = initialValue + r.amount
+                        local total = currentValue 
                         rewardsText = rewardsText .. "+" .. formatNumber(r.amount) .. " " .. itemName .. " [ Total: " .. formatNumber(total) .. " ]\n"
                     elseif itemName:find("Bingo Stamp") and clientData.ItemData and clientData.ItemData.HallowenBingoStamp then
                         currentValue = clientData.ItemData.HallowenBingoStamp.Amount or 0
                         initialValue = getgenv()._WebhookInitialData.ItemData.HallowenBingoStamp or 0
-                        local total = initialValue + r.amount
+                        local total = currentValue 
                         rewardsText = rewardsText .. "+" .. formatNumber(r.amount) .. " " .. itemName .. " [ Total: " .. formatNumber(total) .. " ]\n"
                     else
                         local total = r.amount
