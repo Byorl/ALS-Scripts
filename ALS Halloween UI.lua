@@ -224,6 +224,11 @@ local loadSuccess, loadError = pcall(function()
     MacLib = loadFunc()
 end)
 
+if not loadSuccess or not MacLib then
+    warn("[ALS] Failed to load MacLib: " .. tostring(loadError))
+    warn("[ALS] Please try rejoining the game or use a different executor.")
+    return
+end
 
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
