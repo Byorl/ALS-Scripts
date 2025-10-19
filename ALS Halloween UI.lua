@@ -5958,7 +5958,6 @@ Sections.SeamlessFixLeft:SubLabel({
     Text = "Script will automatically restart after this many rounds to prevent issues"
 })
 
--- Right side - Infinite Mode Restart
 Sections.SeamlessFixRight:Header({ Text = "♾️ Infinite Mode Restart" })
 Sections.SeamlessFixRight:SubLabel({
     Text = "Automatically restart the match when reaching a specific wave in Infinite mode"
@@ -6008,7 +6007,6 @@ Sections.SeamlessFixRight:SubLabel({
     Text = "Match will automatically restart when the wave counter reaches this number"
 })
 
--- Infinite mode restart logic
 if not isInLobby then
     task.spawn(function()
         while true do
@@ -9627,46 +9625,19 @@ do
                 return false
             end
             
-            local clickSuccess = false
-            
-            if getconnections then
-                pcall(function()
-                    task.wait(0.1)
-                    
-                    local events = {"Activated", "MouseButton1Click", "MouseButton1Down"}
-                    for _, eventName in ipairs(events) do
-                        local connections = getconnections(bestCard.button[eventName])
-                        if connections then
-                            for _, conn in ipairs(connections) do
-                                if conn and conn.Fire then
-                                    conn:Fire()
-                                    clickSuccess = true
-                                end
-                            end
-                        end
-                    end
-                    
-                    if clickSuccess then
-                        print("[Smart Card] ✓ Card clicked via connections")
-                    end
-                end)
-            end
-            
-            if not clickSuccess then
-                pcall(function()
-                    local GuiService = game:GetService("GuiService")
-                    GuiService.SelectedObject = nil
-                    task.wait(0.1)
-                    GuiService.SelectedObject = bestCard.button
-                    task.wait(0.2)
-                    
-                    VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
-                    task.wait(0.05)
-                    VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
-                    
-                    print("[Smart Card] ✓ Card clicked via GuiService (fallback)")
-                end)
-            end
+            pcall(function()
+                local GuiService = game:GetService("GuiService")
+                GuiService.SelectedObject = nil
+                task.wait(0.1)
+                GuiService.SelectedObject = bestCard.button
+                task.wait(0.2)
+                
+                VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
+                task.wait(0.05)
+                VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
+                
+                print("[Smart Card] ✓ Card clicked via GuiService")
+            end)
             
             task.wait(0.3)
             
