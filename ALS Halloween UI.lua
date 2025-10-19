@@ -6514,16 +6514,18 @@ do
             local currentTime = tick()
             
             if currentTime - lastSynthesisTime >= 10 then
-                if useCloneSynthesis(jinMori) then
-                    getgenv()._WukongLastSynthesisTime = currentTime
-                    
-                    Window:Notify({
-                        Title = "Auto Wukong",
-                        Description = "Clone Synthesis used (" .. (currentNirvana + 1) .. "/" .. maxNirvana .. ")",
-                        Lifetime = 3
-                    })
-                    
-                    task.wait(1)
+                if currentNirvana < 4 then
+                    if useCloneSynthesis(jinMori) then
+                        getgenv()._WukongLastSynthesisTime = currentTime
+                        
+                        Window:Notify({
+                            Title = "Auto Wukong",
+                            Description = "Clone Synthesis used (" .. (currentNirvana + 1) .. "/" .. maxNirvana .. ")",
+                            Lifetime = 3
+                        })
+                        
+                        task.wait(1)
+                    end
                 end
             end
         end
