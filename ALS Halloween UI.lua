@@ -1332,17 +1332,23 @@ getgenv().AutoExecuteEnabled = getgenv().Config.toggles.AutoExecuteToggle or fal
 
 local queueteleport = queue_on_teleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport)
 
-if getgenv().AutoExecuteEnabled and queueteleport then
-    local TeleportCheck = false
+if queueteleport then
     LocalPlayer.OnTeleport:Connect(function(State)
-        if getgenv().AutoExecuteEnabled and (not TeleportCheck) and queueteleport then
-            TeleportCheck = true
-            queueteleport('loadstring(game:HttpGet("https://raw.githubusercontent.com/Byorl/ALS-Scripts/refs/heads/main/Maclib.lua"))()')
-            print("[ALS] Auto Execute queued for next game")
+        if getgenv().AutoExecuteEnabled then
+            pcall(function()
+                queueteleport('loadstring(game:HttpGet("https://raw.githubusercontent.com/Byorl/ALS-Scripts/refs/heads/main/Maclib.lua"))()')
+                print("[ALS] Auto Execute queued for next game")
+            end)
         end
     end)
-elseif getgenv().AutoExecuteEnabled and not queueteleport then
-    warn("[ALS] Auto Execute enabled but queue_on_teleport function not found in your executor")
+    
+    if getgenv().AutoExecuteEnabled then
+        print("[ALS] Auto Execute on Teleport is active")
+    end
+else
+    if getgenv().AutoExecuteEnabled then
+        warn("[ALS] Auto Execute enabled but queue_on_teleport not supported by your executor")
+    end
 end
 
 if getgenv().SeamlessFixEnabled then
