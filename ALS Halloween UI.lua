@@ -6791,9 +6791,12 @@ task.spawn(function()
             end)
             
             if isFinalExpedition then
-                print("[Final Expedition] Detected - waiting for Next button...")
-                local waitTime = 0
-                local maxWaitTime = 10
+                print("[Final Expedition] Detected - waiting minimum 5s for Next button...")
+                
+                task.wait(5)
+                
+                local waitTime = 5
+                local maxWaitTime = 15
                 
                 while waitTime < maxWaitTime do
                     local foundNext = false
@@ -6819,7 +6822,7 @@ task.spawn(function()
                     end)
                     
                     if foundNext then
-                        print("[Final Expedition] Next button found and visible!")
+                        print("[Final Expedition] Next button found and visible after " .. waitTime .. "s!")
                         break
                     end
                     
@@ -6828,7 +6831,7 @@ task.spawn(function()
                 end
                 
                 if waitTime >= maxWaitTime then
-                    print("[Final Expedition] Timeout waiting for Next button")
+                    print("[Final Expedition] Timeout waiting for Next button after 15s")
                 end
             end
             
