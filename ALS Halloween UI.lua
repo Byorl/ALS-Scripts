@@ -1,5 +1,110 @@
 repeat task.wait() until game:IsLoaded()
 
+if not getgenv()._GlobalConnections then
+    getgenv()._GlobalConnections = {}
+end
+
+task.spawn(function()
+    while true do
+        task.wait(30)
+        pcall(function()
+            local cleaned = 0
+            for i = #getgenv()._GlobalConnections, 1, -1 do
+                local conn = getgenv()._GlobalConnections[i]
+                if conn and conn.Connected == false then
+                    table.remove(getgenv()._GlobalConnections, i)
+                    cleaned = cleaned + 1
+                end
+            end
+            
+            if getgenv().MacroCashHistory and #getgenv().MacroCashHistory > 10 then
+                local temp = {}
+                for i = 1, 10 do
+                    temp[i] = getgenv().MacroCashHistory[i]
+                end
+                getgenv().MacroCashHistory = temp
+                print("[Memory] Trimmed MacroCashHistory")
+            end
+            
+            if getgenv().SmartCardPicked and #getgenv().SmartCardPicked > 5 then
+                getgenv().SmartCardPicked = {}
+                print("[Memory] Cleared SmartCardPicked")
+            end
+            
+            if getgenv().SlowerCardPicked and #getgenv().SlowerCardPicked > 5 then
+                getgenv().SlowerCardPicked = {}
+                print("[Memory] Cleared SlowerCardPicked")
+            end
+            
+            if getgenv().MacroDataV2 and #getgenv().MacroDataV2 > 1000 and not getgenv().MacroRecordingV2 then
+                local temp = {}
+                for i = 1, 500 do
+                    temp[i] = getgenv().MacroDataV2[i]
+                end
+                getgenv().MacroDataV2 = temp
+                print("[Memory] Trimmed MacroDataV2")
+            end
+            
+            local heartbeatConns = 0
+            for _, conn in pairs(getconnections(game:GetService("RunService").Heartbeat)) do
+                if conn.Function then
+                    heartbeatConns = heartbeatConns + 1
+                end
+            end
+            
+            if heartbeatConns > 50 then
+                print("[Memory] WARNING: " .. heartbeatConns .. " Heartbeat connections detected!")
+                local disconnected = 0
+                for _, conn in pairs(getconnections(game:GetService("RunService").Heartbeat)) do
+                    if disconnected >= 20 then break end
+                    pcall(function()
+                        if conn.Function and not conn.Disabled then
+                            conn:Disable()
+                            disconnected = disconnected + 1
+                        end
+                    end)
+                end
+                print("[Memory] Disabled " .. disconnected .. " old Heartbeat connections")
+            end
+            
+            if cleaned > 0 then
+                print("[Memory] Cleaned up " .. cleaned .. " dead connections")
+            end
+            
+            local workspace = game:GetService("Workspace")
+            local debrisFolder = workspace:FindFirstChild("Debris")
+            if debrisFolder then
+                local debrisCount = #debrisFolder:GetChildren()
+                if debrisCount > 50 then
+                    for _, item in pairs(debrisFolder:GetChildren()) do
+                        pcall(function() item:Destroy() end)
+                    end
+                    print("[Memory] Cleared " .. debrisCount .. " debris items")
+                end
+            end
+            
+            local effectsCleared = 0
+            for _, obj in pairs(workspace:GetChildren()) do
+                pcall(function()
+                    if obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Beam") or 
+                       obj:IsA("Fire") or obj:IsA("Smoke") or obj:IsA("Sparkles") then
+                        obj:Destroy()
+                        effectsCleared = effectsCleared + 1
+                    end
+                end)
+            end
+            if effectsCleared > 0 then
+                print("[Memory] Cleared " .. effectsCleared .. " loose effects")
+            end
+            
+            collectgarbage("collect")
+            collectgarbage("collect")
+            
+            print("[Memory] Cleanup complete - Heartbeat: " .. heartbeatConns)
+        end)
+    end
+end)
+
 if not getgenv()._AutoRejoinSetup then
     getgenv()._AutoRejoinSetup = true
     
@@ -1541,7 +1646,7 @@ end
 
 task.spawn(function()
     while true do
-        task.wait(0.5) 
+        task.wait(1) 
         updateGameState()
     end
 end)
@@ -4310,12 +4415,12 @@ pathSlider = createSlider(
     "AutoPlayPathPercentage",
     1,
     50,
-    getgenv().AutoPlayConfig.pathPercentage,
+    getgenv().AutoPlayConfig.pathPercentage or 1,
     function(value)
-        getgenv().AutoPlayConfig.pathPercentage = math.floor(value)
+        getgenv().AutoPlayConfig.pathPercentage = value
     end,
     "Default",
-    0
+    1
 )
 
 task.spawn(function()
@@ -4699,6 +4804,122 @@ Sections.MacroLeft:Button({
             Window:Notify({
                 Title = "Delete Macro",
                 Description = "Failed to delete macro!",
+                Lifetime = 3
+            })
+        end
+    end,
+})
+
+Sections.MacroLeft:Divider()
+
+Sections.MacroLeft:Header({ Text = "📥 Macro Import" })
+Sections.MacroLeft:SubLabel({ Text = "Import macros from Discord links" })
+
+local macroImportInput = createInput(
+    Sections.MacroLeft,
+    "Import Link",
+    "MacroImportLink",
+    "Paste Discord link here",
+    "All",
+    function(value) end,
+    ""
+)
+
+Sections.MacroLeft:Button({
+    Name = "📥 Import Macro",
+    Callback = function()
+        local importLink = getgenv().Config.inputs.MacroImportLink or ""
+        
+        if not importLink or importLink == "" then
+            Window:Notify({
+                Title = "Macro Import",
+                Description = "Please paste a link in the input box!",
+                Lifetime = 3
+            })
+            return
+        end
+        
+        if not importLink:match("cdn%.discordapp%.com") and not importLink:match("cdn%.discord%.com") then
+            Window:Notify({
+                Title = "Macro Import",
+                Description = "Invalid Discord link!",
+                Lifetime = 3
+            })
+            return
+        end
+        
+        Window:Notify({
+            Title = "Macro Import",
+            Description = "Downloading macro...",
+            Lifetime = 2
+        })
+        
+        local success, result = pcall(function()
+            return game:HttpGet(importLink)
+        end)
+        
+        if not success or not result then
+            Window:Notify({
+                Title = "Macro Import",
+                Description = "Failed to download macro!",
+                Lifetime = 3
+            })
+            return
+        end
+        
+        local macroData
+        success, macroData = pcall(function()
+            return HttpService:JSONDecode(result)
+        end)
+        
+        if not success or not macroData then
+            Window:Notify({
+                Title = "Macro Import",
+                Description = "Invalid macro file format!",
+                Lifetime = 3
+            })
+            return
+        end
+        
+        local macroName = importLink:match("/([^/]+)%.json") or "Imported_Macro_" .. os.time()
+        macroName = macroName:gsub("%%20", " ")
+        
+        if getgenv().Macros[macroName] then
+            macroName = macroName .. "_" .. os.time()
+        end
+        
+        local saveSuccess = saveMacro(macroName, macroData)
+        
+        if saveSuccess then
+            loadMacros()
+            local macroNames = getMacroNames()
+            if macroDropdown then
+                pcall(function()
+                    macroDropdown:ClearOptions()
+                    macroDropdown:InsertOptions(macroNames)
+                    macroDropdown:UpdateSelection(macroName)
+                end)
+            end
+            
+            getgenv().CurrentMacro = macroName
+            getgenv().MacroData = macroData
+            getgenv().MacroTotalSteps = #macroData
+            
+            if macroImportInput and macroImportInput.UpdateText then
+                pcall(function()
+                    macroImportInput:UpdateText("")
+                end)
+            end
+            
+            Window:Notify({
+                Title = "Macro Import",
+                Description = "✅ Imported: " .. macroName,
+                Lifetime = 3
+            })
+        else
+            Window:Notify({
+                Title = "Macro Import",
+                Description = "Failed to save imported macro!",
                 Lifetime = 3
             })
         end
@@ -9700,35 +9921,78 @@ end
 do
     task.spawn(function()
         while true do
-            task.wait(1)
+            task.wait(0.25) 
             if getgenv().RemoveEnemiesEnabled then
-            pcall(function()
-                local enemies = workspace:FindFirstChild("Enemies")
-                if enemies then
-                    local children = enemies:GetChildren()
-                    for i = 1, #children do
-                        local enemy = children[i]
+                pcall(function()
+                    local enemies = workspace:FindFirstChild("Enemies")
+                    if enemies then
+                        for _, enemy in pairs(enemies:GetChildren()) do
+                            pcall(function()
+                                if enemy and enemy.Parent and enemy:IsA("Model") then
+                                    local isBoss = enemy:FindFirstChild("Boss")
+                                    if not isBoss or not isBoss.Value then
+                                        for _, desc in pairs(enemy:GetDescendants()) do
+                                            pcall(function()
+                                                if desc:IsA("ParticleEmitter") or desc:IsA("Trail") or desc:IsA("Beam") then
+                                                    desc.Enabled = false
+                                                    desc:Destroy()
+                                                elseif desc:IsA("Sound") then
+                                                    desc:Stop()
+                                                    desc:Destroy()
+                                                end
+                                            end)
+                                        end
+                                        enemy:Destroy()
+                                    end
+                                end
+                            end)
+                        end
+                    end
+                    
+                    local spawnedunits = workspace:FindFirstChild("SpawnedUnits")
+                    if spawnedunits then
+                        for _, su in pairs(spawnedunits:GetChildren()) do
+                            pcall(function()
+                                if su and su.Parent and su:IsA("Model") then
+                                    for _, desc in pairs(su:GetDescendants()) do
+                                        pcall(function()
+                                            if desc:IsA("ParticleEmitter") or desc:IsA("Trail") or desc:IsA("Beam") then
+                                                desc.Enabled = false
+                                                desc:Destroy()
+                                            elseif desc:IsA("Sound") then
+                                                desc:Stop()
+                                                desc:Destroy()
+                                            end
+                                        end)
+                                    end
+                                    su:Destroy()
+                                end
+                            end)
+                        end
+                    end
+                    
+                    local debris = workspace:FindFirstChild("Debris")
+                    if debris then
+                        for _, item in pairs(debris:GetChildren()) do
+                            pcall(function() 
+                                if item then
+                                    item:Destroy()
+                                end
+                            end)
+                        end
+                    end
+                    
+                    for _, obj in pairs(workspace:GetChildren()) do
                         pcall(function()
-                            if enemy and enemy.Parent and enemy:IsA("Model") and enemy.Name ~= "Boss" then
-                                enemy:Destroy()
+                            if obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Beam") then
+                                obj.Enabled = false
+                                obj:Destroy()
                             end
                         end)
                     end
-                end
-                
-                local spawnedunits = workspace:FindFirstChild("SpawnedUnits")
-                if spawnedunits then
-                    for _, su in pairs(spawnedunits:GetChildren()) do
-                        pcall(function()
-                            if su and su.Parent and su:IsA("Model") then
-                                su:Destroy()
-                            end
-                        end)
-                    end
-                end
-            end)
+                end)
+            end
         end
-    end
     end)
 end
 
@@ -9744,11 +10008,56 @@ if getgenv().AutoHideUIEnabled or getgenv().Config.toggles.AutoHideUI then
     end)
 end
 
+if not isInLobby then
+    task.spawn(function()
+        while true do
+            task.wait(1)
+            pcall(function()
+                for _, obj in pairs(workspace:GetDescendants()) do
+                    pcall(function()
+                        if obj:IsA("ParticleEmitter") then
+                            if obj.Rate > 100 then 
+                                obj.Enabled = false
+                                obj:Destroy()
+                            end
+                        elseif obj:IsA("Trail") or obj:IsA("Beam") then
+                            obj.Enabled = false
+                        elseif obj:IsA("Sound") then
+                            if obj.Volume > 0.5 then
+                                obj.Volume = 0
+                            end
+                        elseif obj:IsA("Fire") or obj:IsA("Smoke") or obj:IsA("Sparkles") then
+                            obj.Enabled = false
+                            obj:Destroy()
+                        end
+                    end)
+                end
+                
+                local camera = workspace.CurrentCamera
+                if camera then
+                    for _, effect in pairs(camera:GetChildren()) do
+                        pcall(function()
+                            if effect:IsA("BlurEffect") or effect:IsA("ColorCorrectionEffect") then
+                                effect.Enabled = false
+                            end
+                        end)
+                    end
+                end
+            end)
+        end
+    end)
+end
 
 if not isInLobby then
     task.spawn(function()
         while true do
             task.wait(15)
+            
+            pcall(function()
+                collectgarbage("collect")
+                collectgarbage("collect") 
+            end)
+            
             if getgenv().FPSBoostEnabled then
                 pcall(function()
                     local lighting = game:GetService("Lighting")
@@ -9827,6 +10136,16 @@ end
 
 if not isInLobby then
     task.spawn(function()
+        while true do
+            task.wait(30) 
+            pcall(function()
+                collectgarbage("collect")
+                print("[Memory] Garbage collection performed")
+            end)
+        end
+    end)
+    
+    task.spawn(function()
         local placedTowers = {}
         local hologramParts = {}
         
@@ -9904,10 +10223,22 @@ if not isInLobby then
             local waypoints = getWaypoints()
             if #waypoints == 0 then return nil end
             
-            local index = math.clamp(waypointIndex, 1, #waypoints)
-            local waypoint = waypoints[index].part
+            local baseIndex = math.floor(waypointIndex)
+            local decimal = waypointIndex - baseIndex
             
-            if not waypoint or not waypoint.Position then return nil end
+            baseIndex = math.clamp(baseIndex, 1, #waypoints)
+            local waypoint1 = waypoints[baseIndex].part
+            
+            if not waypoint1 or not waypoint1.Position then return nil end
+            
+            local waypointPos = waypoint1.Position
+            
+            if decimal > 0 and baseIndex < #waypoints then
+                local waypoint2 = waypoints[baseIndex + 1].part
+                if waypoint2 and waypoint2.Position then
+                    waypointPos = waypoint1.Position:Lerp(waypoint2.Position, decimal)
+                end
+            end
             
             if distance == 0 then distance = 10 end
             
@@ -9925,8 +10256,8 @@ if not isInLobby then
                     math.sin(angle) * distVariation
                 )
                 
-                local pos = waypoint.Position + offset
-                local cframe = CFrame.new(pos.X, waypoint.Position.Y, pos.Z)
+                local pos = waypointPos + offset
+                local cframe = CFrame.new(pos.X, waypointPos.Y, pos.Z)
                 
                 if isValidPlacement(cframe.Position) then
                     return cframe
@@ -9939,8 +10270,8 @@ if not isInLobby then
                 0,
                 math.sin(fallbackAngle) * (distance + 5)
             )
-            local fallbackPos = waypoint.Position + fallbackOffset
-            return CFrame.new(fallbackPos.X, waypoint.Position.Y, fallbackPos.Z)
+            local fallbackPos = waypointPos + fallbackOffset
+            return CFrame.new(fallbackPos.X, waypointPos.Y, fallbackPos.Z)
         end
         
         local function createHologram(unitName, cframe, slotNum)
@@ -9996,10 +10327,13 @@ if not isInLobby then
         
         local function clearHolograms()
             for _, part in pairs(hologramParts) do
-                if part and part.Parent then
-                    part:Destroy()
-                end
+                pcall(function()
+                    if part and part.Parent then
+                        part:Destroy()
+                    end
+                end)
             end
+            table.clear(hologramParts)
             hologramParts = {}
         end
         
@@ -10082,7 +10416,7 @@ if not isInLobby then
             print("[AutoPlay] Hologram loop started")
             
             while true do
-                task.wait(1)
+                task.wait(2)  
                 
                 if not getgenv().AutoPlayConfig.hologram then
                     clearHolograms()
@@ -10095,11 +10429,16 @@ if not isInLobby then
                 local clientData = getClientData()
                 if not clientData or not clientData.Slots then continue end
                 
-                local pathIndex = math.floor(getgenv().AutoPlayConfig.pathPercentage or 1)
+                local pathIndex = getgenv().AutoPlayConfig.pathPercentage or 1
                 local distance = math.floor(getgenv().AutoPlayConfig.distanceFromPath or 10)
                 
                 local sortedSlots = {"Slot1", "Slot2", "Slot3", "Slot4", "Slot5", "Slot6"}
+                local totalHolograms = 0
+                local maxHolograms = 30 
+                
                 for slotNum = 1, 6 do
+                    if totalHolograms >= maxHolograms then break end
+                    
                     local slotData = clientData.Slots[sortedSlots[slotNum]]
                     if slotData and slotData.Value then
                         local unitName = slotData.Value
@@ -10107,15 +10446,20 @@ if not isInLobby then
                         local currentCount = getPlacedTowerCount(slotNum)
                         
                         if placeCap > 0 then
-                            for i = currentCount + 1, placeCap do
+                            for i = currentCount + 1, math.min(placeCap, currentCount + 10) do  
+                                if totalHolograms >= maxHolograms then break end
+                                
                                 local position = getPlacementPosition(slotNum, pathIndex, distance)
                                 if position then
                                     createHologram(unitName, position, slotNum)
+                                    totalHolograms = totalHolograms + 1
                                 end
                             end
                         end
                     end
                 end
+                
+                pcall(function() collectgarbage("collect") end)
             end
         end
         
@@ -10123,7 +10467,7 @@ if not isInLobby then
             task.wait(3)
             
             while true do
-                task.wait(2)
+                task.wait(3)  
                 
                 if not getgenv().AutoPlayConfig.autoPlace then
                     task.wait(1)
@@ -10135,7 +10479,7 @@ if not isInLobby then
                 
                 local currentCash = tonumber(getgenv().MacroCurrentCash) or 0
                 
-                local pathIndex = math.floor(getgenv().AutoPlayConfig.pathPercentage or 1)
+                local pathIndex = getgenv().AutoPlayConfig.pathPercentage or 1
                 local distance = math.floor(getgenv().AutoPlayConfig.distanceFromPath or 10)
                 
                 local unitsToPlace = {}
@@ -10195,7 +10539,7 @@ if not isInLobby then
             task.wait(2)
             
             while true do
-                task.wait(0.5)
+                task.wait(1) 
                 
                 if not getgenv().AutoPlayConfig.autoUpgrade and not getgenv().AutoPlayConfig.autoUpgradePriority then continue end
                 
