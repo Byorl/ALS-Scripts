@@ -9215,27 +9215,12 @@ do
                 return false
             end
             
-            local GuiService = game:GetService("GuiService")
             local clickSuccess = false
-            
-            pcall(function()
-                GuiService.SelectedObject = nil
-                task.wait(0.1)
-                GuiService.SelectedObject = bestCard.button
-                task.wait(0.2)
-                
-                VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
-                task.wait(0.05)
-                VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
-                
-                clickSuccess = true
-                print("[Smart Card] ✓ Method 1: GuiService + Enter")
-            end)
-            
-            task.wait(0.2)
             
             if getconnections then
                 pcall(function()
+                    task.wait(0.1)
+                    
                     local events = {"Activated", "MouseButton1Click", "MouseButton1Down"}
                     for _, eventName in ipairs(events) do
                         local connections = getconnections(bestCard.button[eventName])
@@ -9243,11 +9228,31 @@ do
                             for _, conn in ipairs(connections) do
                                 if conn and conn.Fire then
                                     conn:Fire()
+                                    clickSuccess = true
                                 end
                             end
                         end
                     end
-                    print("[Smart Card] ✓ Method 2: Direct connection firing")
+                    
+                    if clickSuccess then
+                        print("[Smart Card] ✓ Card clicked via connections")
+                    end
+                end)
+            end
+            
+            if not clickSuccess then
+                pcall(function()
+                    local GuiService = game:GetService("GuiService")
+                    GuiService.SelectedObject = nil
+                    task.wait(0.1)
+                    GuiService.SelectedObject = bestCard.button
+                    task.wait(0.2)
+                    
+                    VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
+                    task.wait(0.05)
+                    VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
+                    
+                    print("[Smart Card] ✓ Card clicked via GuiService (fallback)")
                 end)
             end
             
