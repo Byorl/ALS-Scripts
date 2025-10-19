@@ -108,6 +108,38 @@ getgenv().Config.autoJoin = getgenv().Config.autoJoin or {}
 getgenv().SaveConfig = saveConfig
 getgenv().LoadConfig = loadConfig
 
+local function safeGarbageCollect()
+    pcall(function()
+        gcinfo()
+    end)
+end
+
+if not getgenv()._ConnectionManager then
+    getgenv()._ConnectionManager = {
+        connections = {},
+        add = function(self, name, connection)
+            if self.connections[name] then
+                pcall(function() self.connections[name]:Disconnect() end)
+            end
+            self.connections[name] = connection
+        end,
+        remove = function(self, name)
+            if self.connections[name] then
+                pcall(function() self.connections[name]:Disconnect() end)
+                self.connections[name] = nil
+            end
+        end,
+        cleanup = function(self)
+            for name, conn in pairs(self.connections) do
+                pcall(function() conn:Disconnect() end)
+            end
+            self.connections = {}
+        end
+    }
+end
+
+local ConnectionManager = getgenv()._ConnectionManager
+
 local defaultWidth = 720
 local defaultHeight = 480
 local customWidth = tonumber(getgenv().Config.inputs.UIWidth) or defaultWidth
@@ -172,6 +204,8 @@ local globalSettings = {
 }
 
 Window.onUnloaded(function()
+    print("[Cleanup] Unloading script and cleaning up resources...")
+    
     getgenv().ALSScriptLoaded = false
     getgenv().MacroPlayEnabled = false
     getgenv().MacroRecordingV2 = false
@@ -179,14 +213,54 @@ Window.onUnloaded(function()
     
     pcall(function()
         if cashConnection then cashConnection:Disconnect() end
+        if cashTrackingConnection then cashTrackingConnection:Disconnect() end
         for tower, conn in pairs(towerTracker.upgradeConnections or {}) do
             if conn then conn:Disconnect() end
         end
     end)
     
+    if ConnectionManager then
+        ConnectionManager:cleanup()
+    end
+    
     getgenv().MacroTowerInfoCache = nil
     getgenv().MacroRemoteCache = nil
     getgenv().MacroCashHistory = nil
+    getgenv().WukongTrackedClones = nil
+    getgenv().SmartCardPicked = nil
+    getgenv().SlowerCardPicked = nil
+    
+    for i = 1, 3 do
+        safeGarbageCollect()
+    end
+    
+    print("[Cleanup] Complete")
+end)
+
+task.spawn(function()
+    local lastPing = 0
+    local highPingCount = 0
+    
+    while task.wait(5) do
+        pcall(function()
+            local ping = game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValue()
+            
+            if ping > 1000 then
+                highPingCount = highPingCount + 1
+                warn("[Network] High ping detected: " .. math.floor(ping) .. "ms (" .. highPingCount .. "/3)")
+                
+                if highPingCount >= 3 then
+                    warn("[Network] ⚠️ Persistent high ping - possible connection issues")
+                    safeGarbageCollect()
+                    highPingCount = 0
+                end
+            else
+                highPingCount = 0
+            end
+            
+            lastPing = ping
+        end)
+    end
 end)
 
 task.wait(2)
@@ -1314,7 +1388,7 @@ local function updateGameState()
         local currentGameEnded = gameEndedValue and gameEndedValue.Value or false
         
         if currentGameEnded and not getgenv().MacroGameState.lastGameEndedState then
-            print("[Game State] Game ended detected")
+            print("[Game State] Game ended detected - cleaning up memory")
             getgenv().MacroGameState.gameEnded = true
             getgenv().MacroGameState.seamlessTransition = false
             
@@ -1325,6 +1399,28 @@ local function updateGameState()
             getgenv().SmartCardLastPromptId = nil
             getgenv().SlowerCardPicked = {}
             getgenv().SlowerCardLastPromptId = nil
+            getgenv().OneEyeDevilCurrentIndex = 0  
+            
+            if getgenv().MacroCashHistory and #getgenv().MacroCashHistory > 10 then
+                local temp = {}
+                for i = 1, 10 do
+                    temp[i] = getgenv().MacroCashHistory[i]
+                end
+                getgenv().MacroCashHistory = temp
+            end
+            
+            if getgenv()._EtoEvoAbilityUsed then
+                getgenv()._EtoEvoAbilityUsed = {}
+            end
+            
+            pcall(function()
+                for i = 1, 3 do
+                    safeGarbageCollect()
+                    task.wait(0.1)
+                end
+            end)
+            
+            print("[Memory] Cleanup complete")
         end
         
         if not currentGameEnded and getgenv().MacroGameState.lastGameEndedState then
@@ -1346,7 +1442,7 @@ end
 
 task.spawn(function()
     while true do
-        task.wait(0.3)
+        task.wait(0.5) 
         updateGameState()
     end
 end)
@@ -1641,10 +1737,10 @@ local function setupRecordingHook()
         local lastTowerCount = {}
         
         while true do
-            task.wait(0.3)
+            task.wait(0.5) 
             
             if not getgenv().MacroRecordingV2 then
-                task.wait(0.5)
+                task.wait(1) 
                 continue
             end
             
@@ -3402,6 +3498,9 @@ getgenv().BulmaWishUsedThisRound = false
 getgenv().WukongEnabled = getgenv().Config.toggles.WukongToggle or false
 getgenv().WukongTrackedClones = {}
 
+getgenv().OneEyeDevilEnabled = getgenv().Config.toggles.OneEyeDevilToggle or false
+getgenv().OneEyeDevilCurrentIndex = 0 
+
 getgenv().EventJoinDelay = tonumber(getgenv().Config.inputs.EventJoinDelay) or 0
 getgenv().AutoJoinDelay = tonumber(getgenv().Config.inputs.AutoJoinDelay) or 0
 
@@ -3703,7 +3802,15 @@ local function buildAutoAbilityUI()
                 end
             end
             
-            if hasBulma or hasWukong then
+            local hasEtoEvo = false
+            for slotName, slotData in pairs(clientData.Slots) do
+                if slotData.Value == "EtoEvo" then
+                    hasEtoEvo = true
+                    break
+                end
+            end
+            
+            if hasBulma or hasWukong or hasEtoEvo then
                 local specialSection = Tabs.Abilities:Section({ Side = "Left" })
                 table.insert(getgenv()._AbilityUIElements["Left"], specialSection)
                 
@@ -3763,6 +3870,27 @@ local function buildAutoAbilityUI()
                             })
                         end,
                         getgenv().WukongEnabled
+                    )
+                end
+                
+                if hasEtoEvo then
+                    if hasBulma or hasWukong then
+                        specialSection:Divider()
+                    end
+                    
+                    createToggle(
+                        specialSection,
+                        "Auto One Eye Devil (EtoEvo)",
+                        "OneEyeDevilToggle",
+                        function(value)
+                            getgenv().OneEyeDevilEnabled = value
+                            Window:Notify({
+                                Title = "Auto One Eye Devil",
+                                Description = value and "Enabled - Cycling Ocular Sigils" or "Disabled",
+                                Lifetime = 2
+                            })
+                        end,
+                        getgenv().OneEyeDevilEnabled
                     )
                 end
             end
@@ -5568,14 +5696,12 @@ task.spawn(function()
                 end
             end)
             
-            -- For Final Expedition, ALWAYS wait for Next button before proceeding
             if isFinalExpedition then
                 print("[Final Expedition] Detected - waiting for Next button...")
                 local waitTime = 0
                 local maxWaitTime = 10
                 
                 while waitTime < maxWaitTime do
-                    -- Check if Next button exists and is visible
                     local foundNext = false
                     pcall(function()
                         if buttons then
@@ -6316,9 +6442,9 @@ do
         if not jinMoriTower then return false end
         
         local success, err = pcall(function()
-            local AbilityEvent = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("AbilityEvent")
-            if AbilityEvent then
-                AbilityEvent:InvokeServer(jinMoriTower, "Clone Synthesis")
+            local Ability = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("Ability")
+            if Ability then
+                Ability:InvokeServer(jinMoriTower, "Clone Synthesis")
                 return true
             end
         end)
@@ -6356,9 +6482,9 @@ do
         if not cloneTower then return false end
         
         local success, err = pcall(function()
-            local AbilityEvent = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("AbilityEvent")
-            if AbilityEvent then
-                AbilityEvent:InvokeServer(cloneTower, "Clone Diffusion")
+            local Ability = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("Ability")
+            if Ability then
+                Ability:InvokeServer(cloneTower, "Clone Diffusion")
                 return true
             end
         end)
@@ -6442,8 +6568,331 @@ do
             getgenv().BulmaWishUsedThisRound = false
             getgenv().WukongTrackedClones = {}
             getgenv()._WukongLastSynthesisTime = 0
+            getgenv().OneEyeDevilCurrentIndex = 0 
+            
+            if getgenv()._EtoEvoAbilityUsed then
+                getgenv()._EtoEvoAbilityUsed = {}
+            end
         end
     end)
+    end)
+end
+
+do
+    task.spawn(function()
+        local SIGIL_ORDER = {
+            [0] = "Ocular Sigil: Eye",
+            [1] = "Ocular Sigil: Mouth",
+            [2] = "Ocular Sigil: Arm",
+            [3] = "Ocular Sigil: Leg"
+        }
+        
+        if not getgenv()._EtoEvoAbilityUsed then
+            getgenv()._EtoEvoAbilityUsed = {}
+        end
+        
+        local function getEtoEvoTower()
+            local towers = workspace:FindFirstChild("Towers")
+            if not towers then return nil end
+            
+            for _, tower in pairs(towers:GetChildren()) do
+                local owner = tower:FindFirstChild("Owner")
+                if tower.Name == "EtoEvo" and owner and owner.Value == LocalPlayer then
+                    return tower
+                end
+            end
+            return nil
+        end
+        
+        local function getTowerInfoName(tower)
+            if not tower then return nil end
+            local config = tower:FindFirstChild("Config")
+            if config then
+                local infoName = config:FindFirstChild("InfoName")
+                if infoName and infoName.Value then
+                    return infoName.Value
+                end
+            end
+            return tower.Name
+        end
+        
+        local function getUpgradeLevel(tower)
+            if not tower then return 0 end
+            local upgrade = tower:FindFirstChild("Upgrade")
+            return upgrade and upgrade.Value or 0
+        end
+        
+        local function getCurrentTimeScale()
+            local ok, res = pcall(function()
+                local timeScale = RS:FindFirstChild("TimeScale")
+                if timeScale and timeScale:IsA("NumberValue") then
+                    return timeScale.Value or 1
+                end
+                return 1
+            end)
+            return ok and res or 1
+        end
+        
+        local function resetEtoEvoCooldowns()
+            if getgenv()._EtoEvoAbilityUsed then
+                getgenv()._EtoEvoAbilityUsed = {}
+            end
+            print("[One Eye Devil] Cooldowns reset")
+        end
+        
+        local function isOnCooldown(infoName, abilityName, unitName)
+            if not getgenv()._EtoEvoAbilityUsed[infoName] then
+                return false
+            end
+            
+            local lastUse = getgenv()._EtoEvoAbilityUsed[infoName][abilityName]
+            if not lastUse then return false end
+            
+            local baseCooldown = 50
+            local towerInfo = getgenv().MacroTowerInfoCache
+            if towerInfo and towerInfo[unitName] then
+                for level, data in pairs(towerInfo[unitName]) do
+                    if data.Abilities then
+                        for _, abilityData in ipairs(data.Abilities) do
+                            if abilityData.Name == abilityName then
+                                baseCooldown = abilityData.Cd or 50
+                                break
+                            end
+                        end
+                    end
+                end
+            end
+            
+            local timeScale = getCurrentTimeScale()
+            local effectiveCooldown = baseCooldown / timeScale
+            
+            local elapsed = tick() - lastUse
+            return elapsed < effectiveCooldown
+        end
+        
+        local function setAbilityUsed(infoName, abilityName)
+            if not getgenv()._EtoEvoAbilityUsed[infoName] then
+                getgenv()._EtoEvoAbilityUsed[infoName] = {}
+            end
+            getgenv()._EtoEvoAbilityUsed[infoName][abilityName] = tick()
+        end
+        
+        local function getCardButtons()
+            local ok, result = pcall(function()
+                local prompt = LocalPlayer.PlayerGui:FindFirstChild("Prompt")
+                if not prompt or not prompt.Enabled then return nil end
+                
+                local frame = prompt:FindFirstChild("Frame")
+                if not frame then return nil end
+                
+                local frame2 = frame:FindFirstChild("Frame")
+                if not frame2 then return nil end
+                
+                local frame3 = frame2:FindFirstChild("Frame")
+                if not frame3 then return nil end
+                
+                local frame4 = frame3:FindFirstChild("Frame")
+                if not frame4 then return nil end
+                
+                local buttons = {}
+                for _, child in ipairs(frame4:GetChildren()) do
+                    if child:IsA("TextButton") then
+                        table.insert(buttons, child)
+                    end
+                end
+                
+                return #buttons > 0 and buttons or nil
+            end)
+            
+            return ok and result or nil
+        end
+        
+        local function getCardName(button)
+            local ok, result = pcall(function()
+                local function searchForTextLabel(parent, depth)
+                    if depth > 10 then return nil end
+                    
+                    for _, child in ipairs(parent:GetChildren()) do
+                        if child:IsA("TextLabel") and child.Text ~= "" and child.Text:find("Ocular Sigil") then
+                            return child.Text
+                        end
+                        
+                        if child:IsA("Frame") or child:IsA("Folder") then
+                            local found = searchForTextLabel(child, depth + 1)
+                            if found then return found end
+                        end
+                    end
+                    
+                    return nil
+                end
+                
+                return searchForTextLabel(button, 0)
+            end)
+            
+            return ok and result or nil
+        end
+        
+        local function clickButton(button)
+            if not button then return false end
+            
+            local success = false
+            
+            if getconnections then
+                pcall(function()
+                    local events = {"Activated", "MouseButton1Click", "MouseButton1Down"}
+                    for _, eventName in ipairs(events) do
+                        local connections = getconnections(button[eventName])
+                        if connections then
+                            for _, conn in ipairs(connections) do
+                                if conn and conn.Fire then
+                                    conn:Fire()
+                                    success = true
+                                end
+                            end
+                        end
+                    end
+                end)
+            end
+            
+            if not success then
+                pcall(function()
+                    local GuiService = game:GetService("GuiService")
+                    GuiService.SelectedObject = nil
+                    task.wait(0.05)
+                    GuiService.SelectedObject = button
+                    task.wait(0.1)
+                    
+                    VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
+                    task.wait(0.02)
+                    VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
+                    
+                    success = true
+                end)
+            end
+            
+            return success
+        end
+        
+        local lastWave = 0
+        local isWaitingForPrompt = false
+        local promptWaitStart = 0
+        
+        while true do
+            task.wait(0.5)
+            
+            if not getgenv().OneEyeDevilEnabled then
+                task.wait(2)
+                continue
+            end
+            
+            pcall(function()
+                local currentWave = 0
+                pcall(function()
+                    local wave = RS:FindFirstChild("Wave")
+                    if wave and wave:IsA("NumberValue") then
+                        currentWave = wave.Value
+                    end
+                end)
+                
+                if currentWave < lastWave then
+                    resetEtoEvoCooldowns()
+                    isWaitingForPrompt = false
+                end
+                
+                if getgenv().SeamlessFixEnabled and lastWave >= 50 and currentWave < 50 then
+                    resetEtoEvoCooldowns()
+                    isWaitingForPrompt = false
+                end
+                
+                if currentWave == 1 and lastWave > 10 then
+                    resetEtoEvoCooldowns()
+                    isWaitingForPrompt = false
+                end
+                
+                lastWave = currentWave
+                
+                local tower = getEtoEvoTower()
+                if not tower then 
+                    isWaitingForPrompt = false
+                    return 
+                end
+                
+                local infoName = getTowerInfoName(tower)
+                local towerLevel = getUpgradeLevel(tower)
+                
+                if towerLevel < 3 then
+                    return
+                end
+                
+                local buttons = getCardButtons()
+                
+                if buttons then
+                    if isWaitingForPrompt and tick() - promptWaitStart > 5 then
+                        isWaitingForPrompt = false
+                        return
+                    end
+                    
+                    if not isWaitingForPrompt then
+                        isWaitingForPrompt = true
+                        promptWaitStart = tick()
+                    end
+                    
+                    local targetCard = SIGIL_ORDER[getgenv().OneEyeDevilCurrentIndex]
+                    
+                    local foundCard = false
+                    for _, button in ipairs(buttons) do
+                        local cardName = getCardName(button)
+                        if cardName then
+                            if cardName == targetCard then
+                                print("[One Eye Devil] Clicking: " .. cardName)
+                                
+                                if clickButton(button) then
+                                    foundCard = true
+                                    isWaitingForPrompt = false
+                                    
+                                    setAbilityUsed(infoName, "Detachment")
+                                    
+                                    local timeScale = getCurrentTimeScale()
+                                    local baseCd = 50
+                                    local effectiveCd = baseCd / timeScale
+                                    
+                                    getgenv().OneEyeDevilCurrentIndex = (getgenv().OneEyeDevilCurrentIndex + 1) % 4
+                                    
+                                    local nextCard = SIGIL_ORDER[getgenv().OneEyeDevilCurrentIndex]
+                                    local cdText = string.format("%.1fs", effectiveCd)
+                                    if timeScale ~= 1 then
+                                        cdText = cdText .. " (x" .. timeScale .. " speed)"
+                                    end
+                                    
+                                    print("[One Eye Devil] Next card: " .. nextCard .. " (CD: " .. cdText .. ")")
+                                    
+                                    Window:Notify({
+                                        Title = "One Eye Devil",
+                                        Description = "Selected: " .. cardName,
+                                        Lifetime = 2
+                                    })
+                                    
+                                    break
+                                end
+                            end
+                        end
+                    end
+
+                    return
+                end
+                
+                if not isWaitingForPrompt and not isOnCooldown(infoName, "Detachment", "EtoEvo") then
+                    local abilityUsed, abilityResult = pcall(function()
+                        return RS.Remotes.Ability:InvokeServer(tower, "Detachment")
+                    end)
+                    
+                    if abilityUsed and abilityResult then
+                        isWaitingForPrompt = true
+                        promptWaitStart = tick()
+                    end
+                end
+            end)
+        end
     end)
 end
 
@@ -6461,6 +6910,7 @@ do
                     getgenv().BulmaWishUsedThisRound = false
                     getgenv().WukongTrackedClones = {}
                     getgenv()._WukongLastSynthesisTime = 0
+                    getgenv().OneEyeDevilCurrentIndex = 0 
                 end
                 
                 lastWave = currentWave
@@ -6667,7 +7117,6 @@ task.spawn(function()
                             return
                         end
                     end
-                    print("[Final Expedition] No matching options found")
                 end
             end)
         end
@@ -7207,12 +7656,36 @@ local function SendMessageEMBED(url, embed, content)
             return false
         end
         
-        local response = requestFunc({
-            Url = url,
-            Method = "POST",
-            Headers = headers,
-            Body = body
-        })
+        local maxRetries = 3
+        local retryDelay = 1
+        local response = nil
+        
+        for attempt = 1, maxRetries do
+            local requestSuccess, requestResult = pcall(function()
+                return requestFunc({
+                    Url = url,
+                    Method = "POST",
+                    Headers = headers,
+                    Body = body
+                })
+            end)
+            
+            if requestSuccess and requestResult then
+                response = requestResult
+                break
+            else
+                warn("[Webhook] Attempt " .. attempt .. "/" .. maxRetries .. " failed: " .. tostring(requestResult))
+                if attempt < maxRetries then
+                    task.wait(retryDelay)
+                    retryDelay = retryDelay * 2 
+                end
+            end
+        end
+        
+        if not response then
+            warn("[Webhook] All retry attempts failed")
+            return false
+        end
         
         if response and response.StatusCode then
             if response.StatusCode == 204 or response.StatusCode == 200 then
@@ -7644,8 +8117,15 @@ do
     local startEvent = halloweenFolder and halloweenFolder:FindFirstChild("Start")
     
     while true do
-        task.wait(0.5)
-        if getgenv().AutoEventEnabled and enterEvent and startEvent then
+        task.wait(1) 
+        
+
+        if not getgenv().AutoEventEnabled then
+            task.wait(2)
+            continue
+        end
+        
+        if enterEvent and startEvent then
             pcall(function()
                 local delay = getgenv().EventJoinDelay or 0
                 if delay > 0 then
@@ -7671,28 +8151,32 @@ if isInLobby then
         
         
         while true do
-            task.wait(2)
-            if getgenv().BingoEnabled then
-                pcall(function()
-                    if UseStampEvent then
-                        for i=1,25 do 
-                            UseStampEvent:FireServer()
-                            task.wait(0.1)
-                        end
-                    end
-                    task.wait(0.5)
-                    if ClaimRewardEvent then
-                        for i=1,25 do 
-                            ClaimRewardEvent:InvokeServer(i)
-                            task.wait(0.1)
-                        end
-                    end
-                    task.wait(0.5)
-                    if CompleteBoardEvent then 
-                        CompleteBoardEvent:InvokeServer()
-                    end
-                end)
+            task.wait(3)
+            
+            if not getgenv().BingoEnabled then
+                task.wait(5)
+                continue
             end
+            
+            pcall(function()
+                if UseStampEvent then
+                    for i=1,25 do 
+                        UseStampEvent:FireServer()
+                        task.wait(0.1)
+                    end
+                end
+                task.wait(0.5)
+                if ClaimRewardEvent then
+                    for i=1,25 do 
+                        ClaimRewardEvent:InvokeServer(i)
+                        task.wait(0.1)
+                    end
+                end
+                task.wait(0.5)
+                if CompleteBoardEvent then 
+                    CompleteBoardEvent:InvokeServer()
+                end
+            end)
         end
     end)
     
@@ -7744,8 +8228,14 @@ if isInLobby then
         end
         
         while true do
-            task.wait(0.5)
-            if getgenv().CapsuleEnabled then
+            task.wait(1) 
+            
+            if not getgenv().CapsuleEnabled then
+                task.wait(3)
+                continue
+            end
+            
+            if true then
                 local clientData = getClientData()
                 if clientData then
                     local candyBasket = clientData.CandyBasket or 0
@@ -7946,6 +8436,10 @@ do
     local function findBestCard(list)
         local bestIndex, bestPriority = nil, math.huge
         
+        local blacklistedCards = {
+            ["Devil's Sacrifice"] = true, 
+        }
+        
         local isBossRush = false
         pcall(function()
             local gamemode = RS:FindFirstChild("Gamemode")
@@ -7958,10 +8452,13 @@ do
         
         for i=1,#list do
             local nm = list[i].name
-            local p = (priorityTable and priorityTable[nm]) or 999
-            if p < bestPriority and p < 999 then
-                bestPriority = p
-                bestIndex = i
+            
+            if not blacklistedCards[nm] then
+                local p = (priorityTable and priorityTable[nm]) or 999
+                if p < bestPriority and p < 999 then
+                    bestPriority = p
+                    bestIndex = i
+                end
             end
         end
         if bestIndex then
@@ -8334,66 +8831,84 @@ do
     end
     
     local function calculateCardValue(cardName, currentWave)
-        local validCandyCards = {
-            ["Critical Denial"] = {type = "wave", value = 100},
-            ["Weakened Resolve III"] = {type = "wave", value = 50},
-            ["Fog of War III"] = {type = "wave", value = 50},
-            ["Weakened Resolve II"] = {type = "wave", value = 25},
-            ["Fog of War II"] = {type = "wave", value = 25},
-            ["Power Reversal II"] = {type = "wave", value = 25},
-            ["Greedy Vampire's"] = {type = "wave", value = 25},
-            ["Weakened Resolve I"] = {type = "wave", value = 15},
-            ["Fog of War I"] = {type = "wave", value = 15},
-            ["Power Reversal I"] = {type = "wave", value = 15},
-            
-            ["Lingering Fear II"] = {type = "kill", value = 2},
-            ["Hellish Gravity"] = {type = "kill", value = 2},
-            ["Lingering Fear I"] = {type = "kill", value = 1},
-            ["Deadly Striker"] = {type = "kill", value = 1},
-            
-            ["Trick or Treat Coin Flip"] = {type = "special", value = 0},
+        local blacklistedCards = {
+            ["Devil's Sacrifice"] = true, 
         }
         
-        local cardData = validCandyCards[cardName]
+        if blacklistedCards[cardName] then
+            return -999999999 
+        end
+        
+        local cardDefinitions = {
+            ["Critical Denial"] = {type = "wave", candyPerWave = 100},
+            ["Weakened Resolve III"] = {type = "wave", candyPerWave = 50},
+            ["Fog of War III"] = {type = "wave", candyPerWave = 50},
+            ["Weakened Resolve II"] = {type = "wave", candyPerWave = 25},
+            ["Fog of War II"] = {type = "wave", candyPerWave = 25},
+            ["Power Reversal II"] = {type = "wave", candyPerWave = 25},
+            ["Greedy Vampire's"] = {type = "wave", candyPerWave = 25},
+            ["Weakened Resolve I"] = {type = "wave", candyPerWave = 15},
+            ["Fog of War I"] = {type = "wave", candyPerWave = 15},
+            ["Power Reversal I"] = {type = "wave", candyPerWave = 15},
+            
+            ["Lingering Fear II"] = {type = "kill", bonusCandyPerKill = 2},
+            ["Hellish Gravity"] = {type = "kill", bonusCandyPerKill = 2},
+            ["Lingering Fear I"] = {type = "kill", bonusCandyPerKill = 1},
+            ["Deadly Striker"] = {type = "kill", bonusCandyPerKill = 1},
+            
+            ["Trick or Treat Coin Flip"] = {type = "special", treatValue = 5000},
+        }
+        
+        local cardData = cardDefinitions[cardName]
         if not cardData then
+            local isCandyCard = getgenv().CandyCards and getgenv().CandyCards[cardName] ~= nil
+            if not isCandyCard then
+                return -999999
+            end
+            cardData = {type = "wave", candyPerWave = 20}
+        end
+        
+        local userPriority = (getgenv().CardPriority and getgenv().CardPriority[cardName]) or 1
+        if userPriority >= 999 then
             return -999999
         end
         
         local TOTAL_WAVES = 50
         local TOTAL_ENEMIES = 1350
         
-        local wavesRemaining = math.max(0, TOTAL_WAVES - currentWave)
+        local wavesRemaining = math.max(1, TOTAL_WAVES - currentWave + 1)
         
         local currentKills = 0
         pcall(function()
             currentKills = game:GetService("Players").LocalPlayer.leaderstats.Kills.Value
         end)
         
-        local enemiesRemaining = math.max(0, TOTAL_ENEMIES - currentKills)
+        local enemiesRemaining = math.max(1, TOTAL_ENEMIES - currentKills)
         
-        local candyValue = 0
+        local totalCandyValue = 0
         
         if cardData.type == "wave" then
-            candyValue = cardData.value * wavesRemaining
-            if candyValue == 0 then
-                candyValue = 1
-            end
+            totalCandyValue = cardData.candyPerWave * wavesRemaining
+            
         elseif cardData.type == "kill" then
-            candyValue = cardData.value * enemiesRemaining
-            if candyValue == 0 then
-                candyValue = 1
-            end
+            totalCandyValue = cardData.bonusCandyPerKill * enemiesRemaining
+            
         elseif cardData.type == "special" and cardName == "Trick or Treat Coin Flip" then
             if wavesRemaining >= 40 then
-                candyValue = 3000
-            elseif wavesRemaining >= 25 then
-                candyValue = 1500
+                totalCandyValue = 2500
+            elseif wavesRemaining >= 30 then
+                totalCandyValue = 2000
+            elseif wavesRemaining >= 20 then
+                totalCandyValue = 1500
             else
-                candyValue = 500
+                totalCandyValue = 1000
             end
         end
         
-        return candyValue
+        local priorityMultiplier = 1.0 / (1.0 + (userPriority - 1) * 0.05)
+        totalCandyValue = totalCandyValue * priorityMultiplier
+        
+        return totalCandyValue
     end
     
     local function selectCardSmart()
@@ -8419,76 +8934,119 @@ do
                 end
             end)
             
-            
             local list = getAvailableCards()
             if not list or #list == 0 then 
+                print("[Smart Card] ❌ No cards detected in UI")
                 return false 
             end
-            
-            local bestCard = nil
-            local bestValue = -999999
-            local secondBestCard = nil
-            local secondBestValue = -999999
             
             local alreadyPicked = {}
             for _, pickedName in ipairs(getgenv().SmartCardPicked) do
                 alreadyPicked[pickedName] = true
             end
             
-            for i=1,#list do
-                local nm = list[i].name
+            local candyCards = {}
+            local nonCandyCards = {}
+            
+            print("[Smart Card] Wave " .. currentWave .. " - Evaluating " .. #list .. " cards:")
+            
+            for i = 1, #list do
+                local cardName = list[i].name
+                local button = list[i].button
                 
-                if not alreadyPicked[nm] then
-                    local value = calculateCardValue(nm, currentWave)
+                if not alreadyPicked[cardName] then
+                    local value = calculateCardValue(cardName, currentWave)
                     
-                    if value > bestValue then
-                        secondBestValue = bestValue
-                        secondBestCard = bestCard
-                        bestValue = value
-                        bestCard = list[i]
-                    elseif value > secondBestValue then
-                        secondBestValue = value
-                        secondBestCard = list[i]
+                    if value > -999999 then
+                        table.insert(candyCards, {
+                            name = cardName,
+                            button = button,
+                            value = value
+                        })
+                        print("  ✅ " .. cardName .. " = " .. math.floor(value) .. " candy")
+                    else
+                        table.insert(nonCandyCards, cardName)
+                        print("  ❌ " .. cardName .. " = SKIPPED")
                     end
                 end
             end
             
-            if not bestCard or bestValue <= 0 or not bestCard.button then
+            table.sort(candyCards, function(a, b)
+                return a.value > b.value
+            end)
+            
+            if #candyCards == 0 then
+                print("[Smart Card] ⚠️ WARNING: No valid candy cards found! Available cards:")
+                for _, name in ipairs(nonCandyCards) do
+                    print("    - " .. name)
+                end
                 return false
             end
             
-            print("[Smart Card] ✅ " .. bestCard.name .. " | Value: " .. math.floor(bestValue))
-
+            local bestCard = candyCards[1]
+            print("[Smart Card] 🎯 SELECTING: " .. bestCard.name .. " (" .. math.floor(bestCard.value) .. " candy)")
+            
+            if not bestCard.button or not bestCard.button:IsDescendantOf(LocalPlayer.PlayerGui) then
+                print("[Smart Card] ❌ Button not valid or not in PlayerGui")
+                return false
+            end
             
             local GuiService = game:GetService("GuiService")
-            local button = bestCard.button
+            local clickSuccess = false
             
-            if not button:IsDescendantOf(LocalPlayer.PlayerGui) then
-                return false
+            pcall(function()
+                GuiService.SelectedObject = nil
+                task.wait(0.1)
+                GuiService.SelectedObject = bestCard.button
+                task.wait(0.2)
+                
+                VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
+                task.wait(0.05)
+                VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
+                
+                clickSuccess = true
+                print("[Smart Card] ✓ Method 1: GuiService + Enter")
+            end)
+            
+            task.wait(0.2)
+            
+            if getconnections then
+                pcall(function()
+                    local events = {"Activated", "MouseButton1Click", "MouseButton1Down"}
+                    for _, eventName in ipairs(events) do
+                        local connections = getconnections(bestCard.button[eventName])
+                        if connections then
+                            for _, conn in ipairs(connections) do
+                                if conn and conn.Fire then
+                                    conn:Fire()
+                                end
+                            end
+                        end
+                    end
+                    print("[Smart Card] ✓ Method 2: Direct connection firing")
+                end)
             end
             
-            GuiService.SelectedObject = nil
-            task.wait(0.05)
+            task.wait(0.3)
             
-            GuiService.SelectedObject = button
-            task.wait(0.15)
+            local confirmSuccess = pressConfirm()
+            if confirmSuccess then
+                print("[Smart Card] ✓ Confirm button pressed")
+            end
             
-            VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
-            task.wait(0.05)
-            VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
+            task.wait(0.2)
             
             getgenv().SmartCardLastPromptId = currentSignature
             
-            task.wait(0.3)
-            pressConfirm()
-            task.wait(0.3)
-            
             table.insert(getgenv().SmartCardPicked, bestCard.name)
-            print("[Smart Card] 📝 " .. bestCard.name .. " (Total: " .. #getgenv().SmartCardPicked .. ")")
+            print("[Smart Card] 📝 Picked: " .. bestCard.name .. " (Total picked: " .. #getgenv().SmartCardPicked .. "/5)")
             
             return true
         end)
-
+        
+        if not ok then
+            warn("[Smart Card] ⚠️ Error:", result)
+        end
         
         return ok and result
     end
@@ -8619,7 +9177,13 @@ if not isInLobby then
         
         task.spawn(function()
             while true do
-                task.wait(0.3)
+                task.wait(0.5) 
+                
+                if not getgenv().SeamlessFixEnabled then
+                    task.wait(2)
+                    continue
+                end
+                
                 pcall(function()
                     local endGameUI = LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
                     local currentEndGameUIState = endGameUI and endGameUI.Enabled or false
@@ -9291,12 +9855,9 @@ if not isInLobby then
                 for _, unitData in ipairs(unitsToPlace) do
                     currentCash = tonumber(getgenv().MacroCurrentCash) or 0
                     
-                    if currentCash >= unitData.cost then
-                        print("[AutoPlay] Attempting to place " .. unitData.unitName .. " (Slot " .. unitData.slotNum .. ")")
-                        
+                    if currentCash >= unitData.cost then                        
                         local position = getPlacementPosition(unitData.slotNum, pathIndex, distance)
                         if position then
-                            print("[AutoPlay] Placing tower at position")
                             if placeTower(unitData.unitName, position, unitData.slotNum) then
                                 task.wait(1)
                                 break 
@@ -9412,36 +9973,51 @@ if not isInLobby then
                 
                 local upgraded = false
                 
-                if getgenv().AutoPlayConfig.focusFarm then
-                    for _, data in ipairs(farmUnits) do
+                local allUnits = {}
+                for _, data in ipairs(farmUnits) do
+                    data.isFarm = true
+                    table.insert(allUnits, data)
+                end
+                for _, data in ipairs(normalUnits) do
+                    data.isFarm = false
+                    table.insert(allUnits, data)
+                end
+                
+                if getgenv().AutoPlayConfig.autoUpgradePriority then
+                    table.sort(allUnits, function(a, b)
+                        if getgenv().AutoPlayConfig.focusFarm then
+                            if a.isFarm ~= b.isFarm then
+                                return a.isFarm
+                            end
+                        end
+                        
+                        if a.priority ~= b.priority then
+                            return a.priority < b.priority
+                        end
+                        
+                        return a.cost < b.cost
+                    end)
+                else
+                    table.sort(allUnits, function(a, b) return a.cost < b.cost end)
+                end
+                
+                if getgenv().AutoPlayConfig.autoUpgradePriority then
+                    for _, data in ipairs(allUnits) do
                         if upgraded then break end
+                        
                         currentCash = tonumber(getgenv().MacroCurrentCash) or 0
                         
                         if data.cost > 0 and currentCash >= data.cost then
-                            print("[AutoUpgrade] [FARM PRIORITY] Upgrading " .. data.unitName .. " from level " .. data.level .. " (Cost: $" .. data.cost .. ")")
+                            local prefix = data.isFarm and "[FARM] " or ""
+                            print("[AutoUpgrade] " .. prefix .. "Upgrading " .. data.unitName .. " (Priority " .. data.priority .. ") from level " .. data.level .. " (Cost: $" .. data.cost .. ")")
                             if upgradeTower(data.tower) then
                                 upgraded = true
                                 task.wait(0.2)
                             end
                         end
                     end
-                    
-                    if not upgraded then
-                        for _, data in ipairs(normalUnits) do
-                            if upgraded then break end
-                            currentCash = tonumber(getgenv().MacroCurrentCash) or 0
-                            
-                            if data.cost > 0 and currentCash >= data.cost then
-                                print("[AutoUpgrade] Upgrading " .. data.unitName .. " from level " .. data.level .. " (Cost: $" .. data.cost .. ")")
-                                if upgradeTower(data.tower) then
-                                    upgraded = true
-                                    task.wait(0.2)
-                                end
-                            end
-                        end
-                    end
                 else
-                    for _, data in ipairs(normalUnits) do
+                    for _, data in ipairs(allUnits) do
                         if upgraded then break end
                         currentCash = tonumber(getgenv().MacroCurrentCash) or 0
                         
@@ -9450,21 +10026,6 @@ if not isInLobby then
                             if upgradeTower(data.tower) then
                                 upgraded = true
                                 task.wait(0.2)
-                            end
-                        end
-                    end
-                    
-                    if not upgraded then
-                        for _, data in ipairs(farmUnits) do
-                            if upgraded then break end
-                            currentCash = tonumber(getgenv().MacroCurrentCash) or 0
-                            
-                            if data.cost > 0 and currentCash >= data.cost then
-                                print("[AutoUpgrade] Upgrading " .. data.unitName .. " from level " .. data.level .. " (Cost: $" .. data.cost .. ")")
-                                if upgradeTower(data.tower) then
-                                    upgraded = true
-                                    task.wait(0.2)
-                                end
                             end
                         end
                     end
