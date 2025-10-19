@@ -801,6 +801,7 @@ local Sections = {
     WebhookLeft = Tabs.Webhook:Section({ Side = "Left" }),
     
     SeamlessFixLeft = Tabs.SeamlessFix:Section({ Side = "Left" }),
+    SeamlessFixRight = Tabs.SeamlessFix:Section({ Side = "Right" }),
     
     MiscLeft = Tabs.Misc:Section({ Side = "Left" }),
     MiscRight = Tabs.Misc:Section({ Side = "Right" }),
@@ -926,6 +927,7 @@ local function createDropdown(section, name, flag, options, multi, callback, def
     
     return section:Dropdown({
         Name = name,
+        Search = true,
         Options = options,
         Multi = multi,
         Required = false,
@@ -5955,6 +5957,97 @@ createInput(
 Sections.SeamlessFixLeft:SubLabel({
     Text = "Script will automatically restart after this many rounds to prevent issues"
 })
+
+-- Right side - Infinite Mode Restart
+Sections.SeamlessFixRight:Header({ Text = "♾️ Infinite Mode Restart" })
+Sections.SeamlessFixRight:SubLabel({
+    Text = "Automatically restart the match when reaching a specific wave in Infinite mode"
+})
+
+if not getgenv().InfiniteRestartEnabled then
+    getgenv().InfiniteRestartEnabled = getgenv().Config.toggles.InfiniteRestartToggle or false
+end
+
+if not getgenv().InfiniteRestartWave then
+    getgenv().InfiniteRestartWave = tonumber(getgenv().Config.inputs.InfiniteRestartWave) or 50
+end
+
+createToggle(
+    Sections.SeamlessFixRight,
+    "Enable Infinite Restart",
+    "InfiniteRestartToggle",
+    function(value)
+        getgenv().InfiniteRestartEnabled = value
+        Window:Notify({
+            Title = "Infinite Restart",
+            Description = value and "Enabled - Will restart at wave " .. getgenv().InfiniteRestartWave or "Disabled",
+            Lifetime = 3
+        })
+    end,
+    getgenv().InfiniteRestartEnabled
+)
+
+createInput(
+    Sections.SeamlessFixRight,
+    "Restart at Wave",
+    "InfiniteRestartWave",
+    "Enter wave number (e.g., 50)",
+    "Numeric",
+    function(value)
+        getgenv().InfiniteRestartWave = tonumber(value) or 50
+        Window:Notify({
+            Title = "Infinite Restart",
+            Description = "Will restart at wave " .. (tonumber(value) or 50),
+            Lifetime = 3
+        })
+    end,
+    tostring(getgenv().InfiniteRestartWave)
+)
+
+Sections.SeamlessFixRight:SubLabel({
+    Text = "Match will automatically restart when the wave counter reaches this number"
+})
+
+-- Infinite mode restart logic
+if not isInLobby then
+    task.spawn(function()
+        while true do
+            task.wait(2)
+            
+            if getgenv().InfiniteRestartEnabled then
+                pcall(function()
+                    local wave = RS:FindFirstChild("Wave")
+                    if wave and wave.Value then
+                        local currentWave = tonumber(wave.Value) or 0
+                        local targetWave = tonumber(getgenv().InfiniteRestartWave) or 50
+                        
+                        if currentWave >= targetWave then
+                            print("[Infinite Restart] Wave " .. currentWave .. " reached, restarting match...")
+                            
+                            local remotes = RS:FindFirstChild("Remotes")
+                            local restartRemote = remotes and remotes:FindFirstChild("RestartMatch")
+                            
+                            if restartRemote then
+                                restartRemote:FireServer()
+                                print("[Infinite Restart] ✅ Restart signal sent")
+                                
+                                Window:Notify({
+                                    Title = "Infinite Restart",
+                                    Description = "Restarting at wave " .. currentWave,
+                                    Lifetime = 3
+                                })
+                                
+                                task.wait(10)
+                            else
+                                print("[Infinite Restart] ❌ RestartMatch remote not found")
+                            end
+                        end
+                    end
+                end)
+            end
+        end
+    end)
+end
 
 
 task.spawn(function()
