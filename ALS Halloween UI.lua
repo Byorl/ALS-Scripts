@@ -1,5 +1,84 @@
 repeat task.wait() until game:IsLoaded()
 
+if not getgenv()._AutoRejoinSetup then
+    getgenv()._AutoRejoinSetup = true
+    
+    local TeleportService = game:GetService("TeleportService")
+    local Players = game:GetService("Players")
+    local LocalPlayer = Players.LocalPlayer
+    local GuiService = game:GetService("GuiService")
+    
+    local function autoRejoin()
+        print("[Auto Rejoin] Attempting to rejoin game...")
+        
+        if queueteleport then
+            queueteleport('loadstring(game:HttpGet("https://raw.githubusercontent.com/Byorl/ALS-Scripts/refs/heads/main/Maclib.lua"))()')
+        end
+        
+        task.wait(0.5)
+        
+        local GAME_PLACE_ID = 12886143095
+        
+        local success, err = pcall(function()
+            TeleportService:Teleport(GAME_PLACE_ID, LocalPlayer)
+        end)
+        
+        if not success then
+            print("[Auto Rejoin] First attempt failed, retrying in 3s...")
+            task.wait(3)
+            
+            pcall(function()
+                TeleportService:Teleport(GAME_PLACE_ID, LocalPlayer)
+            end)
+        end
+    end
+    
+    game:GetService("CoreGui").ChildAdded:Connect(function(child)
+        if child.Name == "RobloxPromptGui" then
+            task.wait(0.5)
+            
+            local found = child:FindFirstChild("promptOverlay", true)
+            if found then
+                for _, descendant in pairs(found:GetDescendants()) do
+                    if descendant:IsA("TextLabel") then
+                        local text = descendant.Text:lower()
+                        
+                        if text:find("disconnect") or 
+                           text:find("error") or 
+                           text:find("kick") or 
+                           text:find("lost connection") or
+                           text:find("failed to connect") or
+                           text:find("connection attempt failed") or
+                           text:find("error code") then
+                            
+                            print("[Auto Rejoin] Disconnect detected: " .. descendant.Text)
+                            task.wait(1)
+                            autoRejoin()
+                            break
+                        end
+                    end
+                end
+            end
+        end
+    end)
+    
+    game:GetService("GuiService").ErrorMessageChanged:Connect(function()
+        print("[Auto Rejoin] Error message detected, rejoining...")
+        task.wait(1)
+        autoRejoin()
+    end)
+    
+    LocalPlayer.OnTeleport:Connect(function(State)
+        if State == Enum.TeleportState.Failed then
+            print("[Auto Rejoin] Teleport failed, rejoining...")
+            task.wait(2)
+            autoRejoin()
+        end
+    end)
+    
+    print("[Auto Rejoin] System active - will auto-rejoin on any disconnect")
+end
+
 if getgenv().ALSScriptLoaded then
     warn("[ALS] Script already running! Please rejoin the game to reload.")
     return
@@ -240,22 +319,36 @@ end)
 task.spawn(function()
     local lastPing = 0
     local highPingCount = 0
+    local connectionCheckCount = 0
+    local startTime = tick()
     
     while task.wait(5) do
         pcall(function()
+            connectionCheckCount = connectionCheckCount + 1
+            local uptime = (tick() - startTime) / 3600
+            
             local ping = game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValue()
             
             if ping > 1000 then
                 highPingCount = highPingCount + 1
-                warn("[Network] High ping detected: " .. math.floor(ping) .. "ms (" .. highPingCount .. "/3)")
+                warn("[Network] High ping: " .. math.floor(ping) .. "ms (" .. highPingCount .. "/3)")
                 
                 if highPingCount >= 3 then
-                    warn("[Network] ⚠️ Persistent high ping - possible connection issues")
+                    warn("[Network] Persistent high ping - cleaning memory")
                     safeGarbageCollect()
                     highPingCount = 0
                 end
             else
                 highPingCount = 0
+            end
+            
+            if connectionCheckCount % 360 == 0 then
+                print(string.format("[Network] Uptime: %.1fh | Ping: %dms", uptime, math.floor(ping)))
+            end
+            
+            if uptime > 5.5 then
+                print("[Network] 5.5h uptime - preemptive memory cleanup")
+                safeGarbageCollect()
             end
             
             lastPing = ping
@@ -5166,16 +5259,32 @@ Sections.SettingsRight:Button({
             cleanupBeforeTeleport()
             task.wait(1)
             
-            local ok, err = pcall(function()
-                TeleportService:Teleport(game.PlaceId, LocalPlayer)
-            end)
-            if not ok then
-                warn("[Server Hop] Failed:", err)
-                Window:Notify({
-                    Title = "Server Hop",
-                    Description = "Failed to hop servers!",
-                    Lifetime = 5
-                })
+            local maxRetries = 3
+            local retryDelay = 2
+            
+            for attempt = 1, maxRetries do
+                local ok, err = pcall(function()
+                    TeleportService:Teleport(game.PlaceId, LocalPlayer)
+                end)
+                
+                if ok then
+                    print("[Server Hop] Teleport initiated (Attempt " .. attempt .. ")")
+                    break
+                else
+                    warn("[Server Hop] Attempt " .. attempt .. "/" .. maxRetries .. " failed:", err)
+                    
+                    if attempt < maxRetries then
+                        print("[Server Hop] Retrying in " .. retryDelay .. "s...")
+                        task.wait(retryDelay)
+                        retryDelay = retryDelay * 2
+                    else
+                        Window:Notify({
+                            Title = "Server Hop",
+                            Description = "Failed after " .. maxRetries .. " attempts",
+                            Lifetime = 5
+                        })
+                    end
+                end
             end
         end)
     end
