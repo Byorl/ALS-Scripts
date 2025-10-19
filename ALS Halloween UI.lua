@@ -4218,11 +4218,22 @@ local function buildAutoAbilityUI()
                     end
                     
                     if unitName == "EscanorGodly" then
-                        pcall(function()
+                        local success, err = pcall(function()
                             local clientData = getClientData()
-                            if clientData and clientData.UnitData then
-                                for unitID, unitData in pairs(clientData.UnitData) do
-                                    if unitData.UnitName == "EscanorGodly" and unitData.EquippedSoul == "SoulOfTheScarredSun" then
+                            
+                            if clientData and clientData.UnitData and clientData.Slots then
+                                local escanorUnitID = nil
+                                for slotName, slotData in pairs(clientData.Slots) do
+                                    if slotData.Value == "EscanorGodly" and slotData.UnitID then
+                                        escanorUnitID = slotData.UnitID
+                                        break
+                                    end
+                                end
+                                
+                                if escanorUnitID and clientData.UnitData[escanorUnitID] then
+                                    local unitData = clientData.UnitData[escanorUnitID]
+                                    
+                                    if unitData.EquippedSoul == "SoulOfTheScarredSun" then
                                         local soulAbilityName = "Who Decided That?"
                                         
                                         if not getgenv().UnitAbilities[unitName][soulAbilityName] then
@@ -4346,12 +4357,20 @@ local function buildAutoAbilityUI()
                                             end,
                                             waveDefault
                                         )
-                                        
-                                        break
+                                    else
+                                        print("[Soul Check] ❌ Soul not equipped or wrong soul")
                                     end
+                                else
+                                    print("[Soul Check] ❌ UnitID not found or no UnitData")
                                 end
+                            else
+                                print("[Soul Check] ❌ Missing ClientData, UnitData, or Slots")
                             end
                         end)
+                        
+                        if not success then
+                            warn("[Soul Check] Error:", err)
+                        end
                     end
                 end
             end
