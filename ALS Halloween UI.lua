@@ -2537,7 +2537,7 @@ if not success then
     error("[FATAL] Cannot continue - Main tab header failed: " .. tostring(err))
 end
 
-local autoJoinModeList = {"Story", "Infinite", "Challenge", "LegendaryStages", "Raids", "Dungeon", "Survival", "ElementalCaverns", "Event", "MidnightHunt", "BossRush", "Siege", "Breach", "FinalExpedition"}
+local autoJoinModeList = {"Story", "Infinite", "Challenge", "LegendaryStages", "Raids", "Dungeon", "Survival", "ElementalCaverns", "BossRush", "Siege"}
 
 local autoJoinMapDropdown = nil
 
@@ -2786,6 +2786,97 @@ if not autoStartSuccess then
     error("[FATAL] Cannot continue - Auto Start toggle failed: " .. tostring(autoStartErr))
 end
 
+task.spawn(function()
+    while task.wait(2) do
+        if not getgenv().AutoJoinConfig or not getgenv().AutoJoinConfig.enabled then
+            continue
+        end
+        
+        pcall(function()
+            local mode = getgenv().AutoJoinConfig.mode
+            local map = getgenv().AutoJoinConfig.map
+            local act = getgenv().AutoJoinConfig.act or 1
+            local difficulty = getgenv().AutoJoinConfig.difficulty or "Normal"
+            
+            if not mode or not map then return end
+            
+            local teleporter = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("Teleporter")
+            if not teleporter then return end
+            
+            if getgenv().AutoJoinConfig.friendsOnly then
+                teleporter.InteractEvent:FireServer("FriendsOnly")
+            end
+            
+            if mode == "Raid" then
+                teleporter.InteractEvent:FireServer("Select", map, act)
+                
+            elseif mode == "Siege" then
+                local siegeDiff = difficulty
+                if difficulty == "Purgatory" or difficulty == "Insanity" then
+                    siegeDiff = "Bounded"
+                elseif difficulty == "Normal" or difficulty == "Nightmare" then
+                    siegeDiff = "Normal"
+                end
+                teleporter.SelectEvent:FireServer(map, siegeDiff)
+                
+            elseif mode == "Dungeon" then
+                teleporter.InteractEvent:FireServer("Select", map)
+                
+            elseif mode == "Survival" then
+                teleporter.InteractEvent:FireServer("Select", map)
+                
+            elseif mode == "Story" then
+                local storyDiff = difficulty
+                if difficulty == "Purgatory" or difficulty == "Insanity" then
+                    storyDiff = "Nightmare"
+                end
+                teleporter.InteractEvent:FireServer("Select", map, act, storyDiff, "Story")
+                
+            elseif mode == "Infinite" then
+                local infDiff = difficulty
+                if difficulty == "Purgatory" or difficulty == "Insanity" then
+                    infDiff = "Nightmare"
+                end
+                teleporter.InteractEvent:FireServer("Select", map, act, infDiff, "Infinite")
+                
+            elseif mode == "Elemental Cavern" then
+                teleporter.InteractEvent:FireServer("Select", map, difficulty)
+                
+            elseif mode == "Challenge" then
+                teleporter.InteractEvent:FireServer("Select", "Challenge", act)
+            end
+            
+            if getgenv().AutoJoinConfig.autoStart then
+                task.wait(0.5)
+                
+                local bottomGui = LocalPlayer.PlayerGui:FindFirstChild("Bottom")
+                if bottomGui then
+                    local frame = bottomGui:FindFirstChild("Frame")
+                    if frame then
+                        for _, child in ipairs(frame:GetChildren()) do
+                            if child:IsA("Frame") then
+                                for _, subChild in ipairs(child:GetChildren()) do
+                                    if subChild:IsA("TextButton") and subChild.Visible then
+                                        for _, element in ipairs(subChild:GetChildren()) do
+                                            if element:IsA("TextLabel") and element.Text == "Start" then
+                                                if getconnections then
+                                                    for _, conn in ipairs(getconnections(subChild.Activated)) do
+                                                        conn:Fire()
+                                                    end
+                                                end
+                                                return
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end)
+    end
+end)
 
 local gameActionsSuccess, gameActionsErr = pcall(function()
     Sections.MainRight:Header({ Text = "📊 Quick Actions" })
@@ -4438,13 +4529,24 @@ Sections.MacroLeft:Button({
             return
         end
         
+        local summonBlacklist = {
+            ["TuskSummon_Act4"] = true,
+            ["NarutoBaryonClone"] = true,
+        }
+        
         local macroUnits = {}
         local unitSet = {}
         for _, action in ipairs(macroData) do
             if action.ActionType == "Place" and action.TowerName then
-                if not unitSet[action.TowerName] then
-                    unitSet[action.TowerName] = true
-                    table.insert(macroUnits, action.TowerName)
+                local towerName = action.TowerName
+                
+                local isSummon = summonBlacklist[towerName] or 
+                                 towerName:find("Summon") or 
+                                 towerName:find("Clone")
+                
+                if not isSummon and not unitSet[towerName] then
+                    unitSet[towerName] = true
+                    table.insert(macroUnits, towerName)
                 end
             end
         end
@@ -8084,23 +8186,10 @@ do
             local hasUnitDrop = false
             local unitDropName = ""
             for _, r in ipairs(rewards) do
-                if r.name then
-                    local isUnit = not (
-                        r.name:find("Jewel") or 
-                        r.name:find("Gold") or 
-                        r.name:find("Emerald") or 
-                        r.name:find("Candy") or 
-                        r.name:find("Stamp") or
-                        r.name:find("Shard") or
-                        r.name:find("EXP") or
-                        r.name:find("Reroll")
-                    )
-                    
-                    if r.type == "Unit" or isUnit then
-                        hasUnitDrop = true
-                        unitDropName = r.name
-                        break
-                    end
+                if r.name and r.type == "Unit" then
+                    hasUnitDrop = true
+                    unitDropName = r.name
+                    break
                 end
             end
             
