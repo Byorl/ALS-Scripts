@@ -4433,7 +4433,7 @@ createSlider(
     "Distance from Path",
     "AutoPlayDistanceFromPath",
     0,
-    100,
+    25,
     getgenv().AutoPlayConfig.distanceFromPath,
     function(value)
         getgenv().AutoPlayConfig.distanceFromPath = math.floor(value)
