@@ -6182,8 +6182,17 @@ local function bossExists()
         if not enemies then 
             return false 
         end
-        local boss = enemies:FindFirstChild("Boss")
-        return boss ~= nil
+        
+        for _, enemy in pairs(enemies:GetChildren()) do
+            if enemy:IsA("Model") then
+                local bossValue = enemy:FindFirstChild("Boss")
+                if bossValue and bossValue:IsA("BoolValue") and bossValue.Value == true then
+                    return true
+                end
+            end
+        end
+        
+        return false
     end)
     if not ok then
         warn("[Auto Ability] Error checking boss existence:", res)
@@ -6232,10 +6241,19 @@ local function getBossCFrame()
     local ok, res = pcall(function()
         local enemies = workspace:FindFirstChild("Enemies")
         if not enemies then return nil end
-        local boss = enemies:FindFirstChild("Boss")
-        if not boss then return nil end
-        local hrp = boss:FindFirstChild("HumanoidRootPart")
-        if hrp then return hrp.CFrame end
+        
+        for _, enemy in pairs(enemies:GetChildren()) do
+            if enemy:IsA("Model") then
+                local bossValue = enemy:FindFirstChild("Boss")
+                if bossValue and bossValue:IsA("BoolValue") and bossValue.Value == true then
+                    local hrp = enemy:FindFirstChild("HumanoidRootPart")
+                    if hrp then 
+                        return hrp.CFrame 
+                    end
+                end
+            end
+        end
+        
         return nil
     end)
     return ok and res or nil
