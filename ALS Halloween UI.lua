@@ -1228,6 +1228,11 @@ local function trackCash()
                 
                 if lastCash > 0 and currentCash < lastCash then
                     local decrease = lastCash - currentCash
+                    
+                    if not getgenv().MacroCashHistory or type(getgenv().MacroCashHistory) ~= "table" then
+                        getgenv().MacroCashHistory = {}
+                    end
+                    
                     table.insert(getgenv().MacroCashHistory, 1, {
                         time = tick(),
                         decrease = decrease,
