@@ -7071,12 +7071,27 @@ end
 
 local function useAbility(tower, abilityName)
     if tower then
-        local correctedName = fixAbilityName(abilityName)
-        pcall(function() RS.Remotes.Ability:InvokeServer(tower, correctedName) end)
+        if abilityName == "Who Decided That?" then
+            pcall(function() 
+                RS.Remotes.Ability:InvokeServer(tower, abilityName)
+                print("[Soul Ability] Used: " .. abilityName)
+            end)
+        else
+            local correctedName = fixAbilityName(abilityName)
+            pcall(function() RS.Remotes.Ability:InvokeServer(tower, correctedName) end)
+        end
     end
 end
 
 local function getAbilityData(towerName, abilityName)
+    if abilityName == "Who Decided That?" then
+        return {
+            cooldown = 999999,
+            requiredLevel = 0,
+            isSoulAbility = true
+        }
+    end
+    
     local abilities = getAllAbilities(towerName)
     return abilities[abilityName]
 end
@@ -7087,6 +7102,13 @@ local function isOnCooldown(towerName, abilityName)
     local key = towerName .. "_" .. abilityName
     local last = abilityCooldowns[key]
     if not last then return false end
+    
+    if d.isSoulAbility then
+        local timeSinceUse = tick() - last
+        local cooldownRemaining = d.cooldown - timeSinceUse
+        return cooldownRemaining > 0.5
+    end
+    
     local scale = getCurrentTimeScale()
     local effectiveCd = d.cooldown / scale
     local timeSinceUse = tick() - last
@@ -7100,6 +7122,9 @@ end
 
 local function hasAbilityBeenUnlocked(towerName, abilityName, towerLevel)
     local d = getAbilityData(towerName, abilityName)
+    if d and d.isSoulAbility then
+        return true
+    end
     return d and towerLevel >= d.requiredLevel
 end
 
