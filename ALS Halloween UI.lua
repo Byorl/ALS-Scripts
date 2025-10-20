@@ -1267,39 +1267,6 @@ getgenv().GetRecentCashDecrease = function(withinSeconds)
     return 0
 end
 
-getgenv().GetPlaceCost = function(towerName)
-    if not getgenv().MacroTowerInfoCache then
-        return 0
-    end
-    
-    if not getgenv().MacroTowerInfoCache[towerName] then 
-        return 0 
-    end
-    
-    if getgenv().MacroTowerInfoCache[towerName][0] then
-        return getgenv().MacroTowerInfoCache[towerName][0].Cost or 0
-    end
-    
-    return 0
-end
-
-getgenv().GetUpgradeCost = function(towerName, currentLevel)
-    if not getgenv().MacroTowerInfoCache then
-        return 0
-    end
-    
-    if not getgenv().MacroTowerInfoCache[towerName] then 
-        return 0 
-    end
-    
-    local nextLevel = (currentLevel or 0) + 1
-    if getgenv().MacroTowerInfoCache[towerName][nextLevel] then
-        return getgenv().MacroTowerInfoCache[towerName][nextLevel].Cost or 0
-    end
-    
-    return 0
-end
-
 trackCash()
 
 
@@ -1345,6 +1312,64 @@ local function getClientData()
         return nil
     end)
     return ok and data or nil
+end
+
+local function getEZATowerName(baseTowerName)
+    local clientData = getClientData()
+    if not clientData or not clientData.Slots then return baseTowerName end
+    
+    for slotName, slotData in pairs(clientData.Slots) do
+        if slotData and slotData.Value == baseTowerName and slotData.UnitID then
+            if clientData.UnitData and clientData.UnitData[slotData.UnitID] then
+                if clientData.UnitData[slotData.UnitID].EZA == true then
+                    return baseTowerName .. "EZA"
+                end
+            elseif clientData[slotData.UnitID] then
+                if clientData[slotData.UnitID].EZA == true then
+                    return baseTowerName .. "EZA"
+                end
+            end
+        end
+    end
+    
+    return baseTowerName
+end
+
+getgenv().GetPlaceCost = function(towerName)
+    if not getgenv().MacroTowerInfoCache then
+        return 0
+    end
+    
+    local towerNameToCheck = getEZATowerName(towerName)
+    
+    if not getgenv().MacroTowerInfoCache[towerNameToCheck] then 
+        return 0 
+    end
+    
+    if getgenv().MacroTowerInfoCache[towerNameToCheck][0] then
+        return getgenv().MacroTowerInfoCache[towerNameToCheck][0].Cost or 0
+    end
+    
+    return 0
+end
+
+getgenv().GetUpgradeCost = function(towerName, currentLevel)
+    if not getgenv().MacroTowerInfoCache then
+        return 0
+    end
+    
+    local towerNameToCheck = getEZATowerName(towerName)
+    
+    if not getgenv().MacroTowerInfoCache[towerNameToCheck] then 
+        return 0 
+    end
+    
+    local nextLevel = (currentLevel or 0) + 1
+    if getgenv().MacroTowerInfoCache[towerNameToCheck][nextLevel] then
+        return getgenv().MacroTowerInfoCache[towerNameToCheck][nextLevel].Cost or 0
+    end
+    
+    return 0
 end
 
 local function getTowerInfo(unitName)
@@ -1431,6 +1456,7 @@ end
 
 getgenv().AutoAbilitiesEnabled = getgenv().Config.toggles.AutoAbilityToggle or false
 getgenv().UnitAbilities = getgenv().UnitAbilities or {}
+getgenv().EZAUnitMapping = getgenv().EZAUnitMapping or {}
 
 getgenv().AutoReadyEnabled = getgenv().Config.toggles.AutoReady or false
 getgenv().AutoNextEnabled = getgenv().Config.toggles.AutoNext or false
@@ -3952,6 +3978,10 @@ getgenv().BulmaWishUsedThisRound = false
 getgenv().WukongEnabled = getgenv().Config.toggles.WukongToggle or false
 getgenv().WukongTrackedClones = {}
 
+getgenv().SkeletonKnightEnabled = getgenv().Config.toggles.SkeletonKnightToggle or false
+getgenv().SkeletonKnightTargetUnit = getgenv().Config.dropdowns.SkeletonKnightTargetUnit or ""
+getgenv().SkeletonKnightLastUse = 0
+
 getgenv().OneEyeDevilEnabled = getgenv().Config.toggles.OneEyeDevilToggle or false
 getgenv().OneEyeDevilCurrentIndex = 0 
 
@@ -3967,6 +3997,7 @@ getgenv().FinalExpSkipRewardsEnabled = getgenv().Config.toggles.FinalExpSkipRewa
 getgenv().FinalExpRestPriority = tonumber(getgenv().Config.inputs.FinalExpRestPriority) or 3
 getgenv().FinalExpDungeonPriority = tonumber(getgenv().Config.inputs.FinalExpDungeonPriority) or 1
 getgenv().FinalExpDoubleDungeonPriority = tonumber(getgenv().Config.inputs.FinalExpDoubleDungeonPriority) or 2
+getgenv().FinalExpShopPriority = tonumber(getgenv().Config.inputs.FinalExpShopPriority) or 4
 
 local BLACKLISTED_UNITS = {
     "NarutoBaryonClone"
@@ -4032,12 +4063,37 @@ local function buildAutoAbilityUI()
         for slotIndex, slotName in ipairs(sortedSlots) do
             local slotData = clientData.Slots[slotName]
             if slotData and slotData.Value then
+                local unitNameToUse = slotData.Value
+                local isEZA = false
+                                
+                if slotData.UnitID then
+                    if clientData.UnitData and clientData.UnitData[slotData.UnitID] then
+                        local unitData = clientData.UnitData[slotData.UnitID]
+                        if unitData.EZA == true then
+                            isEZA = true
+                            unitNameToUse = slotData.Value .. "EZA"
+                        end
+                    elseif clientData[slotData.UnitID] then
+                        local unitData = clientData[slotData.UnitID]
+                        if unitData.EZA == true then
+                            isEZA = true
+                            unitNameToUse = slotData.Value .. "EZA"
+                        end
+                    end
+                end
+                
+                if isEZA then
+                    getgenv().EZAUnitMapping[unitNameToUse] = slotData.Value
+                end
+                
                 table.insert(unitsToShow, {
-                    name = slotData.Value,
+                    name = unitNameToUse,
+                    originalName = slotData.Value,
                     slot = slotName,
                     level = slotData.Level or 0,
                     slotIndex = slotIndex,
-                    isSpawned = false
+                    isSpawned = false,
+                    isEZA = isEZA
                 })
             end
         end
@@ -4063,13 +4119,19 @@ local function buildAutoAbilityUI()
                 local tabSide = "Right"
                 local sideKey = tabSide
                 
-                local displayName = getUnitDisplayName(unitName)
+                local displayName = getUnitDisplayName(unitInfo.originalName or unitName)
+                if unitInfo.isEZA then
+                    displayName = displayName .. " ⚡"
+                end
                 
                 local unitSection = Tabs.Abilities:Section({ Side = tabSide })
                 table.insert(getgenv()._AbilityUIElements[sideKey], unitSection)
                 
                 local headerText = "📦 " .. displayName
                 local sublabelText = unitInfo.slot .. " • Level " .. tostring(unitInfo.level)
+                if unitInfo.isEZA then
+                    sublabelText = sublabelText .. " • EZA"
+                end
                 
                 unitSection:Header({ Text = headerText })
                 unitSection:SubLabel({ Text = sublabelText })
@@ -4404,6 +4466,7 @@ local function buildAutoAbilityUI()
             
             local hasBulma = false
             local hasWukong = false
+            local hasSkeletonKnightEZA = false
             
             for _, slotName in ipairs({"Slot1", "Slot2", "Slot3", "Slot4", "Slot5", "Slot6"}) do
                 local slotData = clientData.Slots[slotName]
@@ -4412,6 +4475,16 @@ local function buildAutoAbilityUI()
                         hasBulma = true
                     elseif slotData.Value == "JinMoriGodly" then
                         hasWukong = true
+                    elseif slotData.Value == "Skull_Knight_Evo" and slotData.UnitID then
+                        if clientData.UnitData and clientData.UnitData[slotData.UnitID] then
+                            if clientData.UnitData[slotData.UnitID].EZA == true then
+                                hasSkeletonKnightEZA = true
+                            end
+                        elseif clientData[slotData.UnitID] then
+                            if clientData[slotData.UnitID].EZA == true then
+                                hasSkeletonKnightEZA = true
+                            end
+                        end
                     end
                 end
             end
@@ -4424,7 +4497,7 @@ local function buildAutoAbilityUI()
                 end
             end
             
-            if hasBulma or hasWukong or hasEtoEvo then
+            if hasBulma or hasWukong or hasEtoEvo or hasSkeletonKnightEZA then
                 local specialSection = Tabs.Abilities:Section({ Side = "Left" })
                 table.insert(getgenv()._AbilityUIElements["Left"], specialSection)
                 
@@ -4485,6 +4558,55 @@ local function buildAutoAbilityUI()
                         end,
                         getgenv().WukongEnabled
                     )
+                end
+                
+                if hasSkeletonKnightEZA then
+                    if hasBulma or hasWukong then
+                        specialSection:Divider()
+                    end
+                    
+                    createToggle(
+                        specialSection,
+                        "Auto Skeleton Knight (Savior)",
+                        "SkeletonKnightToggle",
+                        function(value)
+                            getgenv().SkeletonKnightEnabled = value
+                            Window:Notify({
+                                Title = "Auto Skeleton Knight",
+                                Description = value and "Enabled" or "Disabled",
+                                Lifetime = 2
+                            })
+                        end,
+                        getgenv().SkeletonKnightEnabled
+                    )
+                    
+                    local unitOptions = {}
+                    for _, slotName in ipairs({"Slot1", "Slot2", "Slot3", "Slot4", "Slot5", "Slot6"}) do
+                        local slotData = clientData.Slots[slotName]
+                        if slotData and slotData.Value and slotData.Value ~= "Skull_Knight_Evo" then
+                            local displayName = getUnitDisplayName(slotData.Value)
+                            table.insert(unitOptions, displayName)
+                        end
+                    end
+                    
+                    if #unitOptions > 0 then
+                        createDropdown(
+                            specialSection,
+                            "  > Target Unit",
+                            "SkeletonKnightTargetUnit",
+                            unitOptions,
+                            false,
+                            function(value)
+                                getgenv().SkeletonKnightTargetUnit = value
+                                Window:Notify({
+                                    Title = "Auto Skeleton Knight",
+                                    Description = "Target set to: " .. value,
+                                    Lifetime = 2
+                                })
+                            end,
+                            getgenv().SkeletonKnightTargetUnit or unitOptions[1]
+                        )
+                    end
                 end
                 
                 if hasEtoEvo then
@@ -6389,7 +6511,7 @@ Sections.FinalExpeditionRight:SubLabel({
 Sections.FinalExpeditionRight:Divider()
 
 Sections.FinalExpeditionRight:Header({ Text = "🎯 Auto Select Mode" })
-Sections.FinalExpeditionRight:SubLabel({ Text = "Automatically select Rest/Dungeon/Double Dungeon based on priority" })
+Sections.FinalExpeditionRight:SubLabel({ Text = "Automatically select Rest/Dungeon/Double Dungeon/Shop based on priority (1=highest, 4=lowest)" })
 
 createToggle(
     Sections.FinalExpeditionRight,
@@ -6408,43 +6530,57 @@ createToggle(
 
 createInput(
     Sections.FinalExpeditionRight,
-    "Rest Priority (1-3)",
+    "Rest Priority (1-4)",
     "FinalExpRestPriority",
     "3",
     "Numeric",
     function(value)
         local num = tonumber(value) or 3
         if num < 1 then num = 1 end
-        if num > 3 then num = 3 end
+        if num > 4 then num = 4 end
         getgenv().FinalExpRestPriority = num
     end
 )
 
 createInput(
     Sections.FinalExpeditionRight,
-    "Dungeon Priority (1-3)",
+    "Dungeon Priority (1-4)",
     "FinalExpDungeonPriority",
     "1",
     "Numeric",
     function(value)
         local num = tonumber(value) or 1
         if num < 1 then num = 1 end
-        if num > 3 then num = 3 end
+        if num > 4 then num = 4 end
         getgenv().FinalExpDungeonPriority = num
     end
 )
 
 createInput(
     Sections.FinalExpeditionRight,
-    "Double Dungeon Priority (1-3)",
+    "Double Dungeon Priority (1-4)",
     "FinalExpDoubleDungeonPriority",
     "2",
     "Numeric",
     function(value)
         local num = tonumber(value) or 2
         if num < 1 then num = 1 end
-        if num > 3 then num = 3 end
+        if num > 4 then num = 4 end
         getgenv().FinalExpDoubleDungeonPriority = num
+    end
+)
+
+createInput(
+    Sections.FinalExpeditionRight,
+    "Shop Priority (1-4)",
+    "FinalExpShopPriority",
+    "4",
+    "Numeric",
+    function(value)
+        local num = tonumber(value) or 4
+        if num < 1 then num = 1 end
+        if num > 4 then num = 4 end
+        getgenv().FinalExpShopPriority = num
     end
 )
 
@@ -7449,9 +7585,15 @@ task.spawn(function()
             if not getgenv().UnitAbilities or type(getgenv().UnitAbilities) ~= "table" then return end
             
             for unitName, abilitiesConfig in pairs(getgenv().UnitAbilities) do
+                local towerNameToFind = unitName
+                
+                if getgenv().EZAUnitMapping and getgenv().EZAUnitMapping[unitName] then
+                    towerNameToFind = getgenv().EZAUnitMapping[unitName]
+                end
+                
                 for _, tower in pairs(Towers:GetChildren()) do
                     local owner = tower:FindFirstChild("Owner")
-                    if tower.Name == unitName and owner and owner.Value == LocalPlayer then
+                    if tower.Name == towerNameToFind and owner and owner.Value == LocalPlayer then
                         for abilityName, cfg in pairs(abilitiesConfig) do
                             processAbility(tower, unitName, abilityName, cfg, currentWave, hasBoss)
                         end
@@ -7699,6 +7841,128 @@ do
             end
         end
     end
+    end)
+end
+
+do
+    task.spawn(function()
+        task.wait(2)
+        
+        local function getSkeletonKnightTower()
+            local towers = workspace:FindFirstChild("Towers")
+            if not towers then return nil end
+            
+            for _, tower in pairs(towers:GetChildren()) do
+                local owner = tower:FindFirstChild("Owner")
+                if tower.Name == "Skull_Knight_Evo" and owner and owner.Value == LocalPlayer then
+                    return tower
+                end
+            end
+            
+            return nil
+        end
+        
+        local function getTargetTowerByDisplayName(displayName)
+            if not displayName or displayName == "" then return nil end
+            
+            local clientData = getClientData()
+            if not clientData or not clientData.Slots then return nil end
+            
+            local targetUnitName = nil
+            for _, slotName in ipairs({"Slot1", "Slot2", "Slot3", "Slot4", "Slot5", "Slot6"}) do
+                local slotData = clientData.Slots[slotName]
+                if slotData and slotData.Value then
+                    local unitDisplayName = getUnitDisplayName(slotData.Value)
+                    if unitDisplayName == displayName then
+                        targetUnitName = slotData.Value
+                        break
+                    end
+                end
+            end
+            
+            if not targetUnitName then return nil end
+            
+            local towers = workspace:FindFirstChild("Towers")
+            if not towers then return nil end
+            
+            for _, tower in pairs(towers:GetChildren()) do
+                local owner = tower:FindFirstChild("Owner")
+                if tower.Name == targetUnitName and owner and owner.Value == LocalPlayer then
+                    return tower
+                end
+            end
+            
+            return nil
+        end
+        
+        print("[Auto Skeleton Knight] System loaded")
+        
+        while true do
+            task.wait(1)
+            
+            if not getgenv().SkeletonKnightEnabled then
+                task.wait(2)
+                continue
+            end
+            
+            local skeletonKnight = getSkeletonKnightTower()
+            if not skeletonKnight then
+                task.wait(2)
+                continue
+            end
+            
+            local upgrade = skeletonKnight:FindFirstChild("Upgrade")
+            if not upgrade or upgrade.Value < 11 then
+                task.wait(2)
+                continue
+            end
+            
+            local currentTime = tick()
+            local cooldown = 200
+            local timeSinceLastUse = currentTime - (getgenv().SkeletonKnightLastUse or 0)
+            
+            if timeSinceLastUse < cooldown then
+                task.wait(1)
+                continue
+            end
+            
+            local targetTower = getTargetTowerByDisplayName(getgenv().SkeletonKnightTargetUnit)
+            if not targetTower then
+                print("[Auto Skeleton Knight] Target unit not found: " .. tostring(getgenv().SkeletonKnightTargetUnit))
+                task.wait(5)
+                continue
+            end
+            
+            local success, err = pcall(function()
+                local AbilityEvent = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("AbilityEvent")
+                if AbilityEvent then
+                    AbilityEvent:InvokeServer(skeletonKnight, "Savior")
+                    print("[Auto Skeleton Knight] Used Savior ability")
+                    
+                    task.wait(0.5)
+                    
+                    local SelectUnitEvent = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("AbilityRemotes") and RS.Remotes.AbilityRemotes:FindFirstChild("SelectUnitInWorkspaceEvent")
+                    if SelectUnitEvent then
+                        SelectUnitEvent:FireServer(targetTower)
+                        print("[Auto Skeleton Knight] Selected target: " .. getgenv().SkeletonKnightTargetUnit)
+                        
+                        getgenv().SkeletonKnightLastUse = tick()
+                        
+                        Window:Notify({
+                            Title = "Auto Skeleton Knight",
+                            Description = "Savior used on " .. getgenv().SkeletonKnightTargetUnit,
+                            Lifetime = 3
+                        })
+                    end
+                end
+            end)
+            
+            if not success then
+                warn("[Auto Skeleton Knight] Error: " .. tostring(err))
+            end
+            
+            task.wait(5)
+        end
     end)
 end
 
@@ -8219,7 +8483,8 @@ task.spawn(function()
                     local priorities = {
                         {name = "Rest Point", priority = getgenv().FinalExpRestPriority or 3},
                         {name = "Dungeon", priority = getgenv().FinalExpDungeonPriority or 1},
-                        {name = "Double Dungeon", priority = getgenv().FinalExpDoubleDungeonPriority or 2}
+                        {name = "Double Dungeon", priority = getgenv().FinalExpDoubleDungeonPriority or 2},
+                        {name = "Shop", priority = getgenv().FinalExpShopPriority or 4}
                     }
                     
                     table.sort(priorities, function(a, b) return a.priority < b.priority end)
@@ -8254,6 +8519,8 @@ task.spawn(function()
                                         end
                                     end
                                 end)
+                            elseif option.name == "Shop" then
+                                print("[Final Expedition] Shop selected - Auto Skip Shop will handle it if enabled")
                             end
                             
                             return
@@ -9038,8 +9305,8 @@ do
                 return 
             end
             
-            if getgenv()._webhookLock and (currentTime - getgenv()._webhookLock) < 8 then 
-                print("[Webhook] Lock active, skipping")
+            if getgenv()._webhookLock and (currentTime - getgenv()._webhookLock) < 20 then 
+                print("[Webhook] Lock active, skipping (Secret unit protection)")
                 getgenv().WebhookProcessing = false
                 return 
             end
@@ -9216,15 +9483,39 @@ do
                 webhookContent = "<@" .. getgenv().DiscordUserID .. "> 🎉 **SECRET UNIT DROP: " .. unitDropName .. "**"
             end
             
-            local webhookHash = LocalPlayer.Name .. "_" .. matchTime .. "_" .. matchWave .. "_" .. rewardsText .. "_" .. (hasUnitDrop and unitDropName or "")
+            if not getgenv()._webhookSessionID then
+                getgenv()._webhookSessionID = tostring(tick())
+            end
+            
+            local webhookHash = getgenv()._webhookSessionID .. "_" .. LocalPlayer.Name .. "_" .. matchTime .. "_" .. matchWave .. "_" .. rewardsText .. "_" .. (hasUnitDrop and unitDropName or "")
             if webhookHash == lastWebhookHash then
-                print("[Webhook] Duplicate webhook detected, skipping send")
+                print("[Webhook] Duplicate webhook detected (same session), skipping send")
                 task.wait(0.5)
                 isProcessing = false
                 getgenv().WebhookProcessing = false
                 return
             end
+            
+            if getgenv()._lastWebhookHashList then
+                for _, oldHash in ipairs(getgenv()._lastWebhookHashList) do
+                    if oldHash == webhookHash then
+                        print("[Webhook] Duplicate webhook detected (in history), skipping send")
+                        task.wait(0.5)
+                        isProcessing = false
+                        getgenv().WebhookProcessing = false
+                        return
+                    end
+                end
+            else
+                getgenv()._lastWebhookHashList = {}
+            end
+            
             lastWebhookHash = webhookHash
+            table.insert(getgenv()._lastWebhookHashList, webhookHash)
+            
+            if #getgenv()._lastWebhookHashList > 5 then
+                table.remove(getgenv()._lastWebhookHashList, 1)
+            end
             print("[Webhook] Sending webhook to Discord...")
             
             local sendSuccess = false
@@ -9291,10 +9582,28 @@ do
     
     LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
         if child.Name == "EndGameUI" and getgenv().WebhookEnabled then
+            if getgenv().WebhookProcessing then
+                print("[Webhook] Already processing, ignoring duplicate EndGameUI trigger")
+                return
+            end
+            
+            local currentTime = tick()
+            if getgenv()._lastWebhookTrigger and (currentTime - getgenv()._lastWebhookTrigger) < 15 then
+                print("[Webhook] Triggered too soon after last webhook (" .. (currentTime - getgenv()._lastWebhookTrigger) .. "s), ignoring")
+                return
+            end
+            
+            if getgenv()._webhookLock and (currentTime - getgenv()._webhookLock) < 15 then
+                print("[Webhook] Webhook lock active, ignoring EndGameUI")
+                return
+            end
+            
+            getgenv()._lastWebhookTrigger = currentTime
+            getgenv()._webhookLock = currentTime
             print("[Webhook] EndGameUI detected, setting processing flag...")
             getgenv().WebhookProcessing = true
-            print("[Webhook] Waiting 2s before sending...")
-            task.wait(2)
+            print("[Webhook] Waiting 3s before sending (secret unit protection)...")
+            task.wait(3)
             sendWebhook()
         end
     end)
@@ -9315,7 +9624,21 @@ do
         if getgenv().WebhookEnabled then
             local endGameUI = LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
             if endGameUI and endGameUI.Enabled and not getgenv().WebhookProcessing then
+                local currentTime = tick()
+                if getgenv()._lastWebhookTrigger and (currentTime - getgenv()._lastWebhookTrigger) < 15 then
+                    print("[Webhook] Skipping initial check - too soon after last webhook")
+                    return
+                end
+                
+                if getgenv()._webhookLock and (currentTime - getgenv()._webhookLock) < 15 then
+                    print("[Webhook] Webhook lock active, skipping initial check")
+                    return
+                end
+                
+                getgenv()._lastWebhookTrigger = currentTime
+                getgenv()._webhookLock = currentTime
                 print("[Webhook] EndGameUI already present on load, sending webhook...")
+                getgenv().WebhookProcessing = true
                 task.wait(1)
                 sendWebhook()
             end
@@ -9358,41 +9681,97 @@ end
 
 if isInLobby then
     task.spawn(function()
-        local BingoEvents = RS:FindFirstChild("Events") and RS.Events:FindFirstChild("Bingo")
-        if not BingoEvents then return end
+        task.wait(2)
         
-        local UseStampEvent = BingoEvents:FindFirstChild("UseStamp")
-        local ClaimRewardEvent = BingoEvents:FindFirstChild("ClaimReward")
-        local CompleteBoardEvent = BingoEvents:FindFirstChild("CompleteBoard")
+        local BingoEvents = RS:WaitForChild("Events", 10)
+        if not BingoEvents then 
+            warn("[Auto Bingo] Events folder not found")
+            return 
+        end
         
+        local BingoFolder = BingoEvents:WaitForChild("Bingo", 10)
+        if not BingoFolder then
+            warn("[Auto Bingo] Bingo folder not found")
+            return
+        end
+        
+        local UseStampEvent = BingoFolder:FindFirstChild("UseStamp")
+        local ClaimRewardEvent = BingoFolder:FindFirstChild("ClaimReward")
+        local CompleteBoardEvent = BingoFolder:FindFirstChild("CompleteBoard")
+        
+        if not UseStampEvent or not ClaimRewardEvent or not CompleteBoardEvent then
+            warn("[Auto Bingo] Missing events - UseStamp: " .. tostring(UseStampEvent ~= nil) .. ", ClaimReward: " .. tostring(ClaimRewardEvent ~= nil) .. ", CompleteBoard: " .. tostring(CompleteBoardEvent ~= nil))
+            return
+        end
+        
+        print("[Auto Bingo] Bingo automation loaded!")
         
         while true do
-            task.wait(3)
+            task.wait(1)
             
             if not getgenv().BingoEnabled then
-                task.wait(5)
+                task.wait(2)
                 continue
             end
             
-            pcall(function()
+            local success, err = pcall(function()
+                local clientData = getClientData()
+                local bingoStamps = 0
+                
+                if clientData and clientData.ItemData and clientData.ItemData.HallowenBingoStamp then
+                    bingoStamps = clientData.ItemData.HallowenBingoStamp.Amount or 0
+                end
+                
+                if bingoStamps < 1 then
+                    print("[Auto Bingo] Not enough stamps (" .. bingoStamps .. "), waiting...")
+                    task.wait(5)
+                    return
+                end
+                
+                print("[Auto Bingo] Starting with " .. bingoStamps .. " stamps")
+                
                 if UseStampEvent then
-                    for i=1,25 do 
-                        UseStampEvent:FireServer()
-                        task.wait(0.1)
+                    print("[Auto Bingo] Using 25 stamps...")
+                    for i = 1, 25 do
+                        pcall(function()
+                            UseStampEvent:FireServer()
+                        end)
+                        task.wait(0.05)
                     end
+                    task.wait(0.2)
                 end
-                task.wait(0.5)
+                
                 if ClaimRewardEvent then
-                    for i=1,25 do 
-                        ClaimRewardEvent:InvokeServer(i)
-                        task.wait(0.1)
+                    print("[Auto Bingo] Claiming 25 rewards...")
+                    for i = 1, 25 do
+                        pcall(function()
+                            ClaimRewardEvent:InvokeServer(i)
+                        end)
+                        task.wait(0.05)
                     end
+                    task.wait(0.2)
                 end
-                task.wait(0.5)
-                if CompleteBoardEvent then 
-                    CompleteBoardEvent:InvokeServer()
+                
+                if CompleteBoardEvent then
+                    print("[Auto Bingo] Completing board...")
+                    local boardSuccess, boardResult = pcall(function()
+                        return CompleteBoardEvent:InvokeServer()
+                    end)
+                    if boardSuccess then
+                        print("[Auto Bingo] ✅ Board completed successfully! Result: " .. tostring(boardResult))
+                    else
+                        warn("[Auto Bingo] ❌ Failed to complete board: " .. tostring(boardResult))
+                    end
+                    task.wait(0.1)
                 end
+                
+                print("[Auto Bingo] Cycle complete, waiting 1 second...")
+                task.wait(1)
             end)
+            
+            if not success then
+                warn("[Auto Bingo] Error in cycle: " .. tostring(err))
+            end
         end
     end)
     
@@ -10996,12 +11375,14 @@ if not isInLobby then
             if not slotData or not slotData.Value then return 0 end
             
             local unitName = slotData.Value
+            local unitNameEZA = getEZATowerName(unitName)
+            
             local towersFolder = workspace:FindFirstChild("Towers")
             if not towersFolder then return 0 end
             
             local count = 0
             for _, tower in pairs(towersFolder:GetChildren()) do
-                if tower.Name == unitName then
+                if tower.Name == unitName or tower.Name == unitNameEZA then
                     local owner = tower:FindFirstChild("Owner")
                     if owner and owner.Value == Players.LocalPlayer then
                         count = count + 1
@@ -11010,6 +11391,27 @@ if not isInLobby then
             end
             
             return count
+        end
+        
+        local function getPlacementLimit(unitName)
+            local towersFolder = workspace:FindFirstChild("Towers")
+            if not towersFolder then return nil end
+            
+            local unitNameEZA = getEZATowerName(unitName)
+            
+            local towerModel = towersFolder:FindFirstChild(unitNameEZA)
+            if not towerModel then
+                towerModel = towersFolder:FindFirstChild(unitName)
+            end
+            
+            if not towerModel then return nil end
+            
+            local placementLimit = towerModel:FindFirstChild("PlacementLimit")
+            if placementLimit and placementLimit:IsA("ValueBase") then
+                return placementLimit.Value
+            end
+            
+            return nil
         end
         
         local function placeTower(unitName, cframe, slotNum)
@@ -11205,9 +11607,16 @@ if not isInLobby then
                         if slotData and slotData.Value then
                             local placeCap = math.floor(getgenv().AutoPlayConfig.placeCaps[slotNum] or 0)
                             local currentCount = getPlacedTowerCount(slotNum)
+                            local placementLimit = getPlacementLimit(slotData.Value)
                             
-                            if placeCap > 0 and currentCount < placeCap then
+                            local effectiveCap = placeCap
+                            if placementLimit and placementLimit > 0 then
+                                effectiveCap = math.min(placeCap, placementLimit)
+                            end
+                            
+                            if placeCap > 0 and currentCount < effectiveCap then
                                 allUnitsPlaced = false
+                                print("[Auto Play] Slot " .. slotNum .. " (" .. slotData.Value .. ") not at cap: " .. currentCount .. "/" .. effectiveCap .. " (Cap: " .. placeCap .. ", Limit: " .. tostring(placementLimit) .. ")")
                                 break
                             end
                         end
@@ -11232,10 +11641,17 @@ if not isInLobby then
                     local slotData = clientData.Slots[sortedSlots[slotNum]]
                     if slotData and slotData.Value then
                         local unitName = slotData.Value
+                        local unitNameEZA = getEZATowerName(unitName)
                         local upgradeCap = math.floor(getgenv().AutoPlayConfig.upgradeCaps[slotNum] or 0)
+                        
                         slotUpgradeCaps[unitName] = upgradeCap
+                        slotUpgradeCaps[unitNameEZA] = upgradeCap
+                        
                         slotPriorities[unitName] = getgenv().AutoPlayConfig.upgradePriorities[slotNum] or slotNum
+                        slotPriorities[unitNameEZA] = getgenv().AutoPlayConfig.upgradePriorities[slotNum] or slotNum
+                        
                         unitToSlot[unitName] = slotNum
+                        unitToSlot[unitNameEZA] = slotNum
                     end
                 end
                 
