@@ -4542,7 +4542,15 @@ local function buildAutoAbilityUI()
                 end
             end
             
-            if hasBulma or hasWukong or hasEtoEvo or hasSkeletonKnightEZA then
+            local hasGriffithEclipse = false
+            for slotName, slotData in pairs(clientData.Slots) do
+                if slotData.Value == "GriffithEclipse" then
+                    hasGriffithEclipse = true
+                    break
+                end
+            end
+            
+            if hasBulma or hasWukong or hasEtoEvo or hasSkeletonKnightEZA or hasGriffithEclipse then
                 local specialSection = Tabs.Abilities:Section({ Side = "Left" })
                 table.insert(getgenv()._AbilityUIElements["Left"], specialSection)
                 
@@ -4709,6 +4717,27 @@ local function buildAutoAbilityUI()
                             })
                         end,
                         getgenv().OneEyeDevilEnabled
+                    )
+                end
+                
+                if hasGriffithEclipse then
+                    if hasBulma or hasWukong or hasEtoEvo or hasSkeletonKnightEZA then
+                        specialSection:Divider()
+                    end
+                    
+                    createToggle(
+                        specialSection,
+                        "Auto Griffith Light (Umbral Prince)",
+                        "GriffithLightToggle",
+                        function(value)
+                            getgenv().GriffithLightEnabled = value
+                            Window:Notify({
+                                Title = "Auto Griffith Light",
+                                Description = value and "Enabled - Will use Light Sacrifice at 50k+" or "Disabled",
+                                Lifetime = 2
+                            })
+                        end,
+                        getgenv().GriffithLightEnabled
                     )
                 end
             end
@@ -8240,6 +8269,8 @@ do
             if getgenv()._EtoEvoAbilityUsed then
                 getgenv()._EtoEvoAbilityUsed = {}
             end
+            
+            getgenv().GriffithLightUsedThisRound = false
         end
     end)
     end)
@@ -8565,6 +8596,266 @@ end
 
 do
     task.spawn(function()
+        if not getgenv().GriffithLightUsedThisRound then
+            getgenv().GriffithLightUsedThisRound = false
+        end
+        
+        local function getGriffithEclipseTower()
+            local towers = workspace:FindFirstChild("Towers")
+            if not towers then return nil end
+            
+            for _, tower in pairs(towers:GetChildren()) do
+                local owner = tower:FindFirstChild("Owner")
+                if tower.Name == "GriffithEclipse" and owner and owner.Value == LocalPlayer then
+                    return tower
+                end
+            end
+            return nil
+        end
+        
+        local function getCardButtons()
+            local ok, result = pcall(function()
+                local prompt = LocalPlayer.PlayerGui:FindFirstChild("Prompt")
+                if not prompt or not prompt.Enabled then return nil end
+                
+                local frame = prompt:FindFirstChild("Frame")
+                if not frame then return nil end
+                
+                local frame2 = frame:FindFirstChild("Frame")
+                if not frame2 then return nil end
+                
+                local frame3 = frame2:FindFirstChild("Frame")
+                if not frame3 then return nil end
+                
+                local frame4 = frame3:FindFirstChild("Frame")
+                if not frame4 then return nil end
+                
+                local buttons = {}
+                for _, child in ipairs(frame4:GetChildren()) do
+                    if child:IsA("TextButton") then
+                        table.insert(buttons, child)
+                    end
+                end
+                
+                return #buttons > 0 and buttons or nil
+            end)
+            
+            return ok and result or nil
+        end
+        
+        local function getCardName(button)
+            local ok, result = pcall(function()
+                local function searchForTextLabel(parent, depth)
+                    if depth > 10 then return nil end
+                    
+                    for _, child in ipairs(parent:GetChildren()) do
+                        if child:IsA("TextLabel") and child.Text ~= "" then
+                            local text = child.Text:gsub("<[^>]+>", ""):gsub("%s+", " "):match("^%s*(.-)%s*$")
+                            if text:find("Light Sacrifice") then
+                                return text
+                            end
+                        end
+                        
+                        if child:IsA("Frame") or child:IsA("Folder") then
+                            local found = searchForTextLabel(child, depth + 1)
+                            if found then return found end
+                        end
+                    end
+                    
+                    return nil
+                end
+                
+                return searchForTextLabel(button, 0)
+            end)
+            
+            return ok and result or nil
+        end
+        
+        local function clickButton(button)
+            if not button then return false end
+            
+            local success = false
+            
+            if getconnections then
+                pcall(function()
+                    local events = {"Activated", "MouseButton1Click", "MouseButton1Down"}
+                    for _, eventName in ipairs(events) do
+                        local connections = getconnections(button[eventName])
+                        if connections then
+                            for _, conn in ipairs(connections) do
+                                if conn and conn.Fire then
+                                    conn:Fire()
+                                    success = true
+                                end
+                            end
+                        end
+                    end
+                end)
+            end
+            
+            if not success then
+                pcall(function()
+                    local GuiService = game:GetService("GuiService")
+                    GuiService.SelectedObject = nil
+                    task.wait(0.05)
+                    GuiService.SelectedObject = button
+                    task.wait(0.1)
+                    
+                    VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
+                    task.wait(0.02)
+                    VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
+                    
+                    success = true
+                end)
+            end
+            
+            return success
+        end
+        
+        local function getCurrentCash()
+            local ok, cash = pcall(function()
+                local cashValue = LocalPlayer:FindFirstChild("Cash")
+                if cashValue and cashValue:IsA("NumberValue") then
+                    return cashValue.Value
+                end
+                return 0
+            end)
+            return ok and cash or 0
+        end
+        
+        local lastWave = 0
+        local isWaitingForPrompt = false
+        local promptWaitStart = 0
+        local cashAboveThresholdStart = 0
+        local CASH_STABILITY_DURATION = 3
+        
+        while true do
+            task.wait(0.5)
+            
+            if not getgenv().GriffithLightEnabled then
+                task.wait(2)
+                continue
+            end
+            
+            pcall(function()
+                local currentWave = 0
+                pcall(function()
+                    local wave = RS:FindFirstChild("Wave")
+                    if wave and wave:IsA("NumberValue") then
+                        currentWave = wave.Value
+                    end
+                end)
+                
+                if currentWave < lastWave then
+                    getgenv().GriffithLightUsedThisRound = false
+                    isWaitingForPrompt = false
+                    cashAboveThresholdStart = 0
+                end
+                
+                if getgenv().SeamlessFixEnabled and lastWave >= 50 and currentWave < 50 then
+                    getgenv().GriffithLightUsedThisRound = false
+                    isWaitingForPrompt = false
+                    cashAboveThresholdStart = 0
+                end
+                
+                if currentWave == 1 and lastWave > 10 then
+                    getgenv().GriffithLightUsedThisRound = false
+                    isWaitingForPrompt = false
+                    cashAboveThresholdStart = 0
+                end
+                
+                lastWave = currentWave
+                
+                if getgenv().GriffithLightUsedThisRound then
+                    return
+                end
+                
+                local tower = getGriffithEclipseTower()
+                if not tower then 
+                    isWaitingForPrompt = false
+                    cashAboveThresholdStart = 0
+                    return 
+                end
+                
+                local buttons = getCardButtons()
+                
+                if buttons then
+                    if isWaitingForPrompt and tick() - promptWaitStart > 5 then
+                        isWaitingForPrompt = false
+                        return
+                    end
+                    
+                    if not isWaitingForPrompt then
+                        isWaitingForPrompt = true
+                        promptWaitStart = tick()
+                    end
+                    
+                    local foundCard = false
+                    for _, button in ipairs(buttons) do
+                        local cardName = getCardName(button)
+                        if cardName and cardName:find("Light Sacrifice") then
+                            print("[Griffith Light] Clicking: " .. cardName)
+                            
+                            if clickButton(button) then
+                                foundCard = true
+                                isWaitingForPrompt = false
+                                getgenv().GriffithLightUsedThisRound = true
+                                cashAboveThresholdStart = 0
+                                
+                                print("[Griffith Light] Light Sacrifice selected - will not use again this round")
+                                
+                                Window:Notify({
+                                    Title = "Griffith Light",
+                                    Description = "Light Sacrifice selected! Unit transformed to Umbral Prince",
+                                    Lifetime = 3
+                                })
+                                
+                                break
+                            end
+                        end
+                    end
+
+                    return
+                end
+                
+                if not isWaitingForPrompt then
+                    local currentCash = getCurrentCash()
+                    
+                    if currentCash >= 50000 then
+                        if cashAboveThresholdStart == 0 then
+                            cashAboveThresholdStart = tick()
+                            print("[Griffith Light] Cash reached 50k+ - waiting " .. CASH_STABILITY_DURATION .. "s for stability...")
+                        end
+                        
+                        local timeAboveThreshold = tick() - cashAboveThresholdStart
+                        
+                        if timeAboveThreshold >= CASH_STABILITY_DURATION then
+                            local abilityUsed, abilityResult = pcall(function()
+                                return RS.Remotes.Ability:InvokeServer(tower, "Sacrifice")
+                            end)
+                            
+                            if abilityUsed and abilityResult then
+                                isWaitingForPrompt = true
+                                promptWaitStart = tick()
+                                print("[Griffith Light] Sacrifice ability used at " .. currentCash .. " cash (stable for " .. string.format("%.1f", timeAboveThreshold) .. "s)")
+                            else
+                                cashAboveThresholdStart = 0
+                            end
+                        end
+                    else
+                        if cashAboveThresholdStart > 0 then
+                            print("[Griffith Light] Cash dropped below 50k - resetting stability timer")
+                            cashAboveThresholdStart = 0
+                        end
+                    end
+                end
+            end)
+        end
+    end)
+end
+
+do
+    task.spawn(function()
     local lastWave = 0
     while true do
         task.wait(1)
@@ -8579,6 +8870,7 @@ do
                     getgenv()._WukongLastSynthesisTime = 0
                     getgenv().SkeletonKnightLastUse = 0
                     getgenv().OneEyeDevilCurrentIndex = 0 
+                    getgenv().GriffithLightUsedThisRound = false
                 end
                 
                 lastWave = currentWave
@@ -9710,8 +10002,22 @@ do
                 getgenv()._webhookSessionID = tostring(tick())
             end
             
+            if not getgenv()._lastWebhookSendTime then
+                getgenv()._lastWebhookSendTime = 0
+            end
+            
+            local timeSinceLastSend = tick() - getgenv()._lastWebhookSendTime
+            if timeSinceLastSend < 5 then
+                print("[Webhook] ⏱️ Cooldown active - " .. string.format("%.1f", 5 - timeSinceLastSend) .. "s remaining")
+                task.wait(0.5)
+                isProcessing = false
+                getgenv().WebhookProcessing = false
+                return
+            end
+            
             local webhookHash = getgenv()._webhookSessionID .. "_" .. LocalPlayer.Name .. "_" .. matchTime .. "_" .. matchWave .. "_" .. rewardsText .. "_" .. (hasUnitDrop and unitDropName or "")
             if webhookHash == lastWebhookHash then
+                print("[Webhook] 🔄 Duplicate detected (same as last)")
                 task.wait(0.5)
                 isProcessing = false
                 getgenv().WebhookProcessing = false
@@ -9721,6 +10027,7 @@ do
             if getgenv()._lastWebhookHashList then
                 for _, oldHash in ipairs(getgenv()._lastWebhookHashList) do
                     if oldHash == webhookHash then
+                        print("[Webhook] 🔄 Duplicate detected (in history)")
                         task.wait(0.5)
                         isProcessing = false
                         getgenv().WebhookProcessing = false
@@ -9737,6 +10044,8 @@ do
             if #getgenv()._lastWebhookHashList > 5 then
                 table.remove(getgenv()._lastWebhookHashList, 1)
             end
+            
+            getgenv()._lastWebhookSendTime = tick()
             
             local sendSuccess = false
             local sendAttempts = 0
@@ -9796,13 +10105,26 @@ do
         end
     end
     
-    LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
-        if child.Name == "EndGameUI" and getgenv().WebhookEnabled then
-            getgenv().WebhookProcessing = true
-            task.wait(2)
-            sendWebhook()
+    local webhookConnection = nil
+    
+    local function setupWebhookTrigger()
+        if webhookConnection then
+            webhookConnection:Disconnect()
         end
-    end)
+        
+        webhookConnection = LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
+            if child.Name == "EndGameUI" and getgenv().WebhookEnabled then
+                if getgenv().WebhookProcessing then
+                    return
+                end
+                getgenv().WebhookProcessing = true
+                task.wait(2)
+                sendWebhook()
+            end
+        end)
+    end
+    
+    setupWebhookTrigger()
     
     LocalPlayer.PlayerGui.ChildRemoved:Connect(function(child)
         if child.Name == "EndGameUI" then
@@ -9810,18 +10132,6 @@ do
             if getgenv().WebhookProcessing then
                 warn("[Webhook] Force clearing WebhookProcessing flag due to UI removal")
                 getgenv().WebhookProcessing = false
-            end
-        end
-    end)
-    
-    task.spawn(function()
-        task.wait(1)
-        if getgenv().WebhookEnabled then
-            local endGameUI = LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
-            if endGameUI and endGameUI.Enabled and not getgenv().WebhookProcessing then
-                getgenv().WebhookProcessing = true
-                task.wait(1)
-                sendWebhook()
             end
         end
     end)
