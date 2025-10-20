@@ -4113,6 +4113,10 @@ local function buildAutoAbilityUI()
                 continue
             end
             
+            if unitInfo.originalName == "Skull_Knight_Evo" and unitInfo.isEZA then
+                continue
+            end
+            
             local abilities = getAllAbilities(unitName)
             
             if next(abilities) then
@@ -4580,33 +4584,96 @@ local function buildAutoAbilityUI()
                         getgenv().SkeletonKnightEnabled
                     )
                     
-                    local unitOptions = {}
-                    for _, slotName in ipairs({"Slot1", "Slot2", "Slot3", "Slot4", "Slot5", "Slot6"}) do
-                        local slotData = clientData.Slots[slotName]
-                        if slotData and slotData.Value and slotData.Value ~= "Skull_Knight_Evo" then
-                            local displayName = getUnitDisplayName(slotData.Value)
-                            table.insert(unitOptions, displayName)
+                    specialSection:SubLabel({ Text = "Target unit updates automatically when towers are placed" })
+                    
+                    local function getAvailableTargets()
+                        local targets = {}
+                        local targetMap = {}
+                        
+                        local towers = workspace:FindFirstChild("Towers")
+                        if towers then
+                            for _, tower in pairs(towers:GetChildren()) do
+                                local owner = tower:FindFirstChild("Owner")
+                                if owner and owner.Value == LocalPlayer then
+                                    local towerName = tower.Name
+                                    
+                                    if towerName ~= "Skull_Knight_EvoEZA" and towerName ~= "Skull_Knight_Evo" and towerName ~= "NarutoBaryonClone" then
+                                        local baseName = towerName:gsub("EZA$", "")
+                                        local displayName = getUnitDisplayName(baseName)
+                                        
+                                        if not targetMap[displayName] then
+                                            targetMap[displayName] = towerName
+                                            table.insert(targets, displayName)
+                                        end
+                                    end
+                                end
+                            end
                         end
+                        
+                        table.sort(targets)
+                        return targets, targetMap
                     end
                     
-                    if #unitOptions > 0 then
-                        createDropdown(
-                            specialSection,
-                            "  > Target Unit",
-                            "SkeletonKnightTargetUnit",
-                            unitOptions,
-                            false,
-                            function(value)
-                                getgenv().SkeletonKnightTargetUnit = value
-                                Window:Notify({
-                                    Title = "Auto Skeleton Knight",
-                                    Description = "Target set to: " .. value,
-                                    Lifetime = 2
-                                })
-                            end,
-                            getgenv().SkeletonKnightTargetUnit or unitOptions[1]
-                        )
+                    local targets, targetMap = getAvailableTargets()
+                    
+                    if #targets == 0 then
+                        table.insert(targets, "No units placed yet")
                     end
+                    
+                    if not getgenv().SkeletonKnightTargetUnit or getgenv().SkeletonKnightTargetUnit == "" then
+                        getgenv().SkeletonKnightTargetUnit = targets[1]
+                    end
+                    
+                    getgenv()._SkeletonKnightTargetMap = targetMap
+                    
+                    local dropdown = createDropdown(
+                        specialSection,
+                        "  > Target Unit",
+                        "SkeletonKnightTargetUnit",
+                        targets,
+                        false,
+                        function(value)
+                            getgenv().SkeletonKnightTargetUnit = value
+                            print("[Auto Skeleton Knight] Target set to: " .. value)
+                        end,
+                        getgenv().SkeletonKnightTargetUnit
+                    )
+                    
+                    getgenv()._SkeletonKnightDropdown = dropdown
+                    
+                    task.spawn(function()
+                        local lastTargetList = table.concat(targets, ",")
+                        
+                        while true do
+                            task.wait(2)
+                            
+                            if not getgenv().SkeletonKnightEnabled then
+                                task.wait(3)
+                                continue
+                            end
+                            
+                            local newTargets, newTargetMap = getAvailableTargets()
+                            local newTargetList = table.concat(newTargets, ",")
+                            
+                            if newTargetList ~= lastTargetList then
+                                print("[Auto Skeleton Knight] Target list updated: " .. #newTargets .. " units available")
+                                
+                                if #newTargets == 0 then
+                                    table.insert(newTargets, "No units placed yet")
+                                end
+                                
+                                getgenv()._SkeletonKnightTargetMap = newTargetMap
+                                
+                                if dropdown and dropdown.SetValues then
+                                    pcall(function()
+                                        dropdown:SetValues(newTargets)
+                                    end)
+                                end
+                                
+                                lastTargetList = newTargetList
+                            end
+                        end
+                    end)
                 end
                 
                 if hasEtoEvo then
@@ -7850,48 +7917,46 @@ do
         
         local function getSkeletonKnightTower()
             local towers = workspace:FindFirstChild("Towers")
-            if not towers then return nil end
+            if not towers then 
+                print("[Auto Skeleton Knight] Towers folder not found")
+                return nil 
+            end
             
             for _, tower in pairs(towers:GetChildren()) do
                 local owner = tower:FindFirstChild("Owner")
-                if tower.Name == "Skull_Knight_Evo" and owner and owner.Value == LocalPlayer then
+                if (tower.Name == "Skull_Knight_EvoEZA" or tower.Name == "Skull_Knight_Evo") and owner and owner.Value == LocalPlayer then
+                    print("[Auto Skeleton Knight] Found tower: " .. tower.Name)
                     return tower
                 end
             end
             
+            print("[Auto Skeleton Knight] No Skeleton Knight tower found in workspace")
             return nil
         end
         
         local function getTargetTowerByDisplayName(displayName)
-            if not displayName or displayName == "" then return nil end
-            
-            local clientData = getClientData()
-            if not clientData or not clientData.Slots then return nil end
-            
-            local targetUnitName = nil
-            for _, slotName in ipairs({"Slot1", "Slot2", "Slot3", "Slot4", "Slot5", "Slot6"}) do
-                local slotData = clientData.Slots[slotName]
-                if slotData and slotData.Value then
-                    local unitDisplayName = getUnitDisplayName(slotData.Value)
-                    if unitDisplayName == displayName then
-                        targetUnitName = slotData.Value
-                        break
-                    end
-                end
+            if not displayName or displayName == "" or displayName == "No units placed yet" then 
+                return nil 
             end
-            
-            if not targetUnitName then return nil end
             
             local towers = workspace:FindFirstChild("Towers")
             if not towers then return nil end
             
             for _, tower in pairs(towers:GetChildren()) do
                 local owner = tower:FindFirstChild("Owner")
-                if tower.Name == targetUnitName and owner and owner.Value == LocalPlayer then
-                    return tower
+                if owner and owner.Value == LocalPlayer then
+                    local towerName = tower.Name
+                    local baseName = towerName:gsub("EZA$", "")
+                    local towerDisplayName = getUnitDisplayName(baseName)
+                    
+                    if towerDisplayName == displayName then
+                        print("[Auto Skeleton Knight] Matched tower: " .. towerName .. " for display name: " .. displayName)
+                        return tower
+                    end
                 end
             end
             
+            print("[Auto Skeleton Knight] No tower found for display name: " .. displayName)
             return nil
         end
         
@@ -7900,51 +7965,97 @@ do
         while true do
             task.wait(1)
             
+            print("[Auto Skeleton Knight] Loop tick - Enabled: " .. tostring(getgenv().SkeletonKnightEnabled))
+            
             if not getgenv().SkeletonKnightEnabled then
                 task.wait(2)
                 continue
             end
             
+            print("[Auto Skeleton Knight] Searching for Skeleton Knight tower...")
             local skeletonKnight = getSkeletonKnightTower()
             if not skeletonKnight then
+                print("[Auto Skeleton Knight] ❌ Skeleton Knight tower not found")
+                task.wait(2)
+                continue
+            end
+            print("[Auto Skeleton Knight] ✅ Found Skeleton Knight tower")
+            
+            local upgrade = skeletonKnight:FindFirstChild("Upgrade")
+            if not upgrade then
+                print("[Auto Skeleton Knight] ❌ No Upgrade value found")
                 task.wait(2)
                 continue
             end
             
-            local upgrade = skeletonKnight:FindFirstChild("Upgrade")
-            if not upgrade or upgrade.Value < 11 then
+            print("[Auto Skeleton Knight] Tower level: " .. tostring(upgrade.Value))
+            
+            local isEZA = skeletonKnight.Name == "Skull_Knight_EvoEZA"
+            local requiredLevel = isEZA and 0 or 11
+            
+            if upgrade.Value < requiredLevel then
+                print("[Auto Skeleton Knight] ❌ Tower not level " .. requiredLevel .. " yet (current: " .. upgrade.Value .. ", EZA: " .. tostring(isEZA) .. ")")
                 task.wait(2)
                 continue
             end
+            
+            print("[Auto Skeleton Knight] ✅ Tower ready (Level: " .. upgrade.Value .. ", EZA: " .. tostring(isEZA) .. ")")
             
             local currentTime = tick()
             local cooldown = 200
             local timeSinceLastUse = currentTime - (getgenv().SkeletonKnightLastUse or 0)
             
+            print("[Auto Skeleton Knight] Cooldown check: " .. math.floor(timeSinceLastUse) .. "s / " .. cooldown .. "s")
             if timeSinceLastUse < cooldown then
+                print("[Auto Skeleton Knight] ⏳ On cooldown (" .. math.floor(cooldown - timeSinceLastUse) .. "s remaining)")
                 task.wait(1)
+                continue
+            end
+            
+            print("[Auto Skeleton Knight] Target unit: " .. tostring(getgenv().SkeletonKnightTargetUnit))
+            
+            if not getgenv().SkeletonKnightTargetUnit or getgenv().SkeletonKnightTargetUnit == "" then
+                print("[Auto Skeleton Knight] ❌ No target unit selected in dropdown")
+                task.wait(5)
                 continue
             end
             
             local targetTower = getTargetTowerByDisplayName(getgenv().SkeletonKnightTargetUnit)
             if not targetTower then
-                print("[Auto Skeleton Knight] Target unit not found: " .. tostring(getgenv().SkeletonKnightTargetUnit))
+                print("[Auto Skeleton Knight] ❌ Target unit not found on map: " .. tostring(getgenv().SkeletonKnightTargetUnit))
                 task.wait(5)
                 continue
             end
             
+            if not targetTower.Parent then
+                print("[Auto Skeleton Knight] ❌ Target tower no longer exists")
+                task.wait(5)
+                continue
+            end
+            
+            print("[Auto Skeleton Knight] ✅ Found target tower: " .. targetTower.Name)
+            
+            print("[Auto Skeleton Knight] Attempting to use Savior ability...")
             local success, err = pcall(function()
-                local AbilityEvent = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("Ability")
+                local AbilityEvent = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("AbilityEvent")
+                if not AbilityEvent then
+                    print("[Auto Skeleton Knight] ❌ AbilityEvent not found, trying Ability...")
+                    AbilityEvent = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("Ability")
+                end
+                
                 if AbilityEvent then
-                    AbilityEvent:InvokeServer(skeletonKnight, "Savior")
-                    print("[Auto Skeleton Knight] Used Savior ability")
+                    print("[Auto Skeleton Knight] Invoking AbilityEvent with Savior...")
+                    local result = AbilityEvent:InvokeServer(skeletonKnight, "Savior")
+                    print("[Auto Skeleton Knight] ✅ Savior ability invoked! Result: " .. tostring(result))
                     
                     task.wait(0.5)
                     
+                    print("[Auto Skeleton Knight] Looking for SelectUnitInWorkspace...")
                     local SelectUnitEvent = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("AbilityRemotes") and RS.Remotes.AbilityRemotes:FindFirstChild("SelectUnitInWorkspace")
                     if SelectUnitEvent then
+                        print("[Auto Skeleton Knight] Firing SelectUnitInWorkspace...")
                         SelectUnitEvent:FireServer(targetTower)
-                        print("[Auto Skeleton Knight] Selected target: " .. getgenv().SkeletonKnightTargetUnit)
+                        print("[Auto Skeleton Knight] ✅ Selected target: " .. getgenv().SkeletonKnightTargetUnit)
                         
                         getgenv().SkeletonKnightLastUse = tick()
                         
@@ -7953,12 +8064,16 @@ do
                             Description = "Savior used on " .. getgenv().SkeletonKnightTargetUnit,
                             Lifetime = 3
                         })
+                    else
+                        print("[Auto Skeleton Knight] ❌ SelectUnitInWorkspace not found")
                     end
+                else
+                    print("[Auto Skeleton Knight] ❌ AbilityEvent not found in Remotes")
                 end
             end)
             
             if not success then
-                warn("[Auto Skeleton Knight] Error: " .. tostring(err))
+                warn("[Auto Skeleton Knight] ❌ Error: " .. tostring(err))
             end
             
             task.wait(5)
