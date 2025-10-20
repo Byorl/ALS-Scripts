@@ -4626,7 +4626,6 @@ local function buildAutoAbilityUI()
                     
                     local targets = getAvailableTargets()
                     
-                    print("[Auto Skeleton Knight] Initial targets: " .. table.concat(targets, ", "))
                     
                     if not getgenv().SkeletonKnightTargetUnit or getgenv().SkeletonKnightTargetUnit == "" then
                         getgenv().SkeletonKnightTargetUnit = targets[1]
@@ -4640,7 +4639,6 @@ local function buildAutoAbilityUI()
                         false,
                         function(value)
                             getgenv().SkeletonKnightTargetUnit = value
-                            print("[Auto Skeleton Knight] Target set to: " .. value)
                             Window:Notify({
                                 Title = "Auto Skeleton Knight",
                                 Description = "Target: " .. value,
@@ -8060,19 +8058,16 @@ do
         local function getSkeletonKnightTower()
             local towers = workspace:FindFirstChild("Towers")
             if not towers then 
-                print("[Auto Skeleton Knight] Towers folder not found")
                 return nil 
             end
             
             for _, tower in pairs(towers:GetChildren()) do
                 local owner = tower:FindFirstChild("Owner")
                 if (tower.Name == "Skull_Knight_EvoEZA" or tower.Name == "Skull_Knight_Evo") and owner and owner.Value == LocalPlayer then
-                    print("[Auto Skeleton Knight] Found tower: " .. tower.Name)
                     return tower
                 end
             end
             
-            print("[Auto Skeleton Knight] No Skeleton Knight tower found in workspace")
             return nil
         end
         
@@ -8109,7 +8104,6 @@ do
                 continue
             end
             
-            print("[Auto Skeleton Knight] Searching for Skeleton Knight tower...")
             local skeletonKnight = getSkeletonKnightTower()
             if not skeletonKnight then
                 task.wait(2)
@@ -8118,7 +8112,6 @@ do
             
             local upgrade = skeletonKnight:FindFirstChild("Upgrade")
             if not upgrade then
-                print("[Auto Skeleton Knight] ❌ No Upgrade value found")
                 task.wait(2)
                 continue
             end
@@ -8139,18 +8132,14 @@ do
             local effectiveCooldown = baseCooldown / timeScale
             local timeSinceLastUse = currentTime - (getgenv().SkeletonKnightLastUse or 0)
             
-            print("[Auto Skeleton Knight] Cooldown: " .. math.floor(timeSinceLastUse) .. "s / " .. math.floor(effectiveCooldown) .. "s (TimeScale: " .. timeScale .. "x)")
             
             if timeSinceLastUse < effectiveCooldown then
-                print("[Auto Skeleton Knight] ⏳ On cooldown (" .. math.floor(effectiveCooldown - timeSinceLastUse) .. "s remaining)")
                 task.wait(1)
                 continue
             end
             
-            print("[Auto Skeleton Knight] Target unit: " .. tostring(getgenv().SkeletonKnightTargetUnit))
             
             if not getgenv().SkeletonKnightTargetUnit or getgenv().SkeletonKnightTargetUnit == "" then
-                print("[Auto Skeleton Knight] ❌ No target unit selected in dropdown")
                 task.wait(5)
                 continue
             end
@@ -8169,7 +8158,6 @@ do
             local success, err = pcall(function()
                 local AbilityEvent = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("AbilityEvent")
                 if not AbilityEvent then
-                    print("[Auto Skeleton Knight] ❌ AbilityEvent not found, trying Ability...")
                     AbilityEvent = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("Ability")
                 end
                 
@@ -8188,18 +8176,9 @@ do
                             Description = "Savior used on " .. getgenv().SkeletonKnightTargetUnit,
                             Lifetime = 3
                         })
-                    else
-                        print("[Auto Skeleton Knight] ❌ SelectUnitInWorkspace not found")
                     end
-                else
-                    print("[Auto Skeleton Knight] ❌ AbilityEvent not found in Remotes")
                 end
             end)
-            
-            if not success then
-                warn("[Auto Skeleton Knight] ❌ Error: " .. tostring(err))
-            end
-            
             task.wait(5)
         end
     end)
@@ -11668,7 +11647,6 @@ if not isInLobby then
         
         local function hologramLoop()
             task.wait(3)
-            print("[AutoPlay] Hologram loop started")
             
             while true do
                 task.wait(2)  
@@ -11819,7 +11797,6 @@ if not isInLobby then
                             
                             if placeCap > 0 and currentCount < effectiveCap then
                                 allUnitsPlaced = false
-                                print("[Auto Play] Slot " .. slotNum .. " (" .. slotData.Value .. ") not at cap: " .. currentCount .. "/" .. effectiveCap .. " (Cap: " .. placeCap .. ", Limit: " .. tostring(placementLimit) .. ")")
                                 break
                             end
                         end
@@ -11945,7 +11922,6 @@ if not isInLobby then
                         
                         if data.cost > 0 and currentCash >= data.cost then
                             local prefix = data.isFarm and "[FARM] " or ""
-                            print("[AutoUpgrade] " .. prefix .. "Upgrading " .. data.unitName .. " (Priority " .. data.priority .. ") from level " .. data.level .. " (Cost: $" .. data.cost .. ")")
                             if upgradeTower(data.tower) then
                                 upgraded = true
                                 task.wait(0.2)
@@ -11958,7 +11934,6 @@ if not isInLobby then
                         currentCash = tonumber(getgenv().MacroCurrentCash) or 0
                         
                         if data.cost > 0 and currentCash >= data.cost then
-                            print("[AutoUpgrade] Upgrading " .. data.unitName .. " from level " .. data.level .. " (Cost: $" .. data.cost .. ")")
                             if upgradeTower(data.tower) then
                                 upgraded = true
                                 task.wait(0.2)
