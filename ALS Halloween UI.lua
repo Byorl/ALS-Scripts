@@ -1644,6 +1644,7 @@ local function updateGameState()
             getgenv().BulmaWishUsedThisRound = false
             getgenv().WukongTrackedClones = {}
             getgenv()._WukongLastSynthesisTime = 0
+            getgenv().SkeletonKnightLastUse = 0
             getgenv().SmartCardPicked = {}
             getgenv().SmartCardLastPromptId = nil
             getgenv().SlowerCardPicked = {}
@@ -8042,6 +8043,7 @@ do
             getgenv().BulmaWishUsedThisRound = false
             getgenv().WukongTrackedClones = {}
             getgenv()._WukongLastSynthesisTime = 0
+            getgenv().SkeletonKnightLastUse = 0
             getgenv().OneEyeDevilCurrentIndex = 0 
             
             if getgenv()._EtoEvoAbilityUsed then
@@ -8384,6 +8386,7 @@ do
                     getgenv().BulmaWishUsedThisRound = false
                     getgenv().WukongTrackedClones = {}
                     getgenv()._WukongLastSynthesisTime = 0
+                    getgenv().SkeletonKnightLastUse = 0
                     getgenv().OneEyeDevilCurrentIndex = 0 
                 end
                 
