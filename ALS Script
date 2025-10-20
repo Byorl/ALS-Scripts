@@ -1142,6 +1142,26 @@ local function saveMacro(name, data)
     return success
 end
 
+local function loadMacro(macroName)
+    if not macroName or macroName == "" then return nil end
+    
+    if getgenv().Macros and getgenv().Macros[macroName] then
+        return getgenv().Macros[macroName]
+    end
+    
+    local filePath = MACRO_FOLDER .. "/" .. macroName .. ".json"
+    if isfile(filePath) then
+        local ok, data = pcall(function()
+            return HttpService:JSONDecode(readfile(filePath))
+        end)
+        if ok and type(data) == "table" then
+            return data
+        end
+    end
+    
+    return nil
+end
+
 local function getMacroNames()
     local names = {}
     for name in pairs(getgenv().Macros) do 
@@ -1732,7 +1752,7 @@ end
 
 local function setupTowerUpgradeListener(tower)
     
-    if not tower:FindFirstChild("Upgrade") or towerTracker.upgradeConnections[tower] then 
+    if not tower or not tower.Parent or not tower:FindFirstChild("Upgrade") or towerTracker.upgradeConnections[tower] then 
         return 
     end
     
@@ -10300,7 +10320,7 @@ if isInLobby then
         end
         
         while true do
-            task.wait(1) 
+            task.wait(0.1) 
             
             if not getgenv().CapsuleEnabled then
                 task.wait(3)
