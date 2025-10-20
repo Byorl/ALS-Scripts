@@ -13,7 +13,7 @@ local currentPlaceId = game.PlaceId
 
 for _, placeId in ipairs(SUPPORTED_PLACE_IDS) do
     if currentPlaceId == placeId then
-        loadstring(game:HttpGet("https://raw.githubusercontent.com/Byorl/ALS-Scripts/refs/heads/main/Maclib.lua"))()
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/Byorl/ALS-Scripts/refs/heads/main/ALS%20Script"))()
         return
     end
 end
