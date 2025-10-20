@@ -6,7 +6,7 @@ end
 
 task.spawn(function()
     while true do
-        task.wait(30)
+        task.wait(20)
         pcall(function()
             local cleaned = 0
             for i = #getgenv()._GlobalConnections, 1, -1 do
@@ -23,17 +23,14 @@ task.spawn(function()
                     temp[i] = getgenv().MacroCashHistory[i]
                 end
                 getgenv().MacroCashHistory = temp
-                print("[Memory] Trimmed MacroCashHistory")
             end
             
             if getgenv().SmartCardPicked and #getgenv().SmartCardPicked > 5 then
                 getgenv().SmartCardPicked = {}
-                print("[Memory] Cleared SmartCardPicked")
             end
             
             if getgenv().SlowerCardPicked and #getgenv().SlowerCardPicked > 5 then
                 getgenv().SlowerCardPicked = {}
-                print("[Memory] Cleared SlowerCardPicked")
             end
             
             if getgenv().MacroDataV2 and #getgenv().MacroDataV2 > 1000 and not getgenv().MacroRecordingV2 then
@@ -42,8 +39,17 @@ task.spawn(function()
                     temp[i] = getgenv().MacroDataV2[i]
                 end
                 getgenv().MacroDataV2 = temp
-                print("[Memory] Trimmed MacroDataV2")
             end
+            
+            if getgenv().WukongTrackedClones then
+                for clone, _ in pairs(getgenv().WukongTrackedClones) do
+                    if not clone or not clone.Parent then
+                        getgenv().WukongTrackedClones[clone] = nil
+                    end
+                end
+            end
+            
+            collectgarbage("collect")
             
             local heartbeatConns = 0
             for _, conn in pairs(getconnections(game:GetService("RunService").Heartbeat)) do
@@ -412,12 +418,16 @@ Window.onUnloaded(function()
         ConnectionManager:cleanup()
     end
     
+    pcall(cleanupTowerTracker)
+    
     getgenv().MacroTowerInfoCache = nil
     getgenv().MacroRemoteCache = nil
     getgenv().MacroCashHistory = nil
+    getgenv().MacroDataV2 = nil
     getgenv().WukongTrackedClones = nil
     getgenv().SmartCardPicked = nil
     getgenv().SlowerCardPicked = nil
+    getgenv()._GlobalConnections = nil
     
     for i = 1, 3 do
         safeGarbageCollect()
@@ -1708,6 +1718,18 @@ local towerTracker = {
     upgradeConnections = {}
 }
 
+local function cleanupTowerTracker()
+    for tower, conn in pairs(towerTracker.upgradeConnections) do
+        pcall(function() conn:Disconnect() end)
+    end
+    towerTracker.placeCounts = {}
+    towerTracker.upgradeLevels = {}
+    towerTracker.lastPlaceTime = {}
+    towerTracker.lastUpgradeTime = {}
+    towerTracker.pendingActions = {}
+    towerTracker.upgradeConnections = {}
+end
+
 local function setupTowerUpgradeListener(tower)
     
     if not tower:FindFirstChild("Upgrade") or towerTracker.upgradeConnections[tower] then 
@@ -1749,7 +1771,11 @@ local function setupTowerUpgradeListener(tower)
                     cost = getgenv().GetRecentCashDecrease(0.3)
                 end
                 
-
+                if #getgenv().MacroDataV2 >= 5000 then
+                    warn("[Macro] Recording limit reached (5000 steps). Stopping recording.")
+                    getgenv().MacroRecordingV2 = false
+                    return
+                end
                 
                 table.insert(getgenv().MacroDataV2, {
                     RemoteName = "Upgrade",
@@ -1863,6 +1889,12 @@ local function processRemoteCall(remoteName, method, args)
                     savedArgs[2] = {args[2]:GetComponents()}
                 end
                 
+                if #getgenv().MacroDataV2 >= 5000 then
+                    warn("[Macro] Recording limit reached (5000 steps). Stopping recording.")
+                    getgenv().MacroRecordingV2 = false
+                    return
+                end
+                
                 table.insert(getgenv().MacroDataV2, {
                     RemoteName = remoteName,
                     Args = savedArgs,
@@ -1918,6 +1950,12 @@ local function processRemoteCall(remoteName, method, args)
                                 cost = getgenv().GetRecentCashDecrease(0.3)
                             end
                             
+                            if #getgenv().MacroDataV2 >= 5000 then
+                                warn("[Macro] Recording limit reached (5000 steps). Stopping recording.")
+                                getgenv().MacroRecordingV2 = false
+                                return
+                            end
+                            
                             table.insert(getgenv().MacroDataV2, {
                                 RemoteName = "Upgrade",
                                 Args = {nil},
@@ -1952,6 +1990,12 @@ local function processRemoteCall(remoteName, method, args)
         if args[1] and typeof(args[1]) == "Instance" then
             local tower = args[1]
             local towerName = tower.Name
+            
+            if #getgenv().MacroDataV2 >= 5000 then
+                warn("[Macro] Recording limit reached (5000 steps). Stopping recording.")
+                getgenv().MacroRecordingV2 = false
+                return
+            end
             
             table.insert(getgenv().MacroDataV2, {
                 RemoteName = remoteName,
@@ -2072,6 +2116,8 @@ local function monitorEndGameUI()
             
             if getgenv().MacroRecordingV2 and getgenv().MacroGameState.hasEndGameUI then
                 getgenv().MacroRecordingV2 = false
+                
+                cleanupTowerTracker()
                 
                 pcall(function()
                     if macroRecordToggle then
@@ -3243,7 +3289,6 @@ pcall(function()
                 getgenv().BabyloniaCastle[card.CardName] = card
             end
         end
-        print("[Boss Rush] Loaded " .. #cards .. " Babylonia Castle cards")
     end
 end)
 
@@ -3598,7 +3643,6 @@ task.spawn(function()
                 if enterEvent then
                     local isHardMode = getgenv().InfinityCastleDifficulty == "Hard"
                     enterEvent:FireServer(isHardMode)
-                    print("[Infinity Castle] Joining " .. getgenv().InfinityCastleDifficulty .. " mode (Hard: " .. tostring(isHardMode) .. ")")
                     
                     Window:Notify({
                         Title = "Infinity Castle",
@@ -3607,8 +3651,6 @@ task.spawn(function()
                     })
                     
                     task.wait(5)
-                else
-                    print("[Infinity Castle] EnterEvent remote not found")
                 end
             end)
         end
@@ -8156,7 +8198,7 @@ do
             end
                         
             local success, err = pcall(function()
-                local AbilityEvent = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("AbilityEvent")
+                local AbilityEvent = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("Ability")
                 if not AbilityEvent then
                     AbilityEvent = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("Ability")
                 end
@@ -8756,7 +8798,6 @@ end)
 local function findBestPortalFromClientData()
     local clientData = getClientData()
     if not clientData or not clientData.PortalData then 
-        print("[Portal] No portal data found in ClientData")
         return nil 
     end
     
@@ -8783,7 +8824,6 @@ local function findBestPortalFromClientData()
                         challenge = portalData.Challenges or "",
                         map = portalData.Map or ""
                     })
-                    print("[Portal] Found: " .. (portalData.Map or "Unknown") .. " | Tier " .. (portalData.Tier or 0) .. " | " .. (portalData.Challenges or "None"))
                 end
             end
         end)
@@ -8792,9 +8832,7 @@ local function findBestPortalFromClientData()
     if #matchingPortals == 0 then 
         return nil 
     end
-    
-    print("[Portal] Total matching portals: " .. #matchingPortals)
-    
+        
     if useBestPortal then
         table.sort(matchingPortals, function(a, b)
             return a.tier > b.tier
@@ -8814,7 +8852,6 @@ local function findBestPortalFromClientData()
                 if priorityNum == priority and priorityNum > 0 then
                     for _, portal in ipairs(bestTierPortals) do
                         if portal.challenge == challengeName then
-                            print("[Portal] ✓ Selected: " .. portal.map .. " | Tier " .. portal.tier .. " | " .. portal.challenge .. " (Priority: " .. priorityNum .. ")")
                             return portal.id
                         end
                     end
@@ -8822,7 +8859,6 @@ local function findBestPortalFromClientData()
             end
         end
         
-        print("[Portal] ✓ Selected: " .. bestTierPortals[1].map .. " | Tier " .. bestTierPortals[1].tier .. " (No priority match)")
         return bestTierPortals[1].id
     end
     
@@ -8834,7 +8870,6 @@ local function findBestPortalFromClientData()
     end
     
     if #tierFiltered == 0 then
-        print("[Portal] No portals found for tier " .. targetTier .. ", using first available")
         return matchingPortals[1].id
     end
     
@@ -8843,7 +8878,6 @@ local function findBestPortalFromClientData()
             if priorityNum == priority and priorityNum > 0 then
                 for _, portal in ipairs(tierFiltered) do
                     if portal.challenge == challengeName then
-                        print("[Portal] ✓ Selected: " .. portal.map .. " | Tier " .. portal.tier .. " | " .. portal.challenge .. " (Priority: " .. priorityNum .. ")")
                         return portal.id
                     end
                 end
@@ -8851,27 +8885,22 @@ local function findBestPortalFromClientData()
         end
     end
     
-    print("[Portal] ✓ Selected: " .. tierFiltered[1].map .. " | Tier " .. tierFiltered[1].tier .. " (No priority match)")
     return tierFiltered[1].id
 end
 
 local function activatePortalAndStart(portalID)
     if not portalID then 
-        print("[Portal] ❌ No portal ID provided")
         return false 
     end
         
     local success, err = pcall(function()
         local remotes = RS:FindFirstChild("Remotes")
         if not remotes then
-            print("[Portal] ❌ Remotes not found")
             return false
         end
         
         local portalsFolder = remotes:FindFirstChild("Portals")
         if not portalsFolder then
-            print("[Portal] ❌ Portals folder not found")
-            print("[Portal] 🔍 Contents of Remotes:")
             for _, child in ipairs(remotes:GetChildren()) do
                 print("  - " .. child.Name .. " (" .. child.ClassName .. ")")
             end
@@ -8884,18 +8913,14 @@ local function activatePortalAndStart(portalID)
         end
         
         local result = activateEvent:InvokeServer(portalID)
-        print("[Portal] ✓ ActivateEvent returned:", tostring(result))
         
         task.wait(0.5)
         
         local startEvent = portalsFolder:FindFirstChild("Start")
         if startEvent then
-            print("[Portal] ✓ Calling Start:FireServer()")
             startEvent:FireServer()
-            print("[Portal] ✅ Portal activated and started!")
             return true
         else
-            print("[Portal] ⚠️ Start event not found, but portal activated")
             return true
         end
     end)
@@ -8961,7 +8986,6 @@ local function fastSelectPortal()
         task.wait(0.2)
         
         if GuiService.SelectedObject == portalButton then
-            print("[Portal Reward] Pressing Enter to select portal...")
             VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
             task.wait(0.02)
             VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
@@ -8977,7 +9001,6 @@ local function fastSelectPortal()
             if lockConnection then
                 lockConnection:Disconnect()
             end
-            print("[Portal Reward] ❌ Failed to select portal button")
             return false
         end
         
@@ -8993,15 +9016,11 @@ local function fastSelectPortal()
                 if #children >= 5 then
                     local fifthChild = children[5]
                     confirmButton = fifthChild:FindFirstChild("TextButton")
-                    if confirmButton then
-                        print("[Portal Reward] ✓ Found confirm button")
-                    end
                 end
             end
         end
         
         if confirmButton then
-            print("[Portal Reward] Selecting confirm button...")
             GuiService.SelectedObject = nil
             task.wait(0.05)
             
@@ -9031,17 +9050,14 @@ local function fastSelectPortal()
                 end
                 
                 GuiService.SelectedObject = nil
-                print("[Portal Reward] ✅ Portal selected!")
                 return true
             else
                 if confirmLock then
                     confirmLock:Disconnect()
                 end
-                print("[Portal Reward] ❌ Failed to select confirm button")
                 return false
             end
         else
-            print("[Portal Reward] ❌ Confirm button not found")
             return false
         end
     end)
@@ -9493,8 +9509,6 @@ do
                         end
                     end
                 end
-                
-                print("[Webhook] Initial data captured")
             end
         end)
     end
@@ -9508,24 +9522,20 @@ do
     local function sendWebhook()
         local success, err = pcall(function()
             if not getgenv().WebhookEnabled then 
-                print("[Webhook] Webhook disabled, skipping")
                 getgenv().WebhookProcessing = false
                 return 
             end
             
             if isProcessing and not getgenv().WebhookProcessing then 
-                print("[Webhook] Already processing, skipping duplicate call")
                 return 
             end
             
             local currentTime = tick()
             if currentTime - lastWebhookTime < WEBHOOK_COOLDOWN then 
-                print("[Webhook] Cooldown active, skipping (" .. (WEBHOOK_COOLDOWN - (currentTime - lastWebhookTime)) .. "s remaining)")
                 getgenv().WebhookProcessing = false
                 return 
             end
             
-            print("[Webhook] Starting webhook send process...")
             lastWebhookTime = currentTime
             isProcessing = true
             if not getgenv().WebhookProcessing then
@@ -9702,7 +9712,6 @@ do
             
             local webhookHash = getgenv()._webhookSessionID .. "_" .. LocalPlayer.Name .. "_" .. matchTime .. "_" .. matchWave .. "_" .. rewardsText .. "_" .. (hasUnitDrop and unitDropName or "")
             if webhookHash == lastWebhookHash then
-                print("[Webhook] Duplicate webhook detected (same session), skipping send")
                 task.wait(0.5)
                 isProcessing = false
                 getgenv().WebhookProcessing = false
@@ -9712,7 +9721,6 @@ do
             if getgenv()._lastWebhookHashList then
                 for _, oldHash in ipairs(getgenv()._lastWebhookHashList) do
                     if oldHash == webhookHash then
-                        print("[Webhook] Duplicate webhook detected (in history), skipping send")
                         task.wait(0.5)
                         isProcessing = false
                         getgenv().WebhookProcessing = false
@@ -9729,7 +9737,6 @@ do
             if #getgenv()._lastWebhookHashList > 5 then
                 table.remove(getgenv()._lastWebhookHashList, 1)
             end
-            print("[Webhook] Sending webhook to Discord...")
             
             local sendSuccess = false
             local sendAttempts = 0
@@ -9762,7 +9769,6 @@ do
                     end
                     
                     if sendAttempts < maxAttempts then
-                        print("[Webhook] Retrying in 1 second...")
                         task.wait(1)
                     end
                 end
@@ -9777,11 +9783,9 @@ do
                 })
             end
             
-            print("[Webhook] Cleaning up and releasing lock...")
             task.wait(0.5)
             isProcessing = false
             getgenv().WebhookProcessing = false
-            print("[Webhook] Process complete, ready for next action")
         end)
         
         if not success then
@@ -9789,15 +9793,12 @@ do
             task.wait(0.5)
             isProcessing = false
             getgenv().WebhookProcessing = false
-            print("[Webhook] Error recovery complete, flags cleared")
         end
     end
     
     LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
         if child.Name == "EndGameUI" and getgenv().WebhookEnabled then
-            print("[Webhook] EndGameUI detected, setting processing flag...")
             getgenv().WebhookProcessing = true
-            print("[Webhook] Waiting 2s before sending...")
             task.wait(2)
             sendWebhook()
         end
@@ -9805,7 +9806,6 @@ do
     
     LocalPlayer.PlayerGui.ChildRemoved:Connect(function(child)
         if child.Name == "EndGameUI" then
-            print("[Webhook] EndGameUI removed, clearing processing flag...")
             task.wait(1)
             if getgenv().WebhookProcessing then
                 warn("[Webhook] Force clearing WebhookProcessing flag due to UI removal")
@@ -9819,7 +9819,6 @@ do
         if getgenv().WebhookEnabled then
             local endGameUI = LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
             if endGameUI and endGameUI.Enabled and not getgenv().WebhookProcessing then
-                print("[Webhook] EndGameUI already present on load, sending webhook...")
                 getgenv().WebhookProcessing = true
                 task.wait(1)
                 sendWebhook()
@@ -9863,7 +9862,7 @@ end
 
 if isInLobby then
     task.spawn(function()
-        task.wait(2)
+        task.wait(1)
         
         local BingoEvents = RS:WaitForChild("Events", 10)
         if not BingoEvents then 
@@ -9885,9 +9884,7 @@ if isInLobby then
             warn("[Auto Bingo] Missing events - UseStamp: " .. tostring(UseStampEvent ~= nil) .. ", ClaimReward: " .. tostring(ClaimRewardEvent ~= nil) .. ", CompleteBoard: " .. tostring(CompleteBoardEvent ~= nil))
             return
         end
-        
-        print("[Auto Bingo] Bingo automation loaded!")
-        
+                
         while true do
             task.wait(1)
             
@@ -9910,32 +9907,26 @@ if isInLobby then
                     return
                 end
                 
-                print("[Auto Bingo] Starting with " .. bingoStamps .. " stamps")
                 
                 if UseStampEvent then
-                    print("[Auto Bingo] Using 25 stamps...")
                     for i = 1, 25 do
                         pcall(function()
                             UseStampEvent:FireServer()
                         end)
-                        task.wait(0.05)
                     end
-                    task.wait(0.2)
                 end
                 
                 if ClaimRewardEvent then
-                    print("[Auto Bingo] Claiming 25 rewards...")
-                    for i = 1, 25 do
+                    for i = 1, 11 do
                         pcall(function()
                             ClaimRewardEvent:InvokeServer(i)
                         end)
-                        task.wait(0.05)
                     end
-                    task.wait(0.2)
                 end
                 
+                task.wait(1)
+                
                 if CompleteBoardEvent then
-                    print("[Auto Bingo] Completing board...")
                     local boardSuccess, boardResult = pcall(function()
                         return CompleteBoardEvent:InvokeServer()
                     end)
@@ -9944,11 +9935,7 @@ if isInLobby then
                     else
                         warn("[Auto Bingo] ❌ Failed to complete board: " .. tostring(boardResult))
                     end
-                    task.wait(0.1)
                 end
-                
-                print("[Auto Bingo] Cycle complete, waiting 1 second...")
-                task.wait(1)
             end)
             
             if not success then
@@ -9988,7 +9975,6 @@ if isInLobby then
                 if textButton then
                     clickButton(textButton)
                     success = true
-                    print("[Prompt] Clicked Frame.TextButton")
                 end
                 
                 local folder = frame:FindFirstChild("Folder")
@@ -9997,7 +9983,6 @@ if isInLobby then
                     if folderButton then
                         clickButton(folderButton)
                         success = true
-                        print("[Prompt] Clicked Frame.Folder.TextButton")
                     end
                 end
             end)
@@ -10556,7 +10541,6 @@ do
                 getgenv().SlowerCardPicked = {}
             end
             table.insert(getgenv().SlowerCardPicked, bestCard.name)
-            print("[Slower Card] 📝 " .. bestCard.name .. " (Total: " .. #getgenv().SlowerCardPicked .. ")")
             
             return true
         end)
@@ -10856,9 +10840,7 @@ if not isInLobby then
         local DEBOUNCE_TIME = 3
         local lastEndGameUIState = false
         local newGameStartDetected = false
-        
-        print("[Seamless Fix] Initializing system...")
-        print("[Seamless Fix] Waiting for Settings GUI...")
+
         local maxWait = 0
         repeat 
             task.wait(0.5) 
@@ -10870,7 +10852,6 @@ if not isInLobby then
             return
         end
         
-        print("[Seamless Fix] Settings GUI found!")
         
         local function getSeamlessValue()
             local ok, result = pcall(function()
@@ -10917,7 +10898,6 @@ if not isInLobby then
             end
         end
         
-        print("[Seamless Fix] Checking initial seamless state...")
         enableSeamlessIfNeeded()
         
         local seamlessToggleConnection
@@ -10944,7 +10924,6 @@ if not isInLobby then
                     local currentEndGameUIState = endGameUI and endGameUI.Enabled or false
                     
                     if lastEndGameUIState and not currentEndGameUIState then
-                        print("[Seamless Fix] 🎮 EndGameUI removed - New game started!")
                         newGameStartDetected = true
                         hasRun = false
                         
@@ -10964,12 +10943,10 @@ if not isInLobby then
                 if child.Name == "EndGameUI" then
                     local currentTime = tick()
                     if currentTime - lastEndgameTime < DEBOUNCE_TIME then
-                        print("[Seamless Fix] Debounced duplicate EndGameUI trigger")
                         return
                     end
                     
                     if hasRun then
-                        print("[Seamless Fix] EndGameUI detected but hasRun is true, resetting...")
                         hasRun = false
                     end
                     
@@ -10981,7 +10958,6 @@ if not isInLobby then
                     
                     if endgameCount >= maxRounds and getgenv().SeamlessFixEnabled then
                         maxRoundsReached = true
-                        print("[Seamless Fix] 🔄 Max rounds reached, disabling seamless retry to restart match...")
                         task.wait(0.5)
                         if getSeamlessValue() then
                             setSeamlessRetry()
@@ -10992,14 +10968,12 @@ if not isInLobby then
                         end
                         
                         task.spawn(function()
-                            print("[Seamless Fix] Waiting for EndGameUI to close...")
                             local maxWait = 0
                             while LocalPlayer.PlayerGui:FindFirstChild("EndGameUI") and maxWait < 30 do
                                 task.wait(0.5)
                                 maxWait = maxWait + 0.5
                             end
                             
-                            print("[Seamless Fix] EndGameUI closed, attempting restart...")
                             task.wait(2)
                             
                             local success, err = pcall(function()
@@ -11007,7 +10981,6 @@ if not isInLobby then
                                 local restartEvent = remotes and remotes:FindFirstChild("RestartMatch")
                                 if restartEvent then
                                     restartEvent:FireServer()
-                                    print("[Seamless Fix] ✅ Restart signal sent")
                                     task.wait(3)
                                     endgameCount = 0
                                     maxRoundsReached = false
@@ -11033,7 +11006,6 @@ if not isInLobby then
         
         LocalPlayer.PlayerGui.ChildRemoved:Connect(function(child) 
             if child.Name == "EndGameUI" then 
-                print("[Seamless Fix] EndGameUI removed event triggered")
                 task.wait(3) 
                 hasRun = false 
             end 
@@ -11041,7 +11013,6 @@ if not isInLobby then
         
         LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
             if child.Name == "TeleportUI" and maxRoundsReached then
-                print("[Seamless Fix] 🚀 Teleport detected after max rounds, resetting counter...")
                 endgameCount = 0
                 maxRoundsReached = false
                 task.wait(2)
