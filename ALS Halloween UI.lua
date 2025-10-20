@@ -1389,9 +1389,7 @@ end
 
 local function getAllAbilities(unitName)
     if not unitName or unitName == "" then return {} end
-    local towerNameToCheck = unitName
-    if unitName == "TuskSummon_Act4" then towerNameToCheck = "JohnnyGodly" end
-    local towerInfo = getTowerInfo(towerNameToCheck)
+    local towerInfo = getTowerInfo(unitName)
     if not towerInfo then return {} end
     local abilities = {}
     local seenAbilities = {}
@@ -4726,6 +4724,173 @@ task.spawn(function()
             fallbackSection:SubLabel({ Text = "3. Checking console for errors (F9)" })
         end)
     end
+    
+    task.spawn(function()
+        task.wait(5)
+        
+        if not getgenv()._DynamicSummonSections then
+            getgenv()._DynamicSummonSections = {}
+        end
+        
+        local SUMMON_BLACKLIST = {
+            "NarutoBaryonClone",
+            "JinMoriGodlyClone",
+            "Skull_Knight_EvoEZA"
+        }
+        
+        local function isSummonBlacklisted(unitName)
+            for _, blacklisted in ipairs(SUMMON_BLACKLIST) do
+                if unitName == blacklisted then
+                    return true
+                end
+            end
+            return false
+        end
+        
+        local function isSummonUnit(unitName)
+            if isSummonBlacklisted(unitName) then
+                return false
+            end
+            
+            local clientData = getClientData()
+            if not clientData or not clientData.Slots then return false end
+            
+            for _, slotData in pairs(clientData.Slots) do
+                if slotData and slotData.Value == unitName then
+                    return false
+                end
+            end
+            
+            return true
+        end
+        
+        local trackedSummons = {}
+        
+        
+        while true do
+            task.wait(2)
+            
+            if not Tabs or not Tabs.Abilities then
+                task.wait(5)
+                continue
+            end
+            
+            local towers = workspace:FindFirstChild("Towers")
+            if not towers then
+                task.wait(2)
+                continue
+            end
+            
+            local currentSummons = {}
+            
+            for _, tower in pairs(towers:GetChildren()) do
+                local owner = tower:FindFirstChild("Owner")
+                if owner and owner.Value == LocalPlayer then
+                    local unitName = tower.Name
+                    
+                    if isSummonUnit(unitName) and not isSummonBlacklisted(unitName) then
+                        currentSummons[unitName] = true
+                        
+                        if not trackedSummons[unitName] then
+                            
+                            local abilities = getAllAbilities(unitName)
+                            
+                            if next(abilities) then
+                                local displayName = getUnitDisplayName(unitName)
+                                
+                                local summonSection = Tabs.Abilities:Section({ Side = "Right" })
+                                table.insert(getgenv()._AbilityUIElements["Right"], summonSection)
+                                
+                                summonSection:Header({ Text = "🔮 " .. displayName .. " (Summon)" })
+                                summonSection:SubLabel({ Text = "Auto-detected summon unit" })
+                                summonSection:Divider()
+                                
+                                if not getgenv().UnitAbilities then getgenv().UnitAbilities = {} end
+                                if not getgenv().UnitAbilities[unitName] then getgenv().UnitAbilities[unitName] = {} end
+                                if not getgenv().Config.abilities then getgenv().Config.abilities = {} end
+                                if not getgenv().Config.abilities[unitName] then getgenv().Config.abilities[unitName] = {} end
+                                
+                                local sortedAbilities = {}
+                                for abilityName, data in pairs(abilities) do
+                                    table.insert(sortedAbilities, { name = abilityName, data = data })
+                                end
+                                table.sort(sortedAbilities, function(a, b)
+                                    local aLevel = (a.data and a.data.requiredLevel) or 0
+                                    local bLevel = (b.data and b.data.requiredLevel) or 0
+                                    return aLevel < bLevel
+                                end)
+                                
+                                for _, ab in ipairs(sortedAbilities) do
+                                    local abilityName = ab.name
+                                    local abilityData = ab.data
+                                    
+                                    if not getgenv().UnitAbilities[unitName][abilityName] then
+                                        local saved = getgenv().Config.abilities and 
+                                                     getgenv().Config.abilities[unitName] and 
+                                                     getgenv().Config.abilities[unitName][abilityName]
+                                        
+                                        getgenv().UnitAbilities[unitName][abilityName] = {
+                                            enabled = (saved and saved.enabled) or false,
+                                            onlyOnBoss = (saved and saved.onlyOnBoss) or false,
+                                            specificWave = (saved and saved.specificWave) or nil,
+                                            requireBossInRange = (saved and saved.requireBossInRange) or false,
+                                            useOnWave = (saved and saved.useOnWave) or false
+                                        }
+                                    end
+                                    
+                                    local cfg = getgenv().UnitAbilities[unitName][abilityName]
+                                    
+                                    local cdText = abilityData.cooldown and ("CD: " .. abilityData.cooldown .. "s") or ""
+                                    local globalText = abilityData.isGlobal and " (Global)" or ""
+                                    
+                                    createToggle(
+                                        summonSection,
+                                        "⚡ " .. abilityName .. " (" .. cdText .. ")" .. globalText,
+                                        unitName .. "_" .. abilityName .. "_Toggle",
+                                        function(v)
+                                            cfg.enabled = v
+                                            getgenv().Config.abilities[unitName] = getgenv().Config.abilities[unitName] or {}
+                                            getgenv().Config.abilities[unitName][abilityName] = getgenv().Config.abilities[unitName][abilityName] or {}
+                                            getgenv().Config.abilities[unitName][abilityName].enabled = v
+                                            getgenv().SaveConfig(getgenv().Config)
+                                        end,
+                                        cfg.enabled
+                                    )
+                                end
+                                
+                                getgenv()._DynamicSummonSections[unitName] = summonSection
+                                trackedSummons[unitName] = true
+                                
+                                Window:Notify({
+                                    Title = "Summon Detected",
+                                    Description = displayName .. " abilities added!",
+                                    Lifetime = 3
+                                })
+                            end
+                        end
+                    end
+                end
+            end
+            
+            for unitName, _ in pairs(trackedSummons) do
+                if not currentSummons[unitName] then
+                    
+                    if getgenv()._DynamicSummonSections[unitName] then
+                        pcall(function()
+                            getgenv()._DynamicSummonSections[unitName]:Destroy()
+                        end)
+                        getgenv()._DynamicSummonSections[unitName] = nil
+                    end
+                    
+                    if getgenv().UnitAbilities[unitName] then
+                        getgenv().UnitAbilities[unitName] = nil
+                    end
+                    
+                    trackedSummons[unitName] = nil
+                end
+            end
+        end
+    end)
 end)
 
 
@@ -7969,10 +8134,15 @@ do
             
             
             local currentTime = tick()
-            local cooldown = 200
+            local baseCooldown = 200
+            local timeScale = getCurrentTimeScale()
+            local effectiveCooldown = baseCooldown / timeScale
             local timeSinceLastUse = currentTime - (getgenv().SkeletonKnightLastUse or 0)
             
-            if timeSinceLastUse < cooldown then
+            print("[Auto Skeleton Knight] Cooldown: " .. math.floor(timeSinceLastUse) .. "s / " .. math.floor(effectiveCooldown) .. "s (TimeScale: " .. timeScale .. "x)")
+            
+            if timeSinceLastUse < effectiveCooldown then
+                print("[Auto Skeleton Knight] ⏳ On cooldown (" .. math.floor(effectiveCooldown - timeSinceLastUse) .. "s remaining)")
                 task.wait(1)
                 continue
             end
@@ -9376,14 +9546,7 @@ do
                 return 
             end
             
-            if getgenv()._webhookLock and (currentTime - getgenv()._webhookLock) < 20 then 
-                print("[Webhook] Lock active, skipping (Secret unit protection)")
-                getgenv().WebhookProcessing = false
-                return 
-            end
-            
             print("[Webhook] Starting webhook send process...")
-            getgenv()._webhookLock = currentTime
             lastWebhookTime = currentTime
             isProcessing = true
             if not getgenv().WebhookProcessing then
@@ -9653,28 +9816,10 @@ do
     
     LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
         if child.Name == "EndGameUI" and getgenv().WebhookEnabled then
-            if getgenv().WebhookProcessing then
-                print("[Webhook] Already processing, ignoring duplicate EndGameUI trigger")
-                return
-            end
-            
-            local currentTime = tick()
-            if getgenv()._lastWebhookTrigger and (currentTime - getgenv()._lastWebhookTrigger) < 15 then
-                print("[Webhook] Triggered too soon after last webhook (" .. (currentTime - getgenv()._lastWebhookTrigger) .. "s), ignoring")
-                return
-            end
-            
-            if getgenv()._webhookLock and (currentTime - getgenv()._webhookLock) < 15 then
-                print("[Webhook] Webhook lock active, ignoring EndGameUI")
-                return
-            end
-            
-            getgenv()._lastWebhookTrigger = currentTime
-            getgenv()._webhookLock = currentTime
             print("[Webhook] EndGameUI detected, setting processing flag...")
             getgenv().WebhookProcessing = true
-            print("[Webhook] Waiting 3s before sending (secret unit protection)...")
-            task.wait(3)
+            print("[Webhook] Waiting 2s before sending...")
+            task.wait(2)
             sendWebhook()
         end
     end)
@@ -9695,19 +9840,6 @@ do
         if getgenv().WebhookEnabled then
             local endGameUI = LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
             if endGameUI and endGameUI.Enabled and not getgenv().WebhookProcessing then
-                local currentTime = tick()
-                if getgenv()._lastWebhookTrigger and (currentTime - getgenv()._lastWebhookTrigger) < 15 then
-                    print("[Webhook] Skipping initial check - too soon after last webhook")
-                    return
-                end
-                
-                if getgenv()._webhookLock and (currentTime - getgenv()._webhookLock) < 15 then
-                    print("[Webhook] Webhook lock active, skipping initial check")
-                    return
-                end
-                
-                getgenv()._lastWebhookTrigger = currentTime
-                getgenv()._webhookLock = currentTime
                 print("[Webhook] EndGameUI already present on load, sending webhook...")
                 getgenv().WebhookProcessing = true
                 task.wait(1)
