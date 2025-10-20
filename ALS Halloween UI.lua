@@ -7934,14 +7934,14 @@ do
             end
             
             local success, err = pcall(function()
-                local AbilityEvent = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("AbilityEvent")
+                local AbilityEvent = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("Ability")
                 if AbilityEvent then
                     AbilityEvent:InvokeServer(skeletonKnight, "Savior")
                     print("[Auto Skeleton Knight] Used Savior ability")
                     
                     task.wait(0.5)
                     
-                    local SelectUnitEvent = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("AbilityRemotes") and RS.Remotes.AbilityRemotes:FindFirstChild("SelectUnitInWorkspaceEvent")
+                    local SelectUnitEvent = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("AbilityRemotes") and RS.Remotes.AbilityRemotes:FindFirstChild("SelectUnitInWorkspace")
                     if SelectUnitEvent then
                         SelectUnitEvent:FireServer(targetTower)
                         print("[Auto Skeleton Knight] Selected target: " .. getgenv().SkeletonKnightTargetUnit)
