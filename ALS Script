@@ -1842,10 +1842,6 @@ local function updateGameState()
                 getgenv().FinalExpChestRewards = nil
             end
             
-            if getgenv()._WebhookInitialData then
-                getgenv()._WebhookInitialData = nil
-            end
-            
             if getgenv().MacroActionsV2 and #getgenv().MacroActionsV2 > 500 then
                 print("[Memory] MacroActionsV2 has " .. #getgenv().MacroActionsV2 .. " actions, clearing old ones")
                 local temp = {}
@@ -4994,13 +4990,45 @@ local function buildAutoAbilityUI()
                     )
                     
                     task.spawn(function()
-                        while task.wait(5) do
+                        local lastTargets = {}
+                        for _, v in ipairs(targetsAlucard) do
+                            lastTargets[v] = true
+                        end
+                        
+                        while task.wait(15) do
                             if not alucardDropdown then break end
                             pcall(function()
                                 local newTargets = getAvailableTargetsAlucard()
                                 if #newTargets > 0 and newTargets[1] ~= "Place a unit first" then
-                                    alucardDropdown:ClearOptions()
-                                    alucardDropdown:InsertOptions(newTargets)
+                                    local changed = false
+                                    local newTargetsSet = {}
+                                    for _, v in ipairs(newTargets) do
+                                        newTargetsSet[v] = true
+                                        if not lastTargets[v] then
+                                            changed = true
+                                        end
+                                    end
+                                    
+                                    for k in pairs(lastTargets) do
+                                        if not newTargetsSet[k] then
+                                            changed = true
+                                        end
+                                    end
+                                    
+                                    if changed then
+                                        local currentSelection = getgenv().AlucardHypnosisTargetUnit
+                                        alucardDropdown:ClearOptions()
+                                        alucardDropdown:InsertOptions(newTargets)
+                                        
+                                        if newTargetsSet[currentSelection] then
+                                            alucardDropdown:UpdateSelection(currentSelection)
+                                        else
+                                            getgenv().AlucardHypnosisTargetUnit = newTargets[1]
+                                            alucardDropdown:UpdateSelection(newTargets[1])
+                                        end
+                                        
+                                        lastTargets = newTargetsSet
+                                    end
                                 end
                             end)
                         end
@@ -10541,23 +10569,31 @@ end
 
 do
     if not getgenv()._WebhookInitialData then
-        getgenv()._WebhookInitialData = {}
+        getgenv()._WebhookInitialData = {
+            Jewels = 0,
+            Gold = 0,
+            Emeralds = 0,
+            Rerolls = 0,
+            CandyBasket = 0,
+            HeroTokens = 0,
+            EXP = 0,
+            ItemData = {},
+            ExperienceItemsData = {},
+            UnitCounts = {}
+        }
         task.spawn(function()
             task.wait(2)
             local clientData = getClientData()
             if clientData then
-                getgenv()._WebhookInitialData = {
-                    Jewels = clientData.Jewels or 0,
-                    Gold = clientData.Gold or 0,
-                    Emeralds = clientData.Emeralds or 0,
-                    Rerolls = clientData.Rerolls or 0,
-                    CandyBasket = clientData.CandyBasket or 0,
-                    HeroTokens = clientData.HeroTokens or 0,
-                    EXP = clientData.EXP or 0,
-                    ItemData = {},
-                    ExperienceItemsData = {}
-                }
+                getgenv()._WebhookInitialData.Jewels = clientData.Jewels or 0
+                getgenv()._WebhookInitialData.Gold = clientData.Gold or 0
+                getgenv()._WebhookInitialData.Emeralds = clientData.Emeralds or 0
+                getgenv()._WebhookInitialData.Rerolls = clientData.Rerolls or 0
+                getgenv()._WebhookInitialData.CandyBasket = clientData.CandyBasket or 0
+                getgenv()._WebhookInitialData.HeroTokens = clientData.HeroTokens or 0
+                getgenv()._WebhookInitialData.EXP = clientData.EXP or 0
                 
+                getgenv()._WebhookInitialData.ItemData = {}
                 if clientData.ItemData then
                     for itemName, itemInfo in pairs(clientData.ItemData) do
                         if itemInfo.Amount then
@@ -10566,6 +10602,7 @@ do
                     end
                 end
                 
+                getgenv()._WebhookInitialData.ExperienceItemsData = {}
                 if clientData.ExperienceItemsData then
                     for itemName, itemInfo in pairs(clientData.ExperienceItemsData) do
                         if itemInfo.Amount then
@@ -10684,7 +10721,7 @@ do
                     
                     if r.type == "Unit" then
                         local unitFileName = getUnitFileName(itemName)
-                        initialValue = getgenv()._WebhookInitialData.UnitCounts[unitFileName] or 0
+                        initialValue = (getgenv()._WebhookInitialData and getgenv()._WebhookInitialData.UnitCounts and getgenv()._WebhookInitialData.UnitCounts[unitFileName]) or 0
                         
                         currentValue = 0
                         if clientData.UnitData then
@@ -10699,27 +10736,27 @@ do
                         rewardsText = rewardsText .. "+" .. formatNumber(r.amount) .. " " .. itemName .. " [ Total: " .. formatNumber(total) .. " ]\n"
                     elseif clientData[itemKey] and type(clientData[itemKey]) == "number" then
                         currentValue = clientData[itemKey]
-                        initialValue = getgenv()._WebhookInitialData[itemKey] or 0
+                        initialValue = (getgenv()._WebhookInitialData and getgenv()._WebhookInitialData[itemKey]) or 0
                         local total = currentValue 
                         rewardsText = rewardsText .. "+" .. formatNumber(r.amount) .. " " .. itemName .. " [ Total: " .. formatNumber(total) .. " ]\n"
                     elseif clientData.ItemData and clientData.ItemData[itemKey] then
                         currentValue = clientData.ItemData[itemKey].Amount or 0
-                        initialValue = getgenv()._WebhookInitialData.ItemData[itemKey] or 0
+                        initialValue = (getgenv()._WebhookInitialData and getgenv()._WebhookInitialData.ItemData and getgenv()._WebhookInitialData.ItemData[itemKey]) or 0
                         local total = currentValue 
                         rewardsText = rewardsText .. "+" .. formatNumber(r.amount) .. " " .. itemName .. " [ Total: " .. formatNumber(total) .. " ]\n"
                     elseif clientData.ExperienceItemsData and clientData.ExperienceItemsData[itemKey] then
                         currentValue = clientData.ExperienceItemsData[itemKey].Amount or 0
-                        initialValue = getgenv()._WebhookInitialData.ExperienceItemsData[itemKey] or 0
+                        initialValue = (getgenv()._WebhookInitialData and getgenv()._WebhookInitialData.ExperienceItemsData and getgenv()._WebhookInitialData.ExperienceItemsData[itemKey]) or 0
                         local total = currentValue 
                         rewardsText = rewardsText .. "+" .. formatNumber(r.amount) .. " " .. itemName .. " [ Total: " .. formatNumber(total) .. " ]\n"
                     elseif itemName:find("Candy Basket") then
                         currentValue = clientData.CandyBasket or 0
-                        initialValue = getgenv()._WebhookInitialData.CandyBasket or 0
+                        initialValue = (getgenv()._WebhookInitialData and getgenv()._WebhookInitialData.CandyBasket) or 0
                         local total = currentValue 
                         rewardsText = rewardsText .. "+" .. formatNumber(r.amount) .. " " .. itemName .. " [ Total: " .. formatNumber(total) .. " ]\n"
                     elseif itemName:find("Bingo Stamp") and clientData.ItemData and clientData.ItemData.HallowenBingoStamp then
                         currentValue = clientData.ItemData.HallowenBingoStamp.Amount or 0
-                        initialValue = getgenv()._WebhookInitialData.ItemData.HallowenBingoStamp or 0
+                        initialValue = (getgenv()._WebhookInitialData and getgenv()._WebhookInitialData.ItemData and getgenv()._WebhookInitialData.ItemData.HallowenBingoStamp) or 0
                         local total = currentValue 
                         rewardsText = rewardsText .. "+" .. formatNumber(r.amount) .. " " .. itemName .. " [ Total: " .. formatNumber(total) .. " ]\n"
                     else
@@ -12063,20 +12100,20 @@ if not isInLobby then
         local newGameStartDetected = false
 
         local maxWait = 0
+        local settingsFound = false
         repeat 
             task.wait(0.5) 
             maxWait = maxWait + 0.5 
             local settings = LocalPlayer.PlayerGui:FindFirstChild("Settings")
             if settings and settings:FindFirstChild("SeamlessRetry") then
+                settingsFound = true
                 break
             end
-        until maxWait > 30
+        until maxWait > 10
         
-        local settings = LocalPlayer.PlayerGui:FindFirstChild("Settings")
-        if not settings or not settings:FindFirstChild("SeamlessRetry") then
-            warn("[Seamless Fix] Settings.SeamlessRetry not found after 30s, seamless fix may not work")
-            warn("[Seamless Fix] Expected path: PlayerGui.Settings.SeamlessRetry")
-            return
+        if not settingsFound then
+            print("[Seamless Fix] Settings.SeamlessRetry not found after 10s, using fallback detection")
+            print("[Seamless Fix] Seamless retry will still work based on game state")
         end
         
         
