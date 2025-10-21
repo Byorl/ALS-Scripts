@@ -1750,11 +1750,16 @@ getgenv().MacroGameState = {
     matchStartTime = 0,
     lastGameEndedState = false,
     lastEndGameUIState = false,
-    seamlessTransition = false
+    seamlessTransition = false,
+    towerCount = 0,
+    lastTowerCount = 0
 }
 
 local function updateGameState()
     pcall(function()
+        local restartDetected = false
+        local restartMethod = ""
+        
         local wave = RS:FindFirstChild("Wave")
         if wave and wave.Value then
             local newWave = wave.Value
@@ -1762,15 +1767,33 @@ local function updateGameState()
                 getgenv().MacroGameState.lastWaveChange = tick()
                 
                 if getgenv().MacroGameState.currentWave > 10 and newWave <= 5 then
-                    print("[Game State] New game detected via wave reset (" .. getgenv().MacroGameState.currentWave .. " -> " .. newWave .. ")")
-                    getgenv().MacroGameState.seamlessTransition = true
-                    getgenv().MacroGameState.gameEnded = false
-                    getgenv().MacroGameState.matchStartTime = tick()
+                    restartDetected = true
+                    restartMethod = "Wave Reset"
                 end
                 
                 getgenv().MacroGameState.currentWave = newWave
             end
         end
+        
+        local towerCount = 0
+        if workspace:FindFirstChild("Towers") then
+            for _, tower in pairs(workspace.Towers:GetChildren()) do
+                local owner = tower:FindFirstChild("Owner")
+                if owner and owner.Value == LocalPlayer then
+                    towerCount = towerCount + 1
+                end
+            end
+        end
+        
+        if getgenv().MacroGameState.lastTowerCount > 0 and towerCount == 0 and not getgenv().MacroGameState.hasStartButton then
+            if not restartDetected then
+                restartDetected = true
+                restartMethod = "Tower Reset"
+            end
+        end
+        
+        getgenv().MacroGameState.lastTowerCount = towerCount
+        getgenv().MacroGameState.towerCount = towerCount
         
         local hasStart = false
         pcall(function()
@@ -1798,8 +1821,10 @@ local function updateGameState()
         local currentEndGameUIState = endGameUI and endGameUI.Enabled or false
         
         if getgenv().MacroGameState.lastEndGameUIState and not currentEndGameUIState then
-            print("[Game State] EndGameUI removed - seamless transition or new game starting")
-            getgenv().MacroGameState.seamlessTransition = true
+            if not restartDetected then
+                restartDetected = true
+                restartMethod = "EndGameUI Removed"
+            end
             getgenv().MacroGameState.gameEnded = false
             getgenv().MacroGameState.hasEndGameUI = false
         end
@@ -1811,7 +1836,6 @@ local function updateGameState()
         local currentGameEnded = gameEndedValue and gameEndedValue.Value or false
         
         if currentGameEnded and not getgenv().MacroGameState.lastGameEndedState then
-            print("[Game State] Game ended detected - cleaning up memory")
             getgenv().MacroGameState.gameEnded = true
             getgenv().MacroGameState.seamlessTransition = false
             
@@ -1859,13 +1883,19 @@ local function updateGameState()
                 end
             end)
             
-            print("[Memory] Cleanup complete")
         end
         
         if not currentGameEnded and getgenv().MacroGameState.lastGameEndedState then
-            print("[Game State] New game started (GameEnded: true -> false)")
+            if not restartDetected then
+                restartDetected = true
+                restartMethod = "GameEnded Reset"
+            end
+        end
+        
+        if restartDetected then
             getgenv().MacroGameState.seamlessTransition = true
             getgenv().MacroGameState.matchStartTime = tick()
+            getgenv().MacroGameState.gameEnded = false
         end
         
         getgenv().MacroGameState.lastGameEndedState = currentGameEnded
