@@ -720,8 +720,7 @@ end
 
 getgenv().CleanupBeforeTeleport = cleanupBeforeTeleport
 
-
-MacLib:SetFolder("ALSHalloweenEvent")
+MacLib:SetFolder(CONFIG_FOLDER)
 
 
 
@@ -1163,9 +1162,11 @@ local function convertOldMacroFormat(oldData)
     end
     table.sort(sortedKeys)
     
+    print("[Macro Converter] Converting " .. #sortedKeys .. " steps from Buang format")
+    
     for _, key in ipairs(sortedKeys) do
         local step = oldData[tostring(key)]
-        if step and step.type then
+        if step and step.type and step.unit then
             local newStep = {
                 Wave = 1,
                 Time = 0,
@@ -1179,13 +1180,22 @@ local function convertOldMacroFormat(oldData)
                 local cframeArray = {}
                 if step.cframe then
                     for num in string.gmatch(step.cframe, "[^,%s]+") do
-                        table.insert(cframeArray, tonumber(num) or 0)
+                        local value = tonumber(num)
+                        if value then
+                            table.insert(cframeArray, value)
+                        end
                     end
                 end
                 
-                newStep.Args = {step.unit, cframeArray}
-                newStep.TowerName = step.unit
-                newStep.Cost = tonumber(step.money) or 0
+                if #cframeArray >= 12 then
+                    newStep.Args = {step.unit, cframeArray}
+                    newStep.TowerName = step.unit
+                    newStep.Cost = tonumber(step.money) or 0
+                    table.insert(newData, newStep)
+                    print("[Macro Converter] ✓ Converted SpawnUnit: " .. step.unit)
+                else
+                    warn("[Macro Converter] ✗ Invalid CFrame for SpawnUnit: " .. step.unit)
+                end
                 
             elseif step.type == "UpgradeUnit" then
                 newStep.RemoteName = "Upgrade"
@@ -1195,6 +1205,23 @@ local function convertOldMacroFormat(oldData)
                 newStep.TowerName = step.unit
                 newStep.Cost = tonumber(step.money) or 0
                 
+                local cframeArray = {}
+                if step.cframe then
+                    for num in string.gmatch(step.cframe, "[^,%s]+") do
+                        local value = tonumber(num)
+                        if value then
+                            table.insert(cframeArray, value)
+                        end
+                    end
+                end
+                
+                if #cframeArray >= 12 then
+                    newStep.CFrame = cframeArray
+                end
+                
+                table.insert(newData, newStep)
+                print("[Macro Converter] ✓ Converted UpgradeUnit: " .. step.unit)
+                
             elseif step.type == "SellUnit" then
                 newStep.RemoteName = "Sell"
                 newStep.ActionType = "Sell"
@@ -1202,12 +1229,30 @@ local function convertOldMacroFormat(oldData)
                 newStep.IsInvoke = true
                 newStep.TowerName = step.unit
                 newStep.Cost = 0
+                
+                local cframeArray = {}
+                if step.cframe then
+                    for num in string.gmatch(step.cframe, "[^,%s]+") do
+                        local value = tonumber(num)
+                        if value then
+                            table.insert(cframeArray, value)
+                        end
+                    end
+                end
+                
+                if #cframeArray >= 12 then
+                    newStep.CFrame = cframeArray
+                end
+                
+                table.insert(newData, newStep)
+                print("[Macro Converter] ✓ Converted SellUnit: " .. step.unit)
+            else
+                warn("[Macro Converter] ✗ Unknown step type: " .. tostring(step.type))
             end
-            
-            table.insert(newData, newStep)
         end
     end
     
+    print("[Macro Converter] ✅ Conversion complete: " .. #newData .. " steps")
     return newData
 end
 
@@ -2427,12 +2472,42 @@ local function executeAction(action, retryCount)
             return true, "All " .. action.TowerName .. " already max level"
         end
         
-        table.sort(towers, function(a, b)
-            return a.level < b.level
-        end)
+        local tower = nil
         
-        local towerData = towers[1]
-        local tower = towerData.tower
+        if action.CFrame and #action.CFrame >= 12 and #allTowers > 1 then
+            local targetCFrame = CFrame.new(
+                action.CFrame[1], action.CFrame[2], action.CFrame[3],
+                action.CFrame[4], action.CFrame[5], action.CFrame[6],
+                action.CFrame[7], action.CFrame[8], action.CFrame[9],
+                action.CFrame[10], action.CFrame[11], action.CFrame[12]
+            )
+            
+            local closestTower = nil
+            local closestDistance = math.huge
+            
+            for _, towerData in ipairs(towers) do
+                local t = towerData.tower
+                local hrp = t:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    local distance = (hrp.CFrame.Position - targetCFrame.Position).Magnitude
+                    if distance < closestDistance then
+                        closestDistance = distance
+                        closestTower = towerData
+                    end
+                end
+            end
+            
+            if closestTower and closestDistance < 5 then
+                tower = closestTower.tower
+            end
+        end
+        
+        if not tower then
+            table.sort(towers, function(a, b)
+                return a.level < b.level
+            end)
+            tower = towers[1].tower
+        end
         
         local cash = tonumber(getgenv().MacroCurrentCash) or 0
         local cost = tonumber(action.Cost) or 0
@@ -2471,15 +2546,47 @@ local function executeAction(action, retryCount)
         
     elseif action.ActionType == "Sell" then
         local tower = nil
+        local allTowers = {}
+        
         for _, t in pairs(workspace.Towers:GetChildren()) do
             if t.Name == action.TowerName and t:FindFirstChild("Owner") and t.Owner.Value == LocalPlayer then
-                tower = t
-                break
+                table.insert(allTowers, t)
+            end
+        end
+        
+        if #allTowers == 0 then
+            return false, "Tower not found for sell: " .. action.TowerName
+        end
+        
+        if action.CFrame and #action.CFrame >= 12 and #allTowers > 1 then
+            local targetCFrame = CFrame.new(
+                action.CFrame[1], action.CFrame[2], action.CFrame[3],
+                action.CFrame[4], action.CFrame[5], action.CFrame[6],
+                action.CFrame[7], action.CFrame[8], action.CFrame[9],
+                action.CFrame[10], action.CFrame[11], action.CFrame[12]
+            )
+            
+            local closestTower = nil
+            local closestDistance = math.huge
+            
+            for _, t in ipairs(allTowers) do
+                local hrp = t:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    local distance = (hrp.CFrame.Position - targetCFrame.Position).Magnitude
+                    if distance < closestDistance then
+                        closestDistance = distance
+                        closestTower = t
+                    end
+                end
+            end
+            
+            if closestTower and closestDistance < 5 then
+                tower = closestTower
             end
         end
         
         if not tower then
-            return false, "Tower not found for sell: " .. action.TowerName
+            tower = allTowers[1]
         end
         
         if not remote then
@@ -6179,7 +6286,7 @@ Sections.MacroLeft:Button({
             return
         end
         
-        local macroPath = "ALSHalloweenEvent/macros/" .. selectedMacro .. ".json"
+        local macroPath = CONFIG_FOLDER .. "/macros/" .. selectedMacro .. ".json"
         
         local success = pcall(function()
             if isfile(macroPath) then
