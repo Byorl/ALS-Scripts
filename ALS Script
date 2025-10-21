@@ -7668,10 +7668,11 @@ end
 
 do
 local state = getgenv()._AbilityState
-local helpers2a = getgenv()._AbilityHelpers2a
+local h2a = getgenv()._AbilityHelpers2a
+local h1 = getgenv()._AbilityHelpers1
 
 local function bossExists()
-    return helpers2a.bossExists()
+    return h2a.bossExists()
 end
 
 local function checkBossSpawnTime()
@@ -7769,20 +7770,18 @@ local function resetRoundTrackers()
     state.abilityCooldowns = {}
 end
 
-local helpers1 = getgenv()._AbilityHelpers1
-local helpers2a = getgenv()._AbilityHelpers2a
 getgenv()._AbilitySystemFuncs = {
-    getCurrentWave = helpers1.getCurrentWave,
-    getCurrentTimeScale = helpers1.getCurrentTimeScale,
-    getUpgradeLevel = helpers1.getUpgradeLevel,
-    fixAbilityName = helpers1.fixAbilityName,
-    useAbility = helpers1.useAbility,
-    getAbilityData = helpers1.getAbilityData,
-    hasAbilityBeenUnlocked = helpers1.hasAbilityBeenUnlocked,
-    isOnCooldown = helpers2a.isOnCooldown,
-    setAbilityUsed = helpers2a.setAbilityUsed,
-    bossExists = helpers2a.bossExists,
-    bossReadyForAbilities = helpers2a.bossReadyForAbilities,
+    getCurrentWave = h1.getCurrentWave,
+    getCurrentTimeScale = h1.getCurrentTimeScale,
+    getUpgradeLevel = h1.getUpgradeLevel,
+    fixAbilityName = h1.fixAbilityName,
+    useAbility = h1.useAbility,
+    getAbilityData = h1.getAbilityData,
+    hasAbilityBeenUnlocked = h1.hasAbilityBeenUnlocked,
+    isOnCooldown = h2a.isOnCooldown,
+    setAbilityUsed = h2a.setAbilityUsed,
+    bossExists = h2a.bossExists,
+    bossReadyForAbilities = h2a.bossReadyForAbilities,
     getTowerCFrame = getTowerCFrame,
     getBossCFrame = getBossCFrame,
     getTowerRange = getTowerRange,
