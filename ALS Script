@@ -2381,7 +2381,9 @@ end
 
 getgenv().MacroPlaybackActive = false
 
-local function executeAction(action)
+local function executeAction(action, retryCount)
+    retryCount = retryCount or 0
+    
     if not action.RemoteName then 
         return false, "No remote name"
     end
@@ -2389,6 +2391,14 @@ local function executeAction(action)
     local remote = getgenv().MacroRemoteCache[action.RemoteName:lower()]
     if not remote then 
         return false, "Remote not found: " .. action.RemoteName
+    end
+    
+    if action.ActionType == "Place" and (not action.Args or not action.Args[1]) then
+        return false, "Invalid place action: missing unit name"
+    end
+    
+    if (action.ActionType == "Upgrade" or action.ActionType == "Sell") and not action.TowerName then
+        return false, "Invalid action: missing tower name"
     end
     
     if action.ActionType == "Upgrade" then
@@ -2428,8 +2438,17 @@ local function executeAction(action)
         local cost = tonumber(action.Cost) or 0
         
         if cost > 0 and cash < cost then
-            return false, "Not enough cash: need $" .. cost .. ", have $" .. cash
+            if retryCount == 0 then
+                task.wait(0.3)
+                cash = tonumber(getgenv().MacroCurrentCash) or 0
+            end
+            
+            if cash < cost then
+                return false, "Not enough cash: need $" .. cost .. ", have $" .. cash
+            end
         end
+        
+        local oldLevel = towerData.level
         
         if remote:IsA("RemoteFunction") then
             remote:InvokeServer(tower)
@@ -2439,11 +2458,15 @@ local function executeAction(action)
         
         task.wait(0.5)
         
-        local newLevel = tower:FindFirstChild("Upgrade") and tower.Upgrade.Value or towerData.level
-        if newLevel > towerData.level then
+        local newLevel = tower:FindFirstChild("Upgrade") and tower.Upgrade.Value or oldLevel
+        if newLevel > oldLevel then
             return true, "Upgraded to level " .. newLevel
         else
-            return false, "Upgrade may have failed"
+            if retryCount < 1 then
+                task.wait(0.3)
+                return executeAction(action, retryCount + 1)
+            end
+            return false, "Upgrade failed after retry"
         end
         
     elseif action.ActionType == "Sell" then
@@ -2480,13 +2503,39 @@ local function executeAction(action)
             end
         end
         
+        local towerCountBefore = 0
+        for _, t in pairs(workspace.Towers:GetChildren()) do
+            local owner = t:FindFirstChild("Owner")
+            if owner and owner.Value == LocalPlayer then
+                towerCountBefore = towerCountBefore + 1
+            end
+        end
+        
         if remote:IsA("RemoteFunction") then
             remote:InvokeServer(unpack(args))
         else
             remote:FireServer(unpack(args))
         end
-        task.wait(0.3)
-        return true, "Placed"
+        
+        task.wait(0.5)
+        
+        local towerCountAfter = 0
+        for _, t in pairs(workspace.Towers:GetChildren()) do
+            local owner = t:FindFirstChild("Owner")
+            if owner and owner.Value == LocalPlayer then
+                towerCountAfter = towerCountAfter + 1
+            end
+        end
+        
+        if towerCountAfter > towerCountBefore then
+            return true, "Placed"
+        else
+            if retryCount < 1 then
+                task.wait(0.3)
+                return executeAction(action, retryCount + 1)
+            end
+            return false, "Placement failed after retry"
+        end
     end
     
     return false, "Unknown action type"
@@ -2551,6 +2600,36 @@ local function detectMacroProgress(macroData)
     return lastCompletedStep + 1
 end
 
+local function validateMacro(macroData)
+    if not macroData or #macroData == 0 then
+        return false, "Macro is empty"
+    end
+    
+    local hasPlacement = false
+    for _, action in ipairs(macroData) do
+        if not action.ActionType then
+            return false, "Action missing ActionType"
+        end
+        
+        if action.ActionType == "Place" then
+            hasPlacement = true
+            if not action.Args or not action.Args[1] then
+                return false, "Place action missing unit name"
+            end
+        end
+        
+        if not action.RemoteName then
+            return false, "Action missing RemoteName"
+        end
+    end
+    
+    if not hasPlacement then
+        return false, "Macro has no placement actions"
+    end
+    
+    return true, "Valid"
+end
+
 local function playMacroV2()
     if getgenv().MacroPlaybackActive then return end
     if not getgenv().CurrentMacro or not getgenv().Macros[getgenv().CurrentMacro] then
@@ -2562,6 +2641,15 @@ local function playMacroV2()
     task.spawn(function()
         local macroData = getgenv().Macros[getgenv().CurrentMacro]
         if not macroData or #macroData == 0 then
+            getgenv().MacroPlaybackActive = false
+            return
+        end
+        
+        local valid, err = validateMacro(macroData)
+        if not valid then
+            getgenv().MacroStatusText = "Invalid Macro"
+            getgenv().MacroWaitingText = err
+            getgenv().UpdateMacroStatus()
             getgenv().MacroPlaybackActive = false
             return
         end
@@ -4773,14 +4861,14 @@ local function buildAutoAbilityUI()
                 end
             end
             
-            if hasBulma or hasWukong or hasEtoEvo or hasSkeletonKnightEZA or hasGriffithEclipse or hasAlucardEvo then
-                local specialSection = Tabs.Abilities:Section({ Side = "Left" })
-                table.insert(getgenv()._AbilityUIElements["Left"], specialSection)
-                
-                specialSection:Header({ Text = "🔮 Auto Units" })
-                specialSection:Divider()
-                
-                if hasBulma then
+            local specialSection = Tabs.Abilities:Section({ Side = "Left" })
+            table.insert(getgenv()._AbilityUIElements["Left"], specialSection)
+            
+            specialSection:Header({ Text = "🔮 Auto Units" })
+            specialSection:SubLabel({ Text = "Toggles work when units are equipped" })
+            specialSection:Divider()
+            
+            do
                     createToggle(
                         specialSection,
                         "Bulma Auto-Wish",
@@ -4815,11 +4903,9 @@ local function buildAutoAbilityUI()
                     )
                 end
                 
-                if hasWukong then
-                    if hasBulma then
-                        specialSection:Divider()
-                    end
-                    
+                specialSection:Divider()
+                
+                do
                     createToggle(
                         specialSection,
                         "Auto Wukong (Jin Mori)",
@@ -4836,11 +4922,9 @@ local function buildAutoAbilityUI()
                     )
                 end
                 
-                if hasSkeletonKnightEZA then
-                    if hasBulma or hasWukong then
-                        specialSection:Divider()
-                    end
-                    
+                specialSection:Divider()
+                
+                do
                     createToggle(
                         specialSection,
                         "Auto Skeleton Knight (Savior)",
@@ -4935,11 +5019,9 @@ local function buildAutoAbilityUI()
                     end)
                 end
                 
-                if hasAlucardEvo then
-                    if hasBulma or hasWukong or hasSkeletonKnightEZA then
-                        specialSection:Divider()
-                    end
-                    
+                specialSection:Divider()
+                
+                do
                     createToggle(
                         specialSection,
                         "Auto True Dracula Hypnosis",
@@ -5065,11 +5147,9 @@ local function buildAutoAbilityUI()
                     end)
                 end
                 
-                if hasEtoEvo then
-                    if hasBulma or hasWukong or hasSkeletonKnightEZA or hasAlucardEvo then
-                        specialSection:Divider()
-                    end
-                    
+                specialSection:Divider()
+                
+                do
                     createToggle(
                         specialSection,
                         "Auto One Eye Devil (EtoEvo)",
@@ -5086,11 +5166,9 @@ local function buildAutoAbilityUI()
                     )
                 end
                 
-                if hasGriffithEclipse then
-                    if hasBulma or hasWukong or hasEtoEvo or hasSkeletonKnightEZA or hasAlucardEvo then
-                        specialSection:Divider()
-                    end
-                    
+                specialSection:Divider()
+                
+                do
                     createToggle(
                         specialSection,
                         "Auto Griffith Light (Umbral Prince)",
@@ -5106,7 +5184,6 @@ local function buildAutoAbilityUI()
                         getgenv().GriffithLightEnabled
                     )
                 end
-            end
         end
     end)
     
