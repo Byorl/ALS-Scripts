@@ -5157,6 +5157,10 @@ task.spawn(function()
                             if next(abilities) then
                                 local displayName = getUnitDisplayName(unitName)
                                 
+                                if not getgenv()._AbilityUIElements then
+                                    getgenv()._AbilityUIElements = {Left = {}, Right = {}}
+                                end
+                                
                                 local summonSection = Tabs.Abilities:Section({ Side = "Right" })
                                 table.insert(getgenv()._AbilityUIElements["Right"], summonSection)
                                 
@@ -7711,7 +7715,24 @@ task.spawn(function()
             end)
             
             if isFinalExpedition then
-                print("[Final Expedition] Detected - waiting minimum 5s for Next button...")
+                
+                local promptWait = 0
+                while promptWait < 10 do
+                    local promptExists = false
+                    pcall(function()
+                        local promptGui = LocalPlayer.PlayerGui:FindFirstChild("Prompt")
+                        if promptGui and promptGui.Enabled then
+                            promptExists = true
+                        end
+                    end)
+                    
+                    if not promptExists then
+                        break
+                    end
+                    
+                    task.wait(0.5)
+                    promptWait = promptWait + 0.5
+                end
                 
                 task.wait(5)
                 
@@ -7742,7 +7763,6 @@ task.spawn(function()
                     end)
                     
                     if foundNext then
-                        print("[Final Expedition] Next button found and visible after " .. waitTime .. "s!")
                         break
                     end
                     
@@ -9576,10 +9596,8 @@ task.spawn(function()
                 if finalExpRemote then
                     if getgenv().FinalExpAutoJoinEasyEnabled then
                         finalExpRemote:FireServer("Easy")
-                        print("[Final Expedition] Auto joining Easy mode")
                     elseif getgenv().FinalExpAutoJoinHardEnabled then
                         finalExpRemote:FireServer("Hard")
-                        print("[Final Expedition] Auto joining Hard mode")
                     end
                 end
             end)
@@ -9607,7 +9625,6 @@ task.spawn(function()
                 
                 local function clickOptionButton(button)
                     if not button then return false end
-                    print("[Final Expedition] Clicking button:", button:GetFullName())
                     local events = {"Activated", "MouseButton1Click", "MouseButton1Down", "MouseButton1Up"}
                     for _, ev in ipairs(events) do
                         pcall(function()
@@ -9648,54 +9665,61 @@ task.spawn(function()
                         pcall(function()
                             local promptGui = LocalPlayer.PlayerGui:FindFirstChild("Prompt")
                             if promptGui then
-                                local promptFrame = promptGui:FindFirstChild("Frame")
-                                if promptFrame then
-                                    local textButton = promptFrame:FindFirstChild("TextButton")
-                                    if textButton then
-                                        local innerFrame = textButton:FindFirstChild("Frame")
-                                        if innerFrame then
-                                            local quantityLabel = innerFrame:FindFirstChild("TextLabel")
-                                            local quantity = "1x"
-                                            if quantityLabel and quantityLabel.Text then
-                                                quantity = quantityLabel.Text
-                                            end
-                                            
-                                            local children = innerFrame:GetChildren()
-                                            if children[5] then
-                                                local frameChain = children[5]:FindFirstChild("Frame")
-                                                if frameChain then
-                                                    frameChain = frameChain:FindFirstChild("Frame")
-                                                    if frameChain then
-                                                        frameChain = frameChain:FindFirstChild("Frame")
-                                                        if frameChain then
-                                                            local textLabels = {}
-                                                            for _, child in ipairs(frameChain:GetChildren()) do
-                                                                if child:IsA("TextLabel") and child.Text and child.Text ~= "" then
-                                                                    table.insert(textLabels, child.Text)
-                                                                end
-                                                            end
-                                                            
-                                                            if #textLabels >= 3 then
-                                                                local chestName = textLabels[1] .. " " .. textLabels[2] .. " " .. textLabels[3]
-                                                                print("[Final Expedition] Chest Reward: " .. quantity .. " " .. chestName)
-                                                                
-                                                                if not getgenv().FinalExpChestRewards then
-                                                                    getgenv().FinalExpChestRewards = {}
-                                                                end
-                                                                
-                                                                if not getgenv().FinalExpChestRewards[chestName] then
-                                                                    getgenv().FinalExpChestRewards[chestName] = 0
-                                                                end
-                                                                
-                                                                local amount = tonumber(quantity:match("%d+")) or 1
-                                                                getgenv().FinalExpChestRewards[chestName] = getgenv().FinalExpChestRewards[chestName] + amount
-                                                            end
-                                                        end
-                                                    end
-                                                end
-                                            end
+                                local allTexts = {}
+                                for _, descendant in ipairs(promptGui:GetDescendants()) do
+                                    if descendant:IsA("TextLabel") and descendant.Text and descendant.Text ~= "" then
+                                        local text = descendant.Text:match("^%s*(.-)%s*$")
+                                        if text ~= "" and not text:find("Click") and not text:find("continue") then
+                                            table.insert(allTexts, text)
                                         end
                                     end
+                                end
+                                
+                                local chestTypes = {"Shabby", "Standard", "Prismatic", "Godly"}
+                                local rewardQuantity = nil
+                                local ownedQuantity = nil
+                                local foundChestType = nil
+                                local foundLoot = false
+                                local foundChest = false
+                                
+                                for _, text in ipairs(allTexts) do
+                                    if text:match("^Owned:%s*%d+x$") then
+                                        ownedQuantity = tonumber(text:match("%d+"))
+                                    elseif text:match("^%d+x$") then
+                                        rewardQuantity = tonumber(text:match("%d+"))
+                                    end
+                                    
+                                    for _, chestType in ipairs(chestTypes) do
+                                        if text == chestType then
+                                            foundChestType = chestType
+                                            break
+                                        end
+                                    end
+                                    
+                                    if text == "Loot" then
+                                        foundLoot = true
+                                    end
+                                    
+                                    if text == "Chest" or text:lower():find("chest") then
+                                        foundChest = true
+                                    end
+                                end
+                                
+                                if foundChestType and foundLoot and foundChest then
+                                    local chestName = foundChestType .. " Loot Chest"
+                                    local quantity = rewardQuantity or 1
+                                    local owned = ownedQuantity or 0
+                                    
+                                    if not getgenv().FinalExpChestRewards then
+                                        getgenv().FinalExpChestRewards = {}
+                                    end
+                                    
+                                    if not getgenv().FinalExpChestRewards[chestName] then
+                                        getgenv().FinalExpChestRewards[chestName] = {amount = 0, owned = owned}
+                                    end
+                                    
+                                    getgenv().FinalExpChestRewards[chestName].amount = getgenv().FinalExpChestRewards[chestName].amount + quantity
+                                    getgenv().FinalExpChestRewards[chestName].owned = owned
                                 end
                             end
                         end)
@@ -9722,11 +9746,9 @@ task.spawn(function()
                 end
                 
                 if getgenv().FinalExpAutoSkipShopEnabled and availableOptions["Shop"] then
-                    print("[Final Expedition] Skipping Shop - clicking Shop card")
                     clickOptionButton(availableOptions["Shop"])
                     task.wait(0.5)
                     
-                    print("[Final Expedition] Looking for Shop button inside shop UI...")
                     local shopButtonClicked = false
                     local maxAttempts = 10
                     for attempt = 1, maxAttempts do
@@ -9742,7 +9764,6 @@ task.spawn(function()
                                         if folder then
                                             local shopButton = folder:FindFirstChild("TextButton")
                                             if shopButton then
-                                                print("[Final Expedition] Found Shop button, clicking...")
                                                 clickOptionButton(shopButton)
                                                 shopButtonClicked = true
                                                 task.wait(0.3)
@@ -9774,7 +9795,6 @@ task.spawn(function()
                     
                     for _, option in ipairs(priorities) do
                         if availableOptions[option.name] then
-                            print("[Final Expedition] Auto selecting:", option.name, "(Priority:", option.priority .. ")")
                             clickOptionButton(availableOptions[option.name])
                             task.wait(0.3)
                             
@@ -9793,7 +9813,6 @@ task.spawn(function()
                                                     if folder then
                                                         local closeButton = folder:FindFirstChild("TextButton")
                                                         if closeButton then
-                                                            print("[Final Expedition] Closing Rest Point UI")
                                                             clickOptionButton(closeButton)
                                                         end
                                                     end
@@ -10679,9 +10698,18 @@ do
             end
             
             if getgenv().FinalExpChestRewards and next(getgenv().FinalExpChestRewards) then
-                rewardsText = rewardsText .. "\n**Chests:**\n"
-                for chestName, amount in pairs(getgenv().FinalExpChestRewards) do
-                    rewardsText = rewardsText .. "+" .. amount .. "x " .. chestName .. "\n"
+                if rewardsText == "No rewards found" then
+                    rewardsText = ""
+                end
+                if rewardsText ~= "" then
+                    rewardsText = rewardsText .. "\n"
+                end
+                rewardsText = rewardsText .. "**Chests:**\n"
+                for chestName, data in pairs(getgenv().FinalExpChestRewards) do
+                    local amount = data.amount
+                    local owned = data.owned
+                    local total = owned + amount
+                    rewardsText = rewardsText .. "+" .. formatNumber(amount) .. " " .. chestName .. " [ Total: " .. formatNumber(total) .. " ]\n"
                 end
                 getgenv().FinalExpChestRewards = {}
             end
@@ -10858,6 +10886,7 @@ do
                 end
                 
                 local isFinalExpedition = false
+                local hasLeaveButton = false
                 pcall(function()
                     local gamemode = RS:FindFirstChild("Gamemode")
                     if gamemode and gamemode.Value == "FinalExpedition" then
@@ -10866,12 +10895,86 @@ do
                 end)
                 
                 if isFinalExpedition then
-                    local currentTime = tick()
-                    if currentTime - lastWebhookTime < WEBHOOK_COOLDOWN then
-                        print("[Webhook] Skipping duplicate post in Final Expedition (cooldown active)")
-                        return
+                    print("[Webhook] Final Expedition detected, waiting for Prompt GUI to close...")
+                    
+                    local promptWait = 0
+                    while promptWait < 15 do
+                        local promptExists = false
+                        pcall(function()
+                            local promptGui = LocalPlayer.PlayerGui:FindFirstChild("Prompt")
+                            if promptGui and promptGui.Enabled then
+                                promptExists = true
+                            end
+                        end)
+                        
+                        if not promptExists then
+                            print("[Webhook] Prompt GUI closed after " .. promptWait .. "s, checking if this is the final EndGameUI...")
+                            break
+                        end
+                        
+                        task.wait(0.5)
+                        promptWait = promptWait + 0.5
                     end
-                    lastWebhookTime = currentTime
+                    
+                    task.wait(2)
+                    
+                    local isFinalScreen = false
+                    pcall(function()
+                        local endGameUI = LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
+                        if endGameUI then
+                            print("[Webhook] EndGameUI still exists, checking buttons...")
+                            
+                            local function findButton(parent, buttonName)
+                                if not parent then return nil end
+                                local button = parent:FindFirstChild(buttonName, true)
+                                return button
+                            end
+                            
+                            local leaveButton = findButton(endGameUI, "Leave")
+                            local nextButton = findButton(endGameUI, "Next")
+                            local retryButton = findButton(endGameUI, "Retry")
+                            
+                            print("[Webhook] Leave: " .. tostring(leaveButton and leaveButton.Visible))
+                            print("[Webhook] Retry: " .. tostring(retryButton and retryButton.Visible))
+                            print("[Webhook] Next: " .. tostring(nextButton and nextButton.Visible))
+                            
+                            if (leaveButton and leaveButton.Visible) or (retryButton and retryButton.Visible) then
+                                isFinalScreen = true
+                                print("[Webhook] Found Leave or Retry button - this is the final screen")
+                            elseif nextButton and nextButton.Visible then
+                                local nextText = nextButton:FindFirstChild("TextLabel", true)
+                                if nextText and nextText.Text then
+                                    print("[Webhook] Next button text: " .. nextText.Text)
+                                    if nextText.Text:lower():find("leave") then
+                                        isFinalScreen = true
+                                        print("[Webhook] Next button says 'Leave' - this is the final screen")
+                                    else
+                                        isFinalScreen = true
+                                        print("[Webhook] Next button found - assuming final screen")
+                                    end
+                                else
+                                    isFinalScreen = true
+                                    print("[Webhook] Next button found (no text) - assuming final screen")
+                                end
+                            else
+                                print("[Webhook] No buttons found, checking if EndGameUI persists...")
+                                task.wait(2)
+                                if LocalPlayer.PlayerGui:FindFirstChild("EndGameUI") then
+                                    isFinalScreen = true
+                                    print("[Webhook] EndGameUI still exists after 2s - assuming final screen")
+                                end
+                            end
+                        else
+                            print("[Webhook] EndGameUI no longer exists")
+                        end
+                    end)
+                    
+                    if not isFinalScreen then
+                        print("[Webhook] Skipping intermediate EndGameUI in Final Expedition")
+                        return
+                    else
+                        print("[Webhook] Final EndGameUI confirmed in Final Expedition")
+                    end
                 end
                 
                 getgenv().WebhookProcessing = true
@@ -12771,7 +12874,7 @@ if not isInLobby then
                 
                 for slotNum = 1, 6 do
                     local slotData = clientData.Slots[sortedSlots[slotNum]]
-                    if slotData and slotData.Value then
+                    if slotData and slotData.Value and slotData.Value ~= "" then
                         local unitName = slotData.Value
                         local placeCap = math.floor(getgenv().AutoPlayConfig.placeCaps[slotNum] or 1)
                         local currentCount = getPlacedTowerCount(slotNum)
@@ -12825,10 +12928,15 @@ if not isInLobby then
             while true do
                 task.wait(1) 
                 
-                if not getgenv().AutoPlayConfig.autoUpgrade and not getgenv().AutoPlayConfig.autoUpgradePriority then continue end
+                if not getgenv().AutoPlayConfig.autoUpgrade and not getgenv().AutoPlayConfig.autoUpgradePriority then 
+                    continue 
+                end
+                
                 
                 local clientData = getClientData()
-                if not clientData or not clientData.Slots then continue end
+                if not clientData or not clientData.Slots then 
+                    continue 
+                end
                 
                 if getgenv().AutoPlayConfig.placeBeforeUpgrade and getgenv().AutoPlayConfig.autoPlace then
                     local allUnitsPlaced = true
@@ -12836,7 +12944,7 @@ if not isInLobby then
                     
                     for slotNum = 1, 6 do
                         local slotData = clientData.Slots[sortedSlots[slotNum]]
-                        if slotData and slotData.Value then
+                        if slotData and slotData.Value and slotData.Value ~= "" then
                             local placeCap = math.floor(getgenv().AutoPlayConfig.placeCaps[slotNum] or 0)
                             local currentCount = getPlacedTowerCount(slotNum)
                             local placementLimit = getPlacementLimit(slotData.Value)
@@ -12845,6 +12953,7 @@ if not isInLobby then
                             if placementLimit and placementLimit > 0 then
                                 effectiveCap = math.min(placeCap, placementLimit)
                             end
+                            
                             
                             if placeCap > 0 and currentCount < effectiveCap then
                                 allUnitsPlaced = false
@@ -12947,6 +13056,7 @@ if not isInLobby then
                     table.insert(allUnits, data)
                 end
                 
+                
                 if getgenv().AutoPlayConfig.autoUpgradePriority then
                     table.sort(allUnits, function(a, b)
                         if getgenv().AutoPlayConfig.focusFarm then
@@ -12971,11 +13081,13 @@ if not isInLobby then
                         
                         currentCash = tonumber(getgenv().MacroCurrentCash) or 0
                         
+                        
                         if data.cost > 0 and currentCash >= data.cost then
                             local prefix = data.isFarm and "[FARM] " or ""
                             if upgradeTower(data.tower) then
                                 upgraded = true
                                 task.wait(0.2)
+
                             end
                         end
                     end
@@ -12984,11 +13096,14 @@ if not isInLobby then
                         if upgraded then break end
                         currentCash = tonumber(getgenv().MacroCurrentCash) or 0
                         
+                        
                         if data.cost > 0 and currentCash >= data.cost then
                             if upgradeTower(data.tower) then
                                 upgraded = true
                                 task.wait(0.2)
+
                             end
+                       
                         end
                     end
                 end
