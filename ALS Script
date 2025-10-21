@@ -2478,17 +2478,30 @@ local function executeAction(action, retryCount)
             end
         end
         
-        if tower and remote then
+        if not tower then
+            return false, "Tower not found for sell: " .. action.TowerName
+        end
+        
+        if not remote then
+            return false, "Sell remote not found"
+        end
+        
+        print("[Macro] Selling tower: " .. action.TowerName)
+        
+        local sellSuccess = pcall(function()
             if remote:IsA("RemoteFunction") then
                 remote:InvokeServer(tower)
             else
                 remote:FireServer(tower)
             end
-            task.wait(0.3)
-            return true, "Sold"
-        else
-            return false, "Tower not found for sell"
+        end)
+        
+        if not sellSuccess then
+            return false, "Failed to invoke sell remote"
         end
+        
+        task.wait(0.3)
+        return true, "Sold"
         
     elseif action.ActionType == "Place" then
         local args = {action.Args[1]}
@@ -2951,6 +2964,7 @@ task.spawn(function()
         end)
         
         if lastEndGameUIState and not currentEndGameUIState and getgenv().MacroPlayEnabled then
+            print("[Macro Auto-Restart] EndGameUI closed, restarting macro...")
             task.wait(1)
             
             getgenv().MacroPlaybackActive = false
@@ -2968,6 +2982,7 @@ task.spawn(function()
             
             task.wait(0.5)
             
+            print("[Macro Auto-Restart] Starting playback...")
             playMacroV2()
             lastRestartAttempt = tick()
         end
@@ -2976,7 +2991,8 @@ task.spawn(function()
         
         if getgenv().MacroPlayEnabled and not getgenv().MacroPlaybackActive then
             local now = tick()
-            if now - lastRestartAttempt > 3 then                
+            if now - lastRestartAttempt > 3 then
+                print("[Macro Auto-Restart] Playback not active but enabled, restarting...")
                 getgenv().MacroGameState.gameEnded = false
                 getgenv().MacroGameState.hasEndGameUI = false
                 getgenv().MacroGameState.lastGameEndedState = false
@@ -8023,70 +8039,130 @@ task.spawn(function()
                 hasProcessedCurrentUI = true
                 lastActionTime = tick()
                 
-                local pressSuccess = pcall(function()
-                    if not buttonToPress or not buttonToPress.Parent then
-                        return
-                    end
-                    
-                    if not buttonToPress:IsDescendantOf(game) then
-                        return
-                    end
-                    
-                    if not buttonToPress:IsDescendantOf(LocalPlayer.PlayerGui) then
-                        return
-                    end
-                    
-                    local GuiService = game:GetService("GuiService")
-                    
-                    pcall(function()
-                        GuiService.SelectedObject = nil
-                    end)
-                    task.wait(0.1)
-                    
-                    if not buttonToPress or not buttonToPress.Parent or not buttonToPress:IsDescendantOf(LocalPlayer.PlayerGui) then
-                        return
-                    end
-                    
-                    local setSuccess = pcall(function()
-                        GuiService.SelectedObject = buttonToPress
-                    end)
-                    
-                    if not setSuccess then
-                        return
-                    end
-                    
-                    local lockConnection
-                    lockConnection = RunService.Heartbeat:Connect(function()
+                local pressSuccess = false
+                local clickMethod = "Unknown"
+                
+                local function tryGuiServiceMethod()
+                    local success = pcall(function()
+                        if not buttonToPress or not buttonToPress.Parent then
+                            return
+                        end
+                        
+                        if not buttonToPress:IsDescendantOf(game) then
+                            return
+                        end
+                        
+                        if not buttonToPress:IsDescendantOf(LocalPlayer.PlayerGui) then
+                            return
+                        end
+                        
+                        local GuiService = game:GetService("GuiService")
+                        
                         pcall(function()
-                            if buttonToPress and buttonToPress.Parent and GuiService.SelectedObject ~= buttonToPress then
-                                GuiService.SelectedObject = buttonToPress
-                            end
+                            GuiService.SelectedObject = nil
                         end)
+                        task.wait(0.1)
+                        
+                        if not buttonToPress or not buttonToPress.Parent or not buttonToPress:IsDescendantOf(LocalPlayer.PlayerGui) then
+                            return
+                        end
+                        
+                        local setSuccess = pcall(function()
+                            GuiService.SelectedObject = buttonToPress
+                        end)
+                        
+                        if not setSuccess then
+                            return
+                        end
+                        
+                        local lockConnection
+                        lockConnection = RunService.Heartbeat:Connect(function()
+                            pcall(function()
+                                if buttonToPress and buttonToPress.Parent and GuiService.SelectedObject ~= buttonToPress then
+                                    GuiService.SelectedObject = buttonToPress
+                                end
+                            end)
+                        end)
+                        
+                        task.wait(0.3)
+                        
+                        if GuiService.SelectedObject == buttonToPress then
+                            VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
+                            task.wait(0.05)
+                            VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
+                            task.wait(0.2)
+                            
+                            if lockConnection then
+                                lockConnection:Disconnect()
+                            end
+                            
+                            GuiService.SelectedObject = nil
+                            pressSuccess = true
+                            clickMethod = "GuiService"
+                        else
+                            if lockConnection then
+                                lockConnection:Disconnect()
+                            end
+                        end
                     end)
-                    
-                    task.wait(0.3)
-                    
-                    if GuiService.SelectedObject == buttonToPress then
-                        VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
+                    return success and pressSuccess
+                end
+                
+                local function tryMouseClickMethod()
+                    local success = pcall(function()
+                        if not buttonToPress or not buttonToPress.Parent or not buttonToPress:IsDescendantOf(LocalPlayer.PlayerGui) then
+                            return
+                        end
+                        
+                        local absolutePosition = buttonToPress.AbsolutePosition
+                        local absoluteSize = buttonToPress.AbsoluteSize
+                        local centerX = absolutePosition.X + (absoluteSize.X / 2)
+                        local centerY = absolutePosition.Y + (absoluteSize.Y / 2)
+                        
+                        VIM:SendMouseButtonEvent(centerX, centerY, 0, true, game, 0)
                         task.wait(0.05)
-                        VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
+                        VIM:SendMouseButtonEvent(centerX, centerY, 0, false, game, 0)
                         task.wait(0.2)
                         
-                        print("[Auto " .. actionName .. "] ✅ Button pressed successfully!")
-                        
-                        getgenv()._isTeleporting = true
-                        
-                        if lockConnection then
-                            lockConnection:Disconnect()
+                        pressSuccess = true
+                        clickMethod = "MouseClick"
+                    end)
+                    return success and pressSuccess
+                end
+                
+                local function tryActivatedMethod()
+                    local success = pcall(function()
+                        if not buttonToPress or not buttonToPress.Parent or not buttonToPress:IsDescendantOf(LocalPlayer.PlayerGui) then
+                            return
                         end
                         
-                        GuiService.SelectedObject = nil
-                    else
-                        if lockConnection then
-                            lockConnection:Disconnect()
+                        for _, signal in pairs({"MouseButton1Click", "Activated"}) do
+                            pcall(function()
+                                for _, connection in pairs(getconnections(buttonToPress[signal])) do
+                                    connection:Fire()
+                                end
+                            end)
                         end
-                    end
-                end)
+                        
+                        task.wait(0.2)
+                        pressSuccess = true
+                        clickMethod = "Activated"
+                    end)
+                    return success and pressSuccess
+                end
+                
+                if tryGuiServiceMethod() then
+                    print("[Auto " .. actionName .. "] ✅ Button pressed successfully! (Method: " .. clickMethod .. ")")
+                    getgenv()._isTeleporting = true
+                elseif tryMouseClickMethod() then
+                    print("[Auto " .. actionName .. "] ✅ Button pressed successfully! (Method: " .. clickMethod .. ")")
+                    getgenv()._isTeleporting = true
+                elseif tryActivatedMethod() then
+                    print("[Auto " .. actionName .. "] ✅ Button pressed successfully! (Method: " .. clickMethod .. ")")
+                    getgenv()._isTeleporting = true
+                else
+                    warn("[Auto " .. actionName .. "] ❌ All click methods failed!")
+                end
             end
         end)
     end
@@ -8133,8 +8209,9 @@ end
 
 
 
-do
-local function getCurrentWave()
+getgenv()._AbilityHelpers1 = getgenv()._AbilityHelpers1 or {}
+
+getgenv()._AbilityHelpers1.getCurrentWave = function()
     local ok, res = pcall(function()
         local waveValue = RS:FindFirstChild("Wave")
         if waveValue and waveValue:IsA("IntValue") then
@@ -8163,7 +8240,7 @@ local function getCurrentWave()
     return ok2 and res2 or 0
 end
 
-local function getCurrentTimeScale()
+getgenv()._AbilityHelpers1.getCurrentTimeScale = function()
     local ok, res = pcall(function()
         local timeScale = RS:FindFirstChild("TimeScale")
         if timeScale and timeScale:IsA("NumberValue") then
@@ -8174,7 +8251,7 @@ local function getCurrentTimeScale()
     return ok and res or 1
 end
 
-local function getUpgradeLevel(tower)
+getgenv()._AbilityHelpers1.getUpgradeLevel = function(tower)
     if not tower then return 0 end
     local ok, res = pcall(function()
         local u = tower:FindFirstChild("Upgrade")
@@ -8184,14 +8261,14 @@ local function getUpgradeLevel(tower)
     return ok and res or 0
 end
 
-local function fixAbilityName(abilityName)
+getgenv()._AbilityHelpers1.fixAbilityName = function(abilityName)
     local fixed = abilityName
     fixed = fixed:gsub("!!+", "!")
     fixed = fixed:gsub("%?%?+", "?")
     return fixed
 end
 
-local function useAbility(tower, abilityName)
+getgenv()._AbilityHelpers1.useAbility = function(tower, abilityName)
     if tower then
         if abilityName == "Who Decided That?" then
             pcall(function() 
@@ -8199,13 +8276,13 @@ local function useAbility(tower, abilityName)
                 print("[Soul Ability] Used: " .. abilityName)
             end)
         else
-            local correctedName = fixAbilityName(abilityName)
+            local correctedName = getgenv()._AbilityHelpers1.fixAbilityName(abilityName)
             pcall(function() RS.Remotes.Ability:InvokeServer(tower, correctedName) end)
         end
     end
 end
 
-local function getAbilityData(towerName, abilityName)
+getgenv()._AbilityHelpers1.getAbilityData = function(towerName, abilityName)
     if abilityName == "Who Decided That?" then
         return {
             cooldown = 999999,
@@ -8218,8 +8295,8 @@ local function getAbilityData(towerName, abilityName)
     return abilities[abilityName]
 end
 
-local function isOnCooldown(towerName, abilityName)
-    local d = getAbilityData(towerName, abilityName)
+getgenv()._AbilityHelpers1.isOnCooldown = function(towerName, abilityName)
+    local d = getgenv()._AbilityHelpers1.getAbilityData(towerName, abilityName)
     if not d or not d.cooldown then return false end
     local key = towerName .. "_" .. abilityName
     local last = abilityCooldowns[key]
@@ -8231,40 +8308,25 @@ local function isOnCooldown(towerName, abilityName)
         return cooldownRemaining > 0.5
     end
     
-    local scale = getCurrentTimeScale()
+    local scale = getgenv()._AbilityHelpers1.getCurrentTimeScale()
     local effectiveCd = d.cooldown / scale
     local timeSinceUse = tick() - last
     local cooldownRemaining = effectiveCd - timeSinceUse
     return cooldownRemaining > 0.5
 end
 
-local function setAbilityUsed(towerName, abilityName)
+getgenv()._AbilityHelpers1.setAbilityUsed = function(towerName, abilityName)
     abilityCooldowns[towerName.."_"..abilityName] = tick()
 end
 
-local function hasAbilityBeenUnlocked(towerName, abilityName, towerLevel)
-    local d = getAbilityData(towerName, abilityName)
+getgenv()._AbilityHelpers1.hasAbilityBeenUnlocked = function(towerName, abilityName, towerLevel)
+    local d = getgenv()._AbilityHelpers1.getAbilityData(towerName, abilityName)
     if d and d.isSoulAbility then
         return true
     end
     return d and towerLevel >= d.requiredLevel
 end
 
-getgenv()._AbilityHelpers1 = {
-    getCurrentWave = getCurrentWave,
-    getCurrentTimeScale = getCurrentTimeScale,
-    getUpgradeLevel = getUpgradeLevel,
-    fixAbilityName = fixAbilityName,
-    useAbility = useAbility,
-    getAbilityData = getAbilityData,
-    isOnCooldown = isOnCooldown,
-    setAbilityUsed = setAbilityUsed,
-    hasAbilityBeenUnlocked = hasAbilityBeenUnlocked
-}
-
-end
-
-do
 if not getgenv()._AbilityState then
     getgenv()._AbilityState = {
         abilityCooldowns = {},
@@ -8274,10 +8336,11 @@ if not getgenv()._AbilityState then
     }
 end
 
-local state = getgenv()._AbilityState
-local helpers1 = getgenv()._AbilityHelpers1
+getgenv()._AbilityHelpers2a = getgenv()._AbilityHelpers2a or {}
 
-local function isOnCooldown(towerUniqueId, abilityName, actualTowerName)
+getgenv()._AbilityHelpers2a.isOnCooldown = function(towerUniqueId, abilityName, actualTowerName)
+    local state = getgenv()._AbilityState
+    local helpers1 = getgenv()._AbilityHelpers1
     local nameForData = actualTowerName or towerUniqueId:match("^([^_]+)")
     
     local d = helpers1.getAbilityData(nameForData, abilityName)
@@ -8294,11 +8357,12 @@ local function isOnCooldown(towerUniqueId, abilityName, actualTowerName)
     return cooldownRemaining > 0.5
 end
 
-local function setAbilityUsed(towerUniqueId, abilityName)
+getgenv()._AbilityHelpers2a.setAbilityUsed = function(towerUniqueId, abilityName)
+    local state = getgenv()._AbilityState
     state.abilityCooldowns[towerUniqueId.."_"..abilityName] = tick()
 end
 
-local function bossExists()
+getgenv()._AbilityHelpers2a.bossExists = function()
     local ok, res = pcall(function()
         local enemies = workspace:FindFirstChild("Enemies")
         if not enemies then 
@@ -8322,8 +8386,9 @@ local function bossExists()
     return ok and res
 end
 
-local function bossReadyForAbilities()
-    if bossExists() then
+getgenv()._AbilityHelpers2a.bossReadyForAbilities = function()
+    local state = getgenv()._AbilityState
+    if getgenv()._AbilityHelpers2a.bossExists() then
         if not state.generalBossSpawnTime then state.generalBossSpawnTime = tick() end
         return (tick() - state.generalBossSpawnTime) >= 1
     else
@@ -8332,35 +8397,9 @@ local function bossReadyForAbilities()
     end
 end
 
-getgenv()._AbilityHelpers2a = {
-    isOnCooldown = isOnCooldown,
-    setAbilityUsed = setAbilityUsed,
-    bossExists = bossExists,
-    bossReadyForAbilities = bossReadyForAbilities
-}
+getgenv()._AbilityHelpers3 = getgenv()._AbilityHelpers3 or {}
 
-end
-
-do
-local state = getgenv()._AbilityState
-local h2a = getgenv()._AbilityHelpers2a
-local h1 = getgenv()._AbilityHelpers1
-
-local function bossExists()
-    return h2a.bossExists()
-end
-
-local function checkBossSpawnTime()
-    if bossExists() then
-        if not state.bossSpawnTime then state.bossSpawnTime = tick() end
-        return (tick() - state.bossSpawnTime) >= 16
-    else
-        state.bossSpawnTime = nil
-        return false
-    end
-end
-
-local function getBossCFrame()
+getgenv()._AbilityHelpers3.getBossCFrame = function()
     local ok, res = pcall(function()
         local enemies = workspace:FindFirstChild("Enemies")
         if not enemies then return nil end
@@ -8382,7 +8421,7 @@ local function getBossCFrame()
     return ok and res or nil
 end
 
-local function getTowerCFrame(tower)
+getgenv()._AbilityHelpers3.getTowerCFrame = function(tower)
     if not tower then return nil end
     local ok, res = pcall(function()
         local hrp = tower:FindFirstChild("HumanoidRootPart")
@@ -8392,7 +8431,7 @@ local function getTowerCFrame(tower)
     return ok and res or nil
 end
 
-local function getTowerRange(tower)
+getgenv()._AbilityHelpers3.getTowerRange = function(tower)
     if not tower then return 0 end
     local ok, res = pcall(function()
         local stats = tower:FindFirstChild("Stats")
@@ -8404,21 +8443,22 @@ local function getTowerRange(tower)
     return ok and res or 0
 end
 
-local function isBossInRange(tower)
-    local bossCF = getBossCFrame()
-    local towerCF = getTowerCFrame(tower)
+getgenv()._AbilityHelpers3.isBossInRange = function(tower)
+    local bossCF = getgenv()._AbilityHelpers3.getBossCFrame()
+    local towerCF = getgenv()._AbilityHelpers3.getTowerCFrame(tower)
     if not bossCF or not towerCF then return false end
-    local range = getTowerRange(tower)
+    local range = getgenv()._AbilityHelpers3.getTowerRange(tower)
     if range <= 0 then return false end
     local distance = (bossCF.Position - towerCF.Position).Magnitude
     return distance <= range
 end
 
-local function checkBossInRangeForDuration(tower, requiredDuration)
+getgenv()._AbilityHelpers3.checkBossInRangeForDuration = function(tower, requiredDuration)
     if not tower then return false end
+    local state = getgenv()._AbilityState
     local name = tower.Name
     local currentTime = tick()
-    if isBossInRange(tower) then
+    if getgenv()._AbilityHelpers3.isBossInRange(tower) then
         if requiredDuration == 0 then return true end
         if not state.bossInRangeTracker[name] then
             state.bossInRangeTracker[name] = currentTime
@@ -8432,13 +8472,14 @@ local function checkBossInRangeForDuration(tower, requiredDuration)
     return false
 end
 
-local function getTowerInfoName(tower)
+getgenv()._AbilityHelpers3.getTowerInfoName = function(tower)
     if not tower then return nil end
     local uniqueId = tostring(tower)
     return tower.Name .. "_" .. uniqueId:sub(-8)
 end
 
-local function resetRoundTrackers()
+getgenv()._AbilityHelpers3.resetRoundTrackers = function()
+    local state = getgenv()._AbilityState
     state.bossSpawnTime = nil
     state.generalBossSpawnTime = nil
     state.bossInRangeTracker = {}
@@ -8446,27 +8487,25 @@ local function resetRoundTrackers()
 end
 
 getgenv()._AbilitySystemFuncs = {
-    getCurrentWave = h1.getCurrentWave,
-    getCurrentTimeScale = h1.getCurrentTimeScale,
-    getUpgradeLevel = h1.getUpgradeLevel,
-    fixAbilityName = h1.fixAbilityName,
-    useAbility = h1.useAbility,
-    getAbilityData = h1.getAbilityData,
-    hasAbilityBeenUnlocked = h1.hasAbilityBeenUnlocked,
-    isOnCooldown = h2a.isOnCooldown,
-    setAbilityUsed = h2a.setAbilityUsed,
-    bossExists = h2a.bossExists,
-    bossReadyForAbilities = h2a.bossReadyForAbilities,
-    getTowerCFrame = getTowerCFrame,
-    getBossCFrame = getBossCFrame,
-    getTowerRange = getTowerRange,
-    isBossInRange = isBossInRange,
-    checkBossInRangeForDuration = checkBossInRangeForDuration,
-    getTowerInfoName = getTowerInfoName,
-    resetRoundTrackers = resetRoundTrackers
+    getCurrentWave = getgenv()._AbilityHelpers1.getCurrentWave,
+    getCurrentTimeScale = getgenv()._AbilityHelpers1.getCurrentTimeScale,
+    getUpgradeLevel = getgenv()._AbilityHelpers1.getUpgradeLevel,
+    fixAbilityName = getgenv()._AbilityHelpers1.fixAbilityName,
+    useAbility = getgenv()._AbilityHelpers1.useAbility,
+    getAbilityData = getgenv()._AbilityHelpers1.getAbilityData,
+    hasAbilityBeenUnlocked = getgenv()._AbilityHelpers1.hasAbilityBeenUnlocked,
+    isOnCooldown = getgenv()._AbilityHelpers2a.isOnCooldown,
+    setAbilityUsed = getgenv()._AbilityHelpers2a.setAbilityUsed,
+    bossExists = getgenv()._AbilityHelpers2a.bossExists,
+    bossReadyForAbilities = getgenv()._AbilityHelpers2a.bossReadyForAbilities,
+    getTowerCFrame = getgenv()._AbilityHelpers3.getTowerCFrame,
+    getBossCFrame = getgenv()._AbilityHelpers3.getBossCFrame,
+    getTowerRange = getgenv()._AbilityHelpers3.getTowerRange,
+    isBossInRange = getgenv()._AbilityHelpers3.isBossInRange,
+    checkBossInRangeForDuration = getgenv()._AbilityHelpers3.checkBossInRangeForDuration,
+    getTowerInfoName = getgenv()._AbilityHelpers3.getTowerInfoName,
+    resetRoundTrackers = getgenv()._AbilityHelpers3.resetRoundTrackers
 }
-
-end
 
 do
 local lastWave = 0
@@ -11190,6 +11229,68 @@ do
             end
         end
     end))
+    
+    task.spawn(function()
+        local lastEndGameUICheck = false
+        while true do
+            task.wait(1)
+            
+            if not getgenv().WebhookEnabled then
+                task.wait(2)
+                continue
+            end
+            
+            local currentEndGameUIExists = false
+            pcall(function()
+                local endGameUI = LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
+                currentEndGameUIExists = endGameUI and endGameUI.Enabled or false
+            end)
+            
+            if currentEndGameUIExists and not lastEndGameUICheck and not getgenv().WebhookProcessing then
+                print("[Webhook] Periodic check detected EndGameUI - triggering webhook")
+                task.wait(0.5)
+                
+                local isFinalExpedition = false
+                pcall(function()
+                    local gamemode = RS:FindFirstChild("Gamemode")
+                    if gamemode and gamemode.Value == "FinalExpedition" then
+                        isFinalExpedition = true
+                    end
+                end)
+                
+                if isFinalExpedition then
+                    print("[Webhook] Final Expedition detected in periodic check")
+                    local promptWait = 0
+                    while promptWait < 10 do
+                        local promptExists = false
+                        pcall(function()
+                            local promptGui = LocalPlayer.PlayerGui:FindFirstChild("Prompt")
+                            if promptGui and promptGui.Enabled then
+                                promptExists = true
+                            end
+                        end)
+                        
+                        if not promptExists then
+                            break
+                        end
+                        
+                        task.wait(0.5)
+                        promptWait = promptWait + 0.5
+                    end
+                    
+                    task.wait(2)
+                end
+                
+                if not getgenv().WebhookProcessing then
+                    getgenv().WebhookProcessing = true
+                    task.wait(0.5)
+                    sendWebhook()
+                end
+            end
+            
+            lastEndGameUICheck = currentEndGameUIExists
+        end
+    end)
 end)
 
 
