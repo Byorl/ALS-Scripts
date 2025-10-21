@@ -9643,7 +9643,64 @@ task.spawn(function()
                 
                 if getgenv().FinalExpSkipRewardsEnabled then
                     if availableOptions["Click anywhere to continue"] or availableOptions["(Click anywhere to continue)"] then
-                        print("[Final Expedition] Reward screen detected - clicking to skip")
+                        print("[Final Expedition] Reward screen detected - tracking rewards before skip")
+                        
+                        pcall(function()
+                            local promptGui = LocalPlayer.PlayerGui:FindFirstChild("Prompt")
+                            if promptGui then
+                                local promptFrame = promptGui:FindFirstChild("Frame")
+                                if promptFrame then
+                                    local textButton = promptFrame:FindFirstChild("TextButton")
+                                    if textButton then
+                                        local innerFrame = textButton:FindFirstChild("Frame")
+                                        if innerFrame then
+                                            local quantityLabel = innerFrame:FindFirstChild("TextLabel")
+                                            local quantity = "1x"
+                                            if quantityLabel and quantityLabel.Text then
+                                                quantity = quantityLabel.Text
+                                            end
+                                            
+                                            local children = innerFrame:GetChildren()
+                                            if children[5] then
+                                                local frameChain = children[5]:FindFirstChild("Frame")
+                                                if frameChain then
+                                                    frameChain = frameChain:FindFirstChild("Frame")
+                                                    if frameChain then
+                                                        frameChain = frameChain:FindFirstChild("Frame")
+                                                        if frameChain then
+                                                            local textLabels = {}
+                                                            for _, child in ipairs(frameChain:GetChildren()) do
+                                                                if child:IsA("TextLabel") and child.Text and child.Text ~= "" then
+                                                                    table.insert(textLabels, child.Text)
+                                                                end
+                                                            end
+                                                            
+                                                            if #textLabels >= 3 then
+                                                                local chestName = textLabels[1] .. " " .. textLabels[2] .. " " .. textLabels[3]
+                                                                print("[Final Expedition] Chest Reward: " .. quantity .. " " .. chestName)
+                                                                
+                                                                if not getgenv().FinalExpChestRewards then
+                                                                    getgenv().FinalExpChestRewards = {}
+                                                                end
+                                                                
+                                                                if not getgenv().FinalExpChestRewards[chestName] then
+                                                                    getgenv().FinalExpChestRewards[chestName] = 0
+                                                                end
+                                                                
+                                                                local amount = tonumber(quantity:match("%d+")) or 1
+                                                                getgenv().FinalExpChestRewards[chestName] = getgenv().FinalExpChestRewards[chestName] + amount
+                                                            end
+                                                        end
+                                                    end
+                                                end
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+                        end)
+                        
+                        task.wait(0.5)
                         
                         local textButton = frame:FindFirstChild("TextButton")
                         if textButton and textButton.Visible then
@@ -10621,6 +10678,14 @@ do
                 rewardsText = "No rewards found"
             end
             
+            if getgenv().FinalExpChestRewards and next(getgenv().FinalExpChestRewards) then
+                rewardsText = rewardsText .. "\n**Chests:**\n"
+                for chestName, amount in pairs(getgenv().FinalExpChestRewards) do
+                    rewardsText = rewardsText .. "+" .. amount .. "x " .. chestName .. "\n"
+                end
+                getgenv().FinalExpChestRewards = {}
+            end
+            
             local unitsText = ""
             if clientData.Slots then
                 local slots = {"Slot1", "Slot2", "Slot3", "Slot4", "Slot5", "Slot6"}
@@ -10778,27 +10843,47 @@ do
     end
     
     local webhookConnection = nil
+    local lastWebhookTime = 0
+    local WEBHOOK_COOLDOWN = 30
     
     local function setupWebhookTrigger()
         if webhookConnection then
             webhookConnection:Disconnect()
         end
         
-        webhookConnection = LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
+        webhookConnection = trackConnection(LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
             if child.Name == "EndGameUI" and getgenv().WebhookEnabled then
                 if getgenv().WebhookProcessing then
                     return
                 end
+                
+                local isFinalExpedition = false
+                pcall(function()
+                    local gamemode = RS:FindFirstChild("Gamemode")
+                    if gamemode and gamemode.Value == "FinalExpedition" then
+                        isFinalExpedition = true
+                    end
+                end)
+                
+                if isFinalExpedition then
+                    local currentTime = tick()
+                    if currentTime - lastWebhookTime < WEBHOOK_COOLDOWN then
+                        print("[Webhook] Skipping duplicate post in Final Expedition (cooldown active)")
+                        return
+                    end
+                    lastWebhookTime = currentTime
+                end
+                
                 getgenv().WebhookProcessing = true
                 task.wait(2)
                 sendWebhook()
             end
-        end)
+        end))
     end
     
     setupWebhookTrigger()
     
-    LocalPlayer.PlayerGui.ChildRemoved:Connect(function(child)
+    trackConnection(LocalPlayer.PlayerGui.ChildRemoved:Connect(function(child)
         if child.Name == "EndGameUI" then
             task.wait(1)
             if getgenv().WebhookProcessing then
@@ -10806,7 +10891,7 @@ do
                 getgenv().WebhookProcessing = false
             end
         end
-    end)
+    end))
 end)
 
 
