@@ -4,9 +4,16 @@ if not getgenv()._GlobalConnections then
     getgenv()._GlobalConnections = {}
 end
 
+local function trackConnection(connection)
+    if connection then
+        table.insert(getgenv()._GlobalConnections, connection)
+    end
+    return connection
+end
+
 task.spawn(function()
     while true do
-        task.wait(20)
+        task.wait(30)
         pcall(function()
             local cleaned = 0
             for i = #getgenv()._GlobalConnections, 1, -1 do
@@ -414,6 +421,32 @@ Window.onUnloaded(function()
         end
     end)
     
+    pcall(function()
+        if getgenv()._GlobalConnections then
+            for _, conn in pairs(getgenv()._GlobalConnections) do
+                if conn and conn.Disconnect then
+                    conn:Disconnect()
+                end
+            end
+        end
+    end)
+    
+    pcall(function()
+        if getgenv()._PositionHolograms then
+            for _, hologramData in pairs(getgenv()._PositionHolograms) do
+                if hologramData.part then hologramData.part:Destroy() end
+                if hologramData.beam then hologramData.beam:Destroy() end
+            end
+            getgenv()._PositionHolograms = {}
+        end
+    end)
+    
+    pcall(function()
+        if getgenv()._DynamicSummonSections then
+            getgenv()._DynamicSummonSections = {}
+        end
+    end)
+    
     if ConnectionManager then
         ConnectionManager:cleanup()
     end
@@ -428,6 +461,7 @@ Window.onUnloaded(function()
     getgenv().SmartCardPicked = nil
     getgenv().SlowerCardPicked = nil
     getgenv()._GlobalConnections = nil
+    getgenv()._AbilityUIElements = nil
     
     for i = 1, 3 do
         safeGarbageCollect()
@@ -1107,11 +1141,99 @@ local function saveMacroSettings()
     end)
 end
 
+local function saveMacro(name, data)
+    local success, err = pcall(function()
+        writefile(MACRO_FOLDER .. "/" .. name .. ".json", HttpService:JSONEncode(data))
+        getgenv().Macros[name] = data
+    end)
+    if not success then
+        warn("[Macro] Failed to save:", err)
+    end
+    return success
+end
+
+local function convertOldMacroFormat(oldData)
+    local newData = {}
+    local sortedKeys = {}
+    
+    for key in pairs(oldData) do
+        if key ~= "Data" and tonumber(key) then
+            table.insert(sortedKeys, tonumber(key))
+        end
+    end
+    table.sort(sortedKeys)
+    
+    for _, key in ipairs(sortedKeys) do
+        local step = oldData[tostring(key)]
+        if step and step.type then
+            local newStep = {
+                Wave = 1,
+                Time = 0,
+                IsInvoke = false
+            }
+            
+            if step.type == "SpawnUnit" then
+                newStep.RemoteName = "PlaceTower"
+                newStep.ActionType = "Place"
+                
+                local cframeArray = {}
+                if step.cframe then
+                    for num in string.gmatch(step.cframe, "[^,%s]+") do
+                        table.insert(cframeArray, tonumber(num) or 0)
+                    end
+                end
+                
+                newStep.Args = {step.unit, cframeArray}
+                newStep.TowerName = step.unit
+                newStep.Cost = tonumber(step.money) or 0
+                
+            elseif step.type == "UpgradeUnit" then
+                newStep.RemoteName = "Upgrade"
+                newStep.ActionType = "Upgrade"
+                newStep.Args = {}
+                newStep.IsInvoke = true
+                newStep.TowerName = step.unit
+                newStep.Cost = tonumber(step.money) or 0
+                
+            elseif step.type == "SellUnit" then
+                newStep.RemoteName = "Sell"
+                newStep.ActionType = "Sell"
+                newStep.Args = {}
+                newStep.IsInvoke = true
+                newStep.TowerName = step.unit
+                newStep.Cost = 0
+            end
+            
+            table.insert(newData, newStep)
+        end
+    end
+    
+    return newData
+end
+
+local function isOldMacroFormat(data)
+    if type(data) ~= "table" then return false end
+    
+    if data.Data and data.Data.Map and data.Data.RecordMode then
+        return true
+    end
+    
+    for key, value in pairs(data) do
+        if tonumber(key) and type(value) == "table" and value.type and value.money then
+            return true
+        end
+    end
+    
+    return false
+end
+
 local function loadMacros()
     getgenv().Macros = {}
     if not isfolder(MACRO_FOLDER) then return end
     local files = listfiles(MACRO_FOLDER)
     if not files then return end
+    local convertedCount = 0
+    
     for _, file in pairs(files) do
         if file:sub(-5) == ".json" then
             local fileName = file:match("([^/\\]+)%.json$")
@@ -1123,23 +1245,30 @@ local function loadMacros()
                 if ok and type(data) == "table" then
                     local isSettings = (data.playMacroEnabled ~= nil or data.selectedMacro ~= nil or data.macroMaps ~= nil)
                     if not isSettings then
-                        getgenv().Macros[fileName] = data
+                        if isOldMacroFormat(data) then
+                            print("[Macro] Converting old format: " .. fileName)
+                            local convertedData = convertOldMacroFormat(data)
+                            if #convertedData > 0 then
+                                getgenv().Macros[fileName] = convertedData
+                                saveMacro(fileName, convertedData)
+                                convertedCount = convertedCount + 1
+                            end
+                        else
+                            getgenv().Macros[fileName] = data
+                        end
                     end
                 end
             end
         end
     end
-end
-
-local function saveMacro(name, data)
-    local success, err = pcall(function()
-        writefile(MACRO_FOLDER .. "/" .. name .. ".json", HttpService:JSONEncode(data))
-        getgenv().Macros[name] = data
-    end)
-    if not success then
-        warn("[Macro] Failed to save:", err)
+    
+    if convertedCount > 0 then
+        Window:Notify({
+            Title = "Macro Converter",
+            Description = "Converted " .. convertedCount .. " old format macro(s)",
+            Lifetime = 5
+        })
     end
-    return success
 end
 
 local function loadMacro(macroName)
@@ -1155,6 +1284,23 @@ local function loadMacro(macroName)
             return HttpService:JSONDecode(readfile(filePath))
         end)
         if ok and type(data) == "table" then
+            if isOldMacroFormat(data) then
+                print("[Macro] Detected old format macro, converting: " .. macroName)
+                local convertedData = convertOldMacroFormat(data)
+                
+                if #convertedData > 0 then
+                    getgenv().Macros[macroName] = convertedData
+                    saveMacro(macroName, convertedData)
+                    
+                    Window:Notify({
+                        Title = "Macro Converter",
+                        Description = "Converted old format: " .. macroName .. " (" .. #convertedData .. " steps)",
+                        Lifetime = 5
+                    })
+                    
+                    return convertedData
+                end
+            end
             return data
         end
     end
@@ -1241,9 +1387,9 @@ local cashConnection
 pcall(function()
     if LocalPlayer:FindFirstChild("Cash") then
         getgenv().MacroCurrentCash = LocalPlayer.Cash.Value
-        cashConnection = LocalPlayer.Cash:GetPropertyChangedSignal("Value"):Connect(function()
+        cashConnection = trackConnection(LocalPlayer.Cash:GetPropertyChangedSignal("Value"):Connect(function()
             getgenv().MacroCurrentCash = LocalPlayer.Cash.Value
-        end)
+        end))
     end
 end)
 
@@ -1257,7 +1403,7 @@ local function trackCash()
         if LocalPlayer:FindFirstChild("Cash") then
             getgenv().MacroLastCash = LocalPlayer.Cash.Value
             
-            cashTrackingConnection = LocalPlayer.Cash:GetPropertyChangedSignal("Value"):Connect(function()
+            cashTrackingConnection = trackConnection(LocalPlayer.Cash:GetPropertyChangedSignal("Value"):Connect(function()
                 local currentCash = tonumber(LocalPlayer.Cash.Value) or 0
                 local lastCash = tonumber(getgenv().MacroLastCash) or 0
                 
@@ -1281,7 +1427,7 @@ local function trackCash()
                 end
                 
                 getgenv().MacroLastCash = currentCash
-            end)
+            end))
         end
     end)
 end
@@ -1673,6 +1819,7 @@ local function updateGameState()
             getgenv().WukongTrackedClones = {}
             getgenv()._WukongLastSynthesisTime = 0
             getgenv().SkeletonKnightLastUse = 0
+            getgenv().AlucardHypnosisLastUse = 0
             getgenv().SmartCardPicked = {}
             getgenv().SmartCardLastPromptId = nil
             getgenv().SlowerCardPicked = {}
@@ -1847,7 +1994,7 @@ local function setupTowerUpgradeListener(tower)
 end
 
 task.spawn(function()    
-    workspace.Towers.ChildAdded:Connect(function(tower)
+    trackConnection(workspace.Towers.ChildAdded:Connect(function(tower)
         task.spawn(function()
             for attempt = 1, 10 do
                 task.wait(0.1)
@@ -1859,7 +2006,7 @@ task.spawn(function()
                 if owner then return end
             end
         end)
-    end)
+    end))
     
     task.wait(0.5)
     for _, tower in pairs(workspace.Towers:GetChildren()) do
@@ -4043,6 +4190,10 @@ getgenv().SkeletonKnightEnabled = getgenv().Config.toggles.SkeletonKnightToggle 
 getgenv().SkeletonKnightTargetUnit = getgenv().Config.dropdowns.SkeletonKnightTargetUnit or ""
 getgenv().SkeletonKnightLastUse = 0
 
+getgenv().AlucardHypnosisEnabled = getgenv().Config.toggles.AlucardHypnosisToggle or false
+getgenv().AlucardHypnosisTargetUnit = getgenv().Config.dropdowns.AlucardHypnosisTargetUnit or ""
+getgenv().AlucardHypnosisLastUse = 0
+
 getgenv().OneEyeDevilEnabled = getgenv().Config.toggles.OneEyeDevilToggle or false
 getgenv().OneEyeDevilCurrentIndex = 0 
 
@@ -4570,7 +4721,15 @@ local function buildAutoAbilityUI()
                 end
             end
             
-            if hasBulma or hasWukong or hasEtoEvo or hasSkeletonKnightEZA or hasGriffithEclipse then
+            local hasAlucardEvo = false
+            for slotName, slotData in pairs(clientData.Slots) do
+                if slotData.Value == "Alucard2Evo" then
+                    hasAlucardEvo = true
+                    break
+                end
+            end
+            
+            if hasBulma or hasWukong or hasEtoEvo or hasSkeletonKnightEZA or hasGriffithEclipse or hasAlucardEvo then
                 local specialSection = Tabs.Abilities:Section({ Side = "Left" })
                 table.insert(getgenv()._AbilityUIElements["Left"], specialSection)
                 
@@ -4653,7 +4812,7 @@ local function buildAutoAbilityUI()
                         getgenv().SkeletonKnightEnabled
                     )
                     
-                    specialSection:SubLabel({ Text = "Select target from placed towers (updates on ability UI refresh)" })
+                    specialSection:SubLabel({ Text = "Select target from placed towers (auto-updates every 5s)" })
                     
                     local function getAvailableTargets()
                         local targets = {}
@@ -4701,7 +4860,7 @@ local function buildAutoAbilityUI()
                         getgenv().SkeletonKnightTargetUnit = targets[1]
                     end
                     
-                    createDropdown(
+                    local skeletonDropdown = createDropdown(
                         specialSection,
                         "  > Target Unit",
                         "SkeletonKnightTargetUnit",
@@ -4717,10 +4876,121 @@ local function buildAutoAbilityUI()
                         end,
                         getgenv().SkeletonKnightTargetUnit
                     )
+                    
+                    task.spawn(function()
+                        while task.wait(5) do
+                            if not skeletonDropdown then break end
+                            pcall(function()
+                                local newTargets = getAvailableTargets()
+                                if #newTargets > 0 and newTargets[1] ~= "Place a unit first" then
+                                    skeletonDropdown:ClearOptions()
+                                    skeletonDropdown:InsertOptions(newTargets)
+                                end
+                            end)
+                        end
+                    end)
+                end
+                
+                if hasAlucardEvo then
+                    if hasBulma or hasWukong or hasSkeletonKnightEZA then
+                        specialSection:Divider()
+                    end
+                    
+                    createToggle(
+                        specialSection,
+                        "Auto True Dracula Hypnosis",
+                        "AlucardHypnosisToggle",
+                        function(value)
+                            getgenv().AlucardHypnosisEnabled = value
+                            Window:Notify({
+                                Title = "Auto True Dracula Hypnosis",
+                                Description = value and "Enabled" or "Disabled",
+                                Lifetime = 2
+                            })
+                        end,
+                        getgenv().AlucardHypnosisEnabled
+                    )
+                    
+                    specialSection:SubLabel({ Text = "Select target from placed towers (auto-updates every 5s)" })
+                    
+                    local function getAvailableTargetsAlucard()
+                        local targets = {}
+                        
+                        local towers = workspace:FindFirstChild("Towers")
+                        if towers then
+                            for _, tower in pairs(towers:GetChildren()) do
+                                local owner = tower:FindFirstChild("Owner")
+                                if owner and owner.Value == LocalPlayer then
+                                    local towerName = tower.Name
+                                    
+                                    if towerName ~= "Alucard2Evo" and towerName ~= "NarutoBaryonClone" then
+                                        local baseName = towerName:gsub("EZA$", "")
+                                        local displayName = getUnitDisplayName(baseName)
+                                        
+                                        local alreadyExists = false
+                                        for _, existing in ipairs(targets) do
+                                            if existing == displayName then
+                                                alreadyExists = true
+                                                break
+                                            end
+                                        end
+                                        
+                                        if not alreadyExists then
+                                            table.insert(targets, displayName)
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                        
+                        table.sort(targets)
+                        
+                        if #targets == 0 then
+                            table.insert(targets, "Place a unit first")
+                        end
+                        
+                        return targets
+                    end
+                    
+                    local targetsAlucard = getAvailableTargetsAlucard()
+                    
+                    if not getgenv().AlucardHypnosisTargetUnit or getgenv().AlucardHypnosisTargetUnit == "" then
+                        getgenv().AlucardHypnosisTargetUnit = targetsAlucard[1]
+                    end
+                    
+                    local alucardDropdown = createDropdown(
+                        specialSection,
+                        "  > Target Unit",
+                        "AlucardHypnosisTargetUnit",
+                        targetsAlucard,
+                        false,
+                        function(value)
+                            getgenv().AlucardHypnosisTargetUnit = value
+                            Window:Notify({
+                                Title = "Auto True Dracula Hypnosis",
+                                Description = "Target: " .. value,
+                                Lifetime = 2
+                            })
+                        end,
+                        getgenv().AlucardHypnosisTargetUnit
+                    )
+                    
+                    task.spawn(function()
+                        while task.wait(5) do
+                            if not alucardDropdown then break end
+                            pcall(function()
+                                local newTargets = getAvailableTargetsAlucard()
+                                if #newTargets > 0 and newTargets[1] ~= "Place a unit first" then
+                                    alucardDropdown:ClearOptions()
+                                    alucardDropdown:InsertOptions(newTargets)
+                                end
+                            end)
+                        end
+                    end)
                 end
                 
                 if hasEtoEvo then
-                    if hasBulma or hasWukong then
+                    if hasBulma or hasWukong or hasSkeletonKnightEZA or hasAlucardEvo then
                         specialSection:Divider()
                     end
                     
@@ -4741,7 +5011,7 @@ local function buildAutoAbilityUI()
                 end
                 
                 if hasGriffithEclipse then
-                    if hasBulma or hasWukong or hasEtoEvo or hasSkeletonKnightEZA then
+                    if hasBulma or hasWukong or hasEtoEvo or hasSkeletonKnightEZA or hasAlucardEvo then
                         specialSection:Divider()
                     end
                     
@@ -5010,7 +5280,10 @@ getgenv().AutoPlayConfig = getgenv().AutoPlayConfig or {
     distanceFromPath = 0,
     placeCaps = {1, 1, 1, 1, 1, 1},
     upgradeCaps = {0, 0, 0, 0, 0, 0},
-    upgradePriorities = {1, 2, 3, 4, 5, 6}
+    upgradePriorities = {1, 2, 3, 4, 5, 6},
+    autoPlaceAtPosition = false,
+    positionHologram = false,
+    unitPositions = {}
 }
 
 getgenv().AutoPlayConfig.autoPlace = getgenv().Config.toggles.AutoPlayPlace or false
@@ -5046,6 +5319,9 @@ end
 Sections.AutoPlayLeft:Header({ Text = "🤖 Auto Play" })
 Sections.AutoPlayLeft:SubLabel({ Text = "Automated tower placement and upgrades" })
 
+Sections.AutoPlayLeft:Divider()
+Sections.AutoPlayLeft:Header({ Text = "📍 Placement Settings" })
+
 createToggle(
     Sections.AutoPlayLeft,
     "Enable Auto Place",
@@ -5055,6 +5331,21 @@ createToggle(
     end,
     getgenv().AutoPlayConfig.autoPlace
 )
+
+createToggle(
+    Sections.AutoPlayLeft,
+    "Enable Auto Place at Position",
+    "AutoPlayPlaceAtPosition",
+    function(value)
+        getgenv().AutoPlayConfig.autoPlaceAtPosition = value
+    end,
+    getgenv().AutoPlayConfig.autoPlaceAtPosition
+)
+
+Sections.AutoPlayLeft:SubLabel({ Text = "Position mode uses saved unit positions instead of path" })
+
+Sections.AutoPlayLeft:Divider()
+Sections.AutoPlayLeft:Header({ Text = "⬆️ Upgrade Settings" })
 
 local autoUpgradeToggle, autoUpgradePriorityToggle
 
@@ -5096,6 +5387,19 @@ autoUpgradePriorityToggle = createToggle(
 
 createToggle(
     Sections.AutoPlayLeft,
+    "Place Units before Upgrading",
+    "AutoPlayPlaceBeforeUpgrade",
+    function(value)
+        getgenv().AutoPlayConfig.placeBeforeUpgrade = value
+    end,
+    getgenv().AutoPlayConfig.placeBeforeUpgrade
+)
+
+Sections.AutoPlayLeft:Divider()
+Sections.AutoPlayLeft:Header({ Text = "⚙️ Additional Options" })
+
+createToggle(
+    Sections.AutoPlayLeft,
     "Focus Farm Units",
     "AutoPlayFocusFarm",
     function(value)
@@ -5103,6 +5407,8 @@ createToggle(
     end,
     getgenv().AutoPlayConfig.focusFarm
 )
+
+Sections.AutoPlayLeft:SubLabel({ Text = "Prioritize placing farm units first" })
 
 createToggle(
     Sections.AutoPlayLeft,
@@ -5114,17 +5420,10 @@ createToggle(
     getgenv().AutoPlayConfig.hologram
 )
 
-createToggle(
-    Sections.AutoPlayLeft,
-    "Place Units before Upgrading",
-    "AutoPlayPlaceBeforeUpgrade",
-    function(value)
-        getgenv().AutoPlayConfig.placeBeforeUpgrade = value
-    end,
-    getgenv().AutoPlayConfig.placeBeforeUpgrade
-)
+Sections.AutoPlayLeft:SubLabel({ Text = "Show placement preview markers" })
 
 Sections.AutoPlayLeft:Divider()
+Sections.AutoPlayLeft:Header({ Text = "🎯 Path & Distance" })
 
 local pathSlider
 local function updatePathSliderMax()
@@ -5184,6 +5483,178 @@ createSlider(
     "Default",
     0
 )
+
+Sections.AutoPlayLeft:SubLabel({ Text = "Only used when not in position mode" })
+
+Sections.AutoPlayLeft:Divider()
+Sections.AutoPlayLeft:Header({ Text = "📍 Custom Unit Positions" })
+Sections.AutoPlayLeft:SubLabel({ Text = "Stand where you want each unit, then click Set Position" })
+
+createToggle(
+    Sections.AutoPlayLeft,
+    "Enable Position Hologram",
+    "AutoPlayPositionHologram",
+    function(value)
+        getgenv().AutoPlayConfig.positionHologram = value
+        if not value then
+            if getgenv()._PositionHolograms then
+                for _, hologramData in pairs(getgenv()._PositionHolograms) do
+                    pcall(function()
+                        if hologramData.part then hologramData.part:Destroy() end
+                        if hologramData.beam then hologramData.beam:Destroy() end
+                    end)
+                end
+                getgenv()._PositionHolograms = {}
+            end
+        else
+            task.spawn(function()
+                if not getgenv()._PositionHolograms then
+                    getgenv()._PositionHolograms = {}
+                end
+                for i = 1, 6 do
+                    local pos = getgenv().AutoPlayConfig.unitPositions[i]
+                    if pos then
+                        updatePositionHologram(i)
+                    end
+                end
+            end)
+        end
+    end,
+    getgenv().AutoPlayConfig.positionHologram
+)
+
+Sections.AutoPlayLeft:SubLabel({ Text = "Shows markers at saved positions" })
+
+if not getgenv()._PositionHolograms then
+    getgenv()._PositionHolograms = {}
+end
+
+if not getgenv().AutoPlayConfig.unitPositions then
+    getgenv().AutoPlayConfig.unitPositions = {}
+end
+
+local function updatePositionHologram(slotIndex)
+    if not getgenv().AutoPlayConfig.positionHologram then return end
+    
+    pcall(function()
+        if getgenv()._PositionHolograms[slotIndex] then
+            if getgenv()._PositionHolograms[slotIndex].part then
+                getgenv()._PositionHolograms[slotIndex].part:Destroy()
+            end
+            if getgenv()._PositionHolograms[slotIndex].beam then
+                getgenv()._PositionHolograms[slotIndex].beam:Destroy()
+            end
+            getgenv()._PositionHolograms[slotIndex] = nil
+        end
+        
+        local pos = getgenv().AutoPlayConfig.unitPositions[slotIndex]
+        if pos then
+            local part = Instance.new("Part")
+            part.Size = Vector3.new(0.5, 0.5, 0.5)
+            part.Position = pos + Vector3.new(0, 2, 0)
+            part.Anchored = true
+            part.CanCollide = false
+            part.Transparency = 0.5
+            part.Color = Color3.fromRGB(0, 255, 100)
+            part.Material = Enum.Material.Neon
+            part.Shape = Enum.PartType.Ball
+            part.Parent = workspace
+            
+            local beam = Instance.new("Part")
+            beam.Size = Vector3.new(0.2, 4, 0.2)
+            beam.Position = pos
+            beam.Anchored = true
+            beam.CanCollide = false
+            beam.Transparency = 0.6
+            beam.Color = Color3.fromRGB(0, 255, 100)
+            beam.Material = Enum.Material.Neon
+            beam.Parent = workspace
+            
+            local billboard = Instance.new("BillboardGui")
+            billboard.Size = UDim2.new(0, 120, 0, 30)
+            billboard.StudsOffset = Vector3.new(0, 3, 0)
+            billboard.AlwaysOnTop = true
+            billboard.Parent = part
+            
+            local label = Instance.new("TextLabel")
+            label.Size = UDim2.new(1, 0, 1, 0)
+            label.BackgroundTransparency = 0.3
+            label.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+            label.Text = "Unit " .. slotIndex
+            label.TextColor3 = Color3.fromRGB(0, 255, 100)
+            label.TextScaled = true
+            label.Font = Enum.Font.GothamBold
+            label.Parent = billboard
+            
+            local corner = Instance.new("UICorner")
+            corner.CornerRadius = UDim.new(0, 4)
+            corner.Parent = label
+            
+            getgenv()._PositionHolograms[slotIndex] = {
+                part = part,
+                beam = beam
+            }
+        end
+    end)
+end
+
+for i = 1, 6 do
+    Sections.AutoPlayLeft:Label({ Text = "Unit " .. i })
+    
+    Sections.AutoPlayLeft:Button({
+        Name = "  Set Position",
+        Callback = function()
+            local char = LocalPlayer.Character
+            if char and char:FindFirstChild("HumanoidRootPart") then
+                local pos = char.HumanoidRootPart.Position
+                getgenv().AutoPlayConfig.unitPositions[i] = pos
+                
+                updatePositionHologram(i)
+                
+                Window:Notify({
+                    Title = "Position Set",
+                    Description = "Unit " .. i .. " position saved!",
+                    Lifetime = 2
+                })
+            else
+                Window:Notify({
+                    Title = "Error",
+                    Description = "Character not found!",
+                    Lifetime = 2
+                })
+            end
+        end
+    })
+    
+    Sections.AutoPlayLeft:Button({
+        Name = "  Reset Position",
+        Callback = function()
+            getgenv().AutoPlayConfig.unitPositions[i] = nil
+            
+            if getgenv()._PositionHolograms[i] then
+                pcall(function()
+                    if getgenv()._PositionHolograms[i].part then
+                        getgenv()._PositionHolograms[i].part:Destroy()
+                    end
+                    if getgenv()._PositionHolograms[i].beam then
+                        getgenv()._PositionHolograms[i].beam:Destroy()
+                    end
+                end)
+                getgenv()._PositionHolograms[i] = nil
+            end
+            
+            Window:Notify({
+                Title = "Position Reset",
+                Description = "Unit " .. i .. " position cleared!",
+                Lifetime = 2
+            })
+        end
+    })
+    
+    if i < 6 then
+        Sections.AutoPlayLeft:Spacer()
+    end
+end
 
 Sections.AutoPlayRight:Header({ Text = "⚙️ Auto Place & Upgrade Settings" })
 Sections.AutoPlayRight:SubLabel({ Text = "Configure placement and upgrade caps per slot" })
@@ -5674,7 +6145,7 @@ Sections.MacroLeft:Divider()
 Sections.MacroLeft:Header({ Text = "🎬 Recording & Playback" })
 Sections.MacroLeft:SubLabel({ Text = "Record new macros or play existing ones" })
 
-local macroRecordToggle = createToggleNoSave(
+getgenv().MacroRecordToggle = createToggleNoSave(
     Sections.MacroLeft,
     "Record Macro",
     "MacroRecordToggle",
@@ -5687,7 +6158,7 @@ local macroRecordToggle = createToggleNoSave(
                     Lifetime = 3
                 })
                 pcall(function()
-                    macroRecordToggle:UpdateState(false)
+                    getgenv().MacroRecordToggle:UpdateState(false)
                 end)
                 return
             end
@@ -8287,17 +8758,144 @@ do
             task.wait(5)
         end
     end)
+    
+    task.spawn(function()
+        task.wait(2)
+        
+        local function getAlucardTower()
+            local towers = workspace:FindFirstChild("Towers")
+            if not towers then 
+                return nil 
+            end
+            
+            for _, tower in pairs(towers:GetChildren()) do
+                local owner = tower:FindFirstChild("Owner")
+                if tower.Name == "Alucard2Evo" and owner and owner.Value == LocalPlayer then
+                    return tower
+                end
+            end
+            
+            return nil
+        end
+        
+        local function getTargetTowerByDisplayNameAlucard(displayName)
+            if not displayName or displayName == "" or displayName == "No units placed yet" or displayName == "Place a unit first" then 
+                return nil 
+            end
+            
+            local towers = workspace:FindFirstChild("Towers")
+            if not towers then return nil end
+            
+            for _, tower in pairs(towers:GetChildren()) do
+                local owner = tower:FindFirstChild("Owner")
+                if owner and owner.Value == LocalPlayer then
+                    local towerName = tower.Name
+                    local baseName = towerName:gsub("EZA$", "")
+                    local towerDisplayName = getUnitDisplayName(baseName)
+                    
+                    if towerDisplayName == displayName then
+                        return tower
+                    end
+                end
+            end
+            
+            return nil
+        end
+        
+        
+        while true do
+            task.wait(1)
+                        
+            if not getgenv().AlucardHypnosisEnabled then
+                task.wait(2)
+                continue
+            end
+            
+            local alucardTower = getAlucardTower()
+            if not alucardTower then
+                task.wait(2)
+                continue
+            end
+            
+            local upgrade = alucardTower:FindFirstChild("Upgrade")
+            if not upgrade then
+                task.wait(2)
+                continue
+            end
+            
+            local requiredLevel = 0
+            
+            if upgrade.Value < requiredLevel then
+                task.wait(2)
+                continue
+            end
+            
+            local currentTime = tick()
+            local baseCooldown = 200
+            local timeScale = getCurrentTimeScale()
+            local effectiveCooldown = baseCooldown / timeScale
+            local timeSinceLastUse = currentTime - (getgenv().AlucardHypnosisLastUse or 0)
+            
+            if timeSinceLastUse < effectiveCooldown then
+                task.wait(1)
+                continue
+            end
+            
+            if not getgenv().AlucardHypnosisTargetUnit or getgenv().AlucardHypnosisTargetUnit == "" then
+                task.wait(5)
+                continue
+            end
+            
+            local targetTower = getTargetTowerByDisplayNameAlucard(getgenv().AlucardHypnosisTargetUnit)
+            if not targetTower then
+                task.wait(5)
+                continue
+            end
+            
+            if not targetTower.Parent then
+                task.wait(5)
+                continue
+            end
+                        
+            local success, err = pcall(function()
+                local AbilityEvent = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("Ability")
+                if not AbilityEvent then
+                    AbilityEvent = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("Ability")
+                end
+                
+                if AbilityEvent then
+                    local result = AbilityEvent:InvokeServer(alucardTower, "Hypnosis")                    
+                    task.wait(0.5)
+                    
+                    local SelectUnitEvent = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("AbilityRemotes") and RS.Remotes.AbilityRemotes:FindFirstChild("SelectUnitInWorkspace")
+                    if SelectUnitEvent then
+                        SelectUnitEvent:FireServer(targetTower)
+                        
+                        getgenv().AlucardHypnosisLastUse = tick()
+                        
+                        Window:Notify({
+                            Title = "Auto True Dracula Hypnosis",
+                            Description = "Hypnosis used on " .. getgenv().AlucardHypnosisTargetUnit,
+                            Lifetime = 3
+                        })
+                    end
+                end
+            end)
+            task.wait(5)
+        end
+    end)
 end
 
 
 do
     task.spawn(function()
-        LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
+        trackConnection(LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
         if child.Name == "EndGameUI" then
             getgenv().BulmaWishUsedThisRound = false
             getgenv().WukongTrackedClones = {}
             getgenv()._WukongLastSynthesisTime = 0
             getgenv().SkeletonKnightLastUse = 0
+            getgenv().AlucardHypnosisLastUse = 0
             getgenv().OneEyeDevilCurrentIndex = 0 
             
             if getgenv()._EtoEvoAbilityUsed then
@@ -8305,8 +8903,47 @@ do
             end
             
             getgenv().GriffithLightUsedThisRound = false
+            
+            if getgenv().MacroRecordingV2 then
+                task.spawn(function()
+                    task.wait(1)
+                    
+                    getgenv().MacroRecordingV2 = false
+                    
+                    if #getgenv().MacroDataV2 > 0 and getgenv().CurrentMacro then
+                        local success = saveMacro(getgenv().CurrentMacro, getgenv().MacroDataV2)
+                        if success then
+                            Window:Notify({
+                                Title = "Macro Recording",
+                                Description = "Auto-saved " .. #getgenv().MacroDataV2 .. " steps (game ended)",
+                                Lifetime = 5
+                            })
+                        else
+                            Window:Notify({
+                                Title = "Macro Recording",
+                                Description = "Failed to auto-save macro",
+                                Lifetime = 3
+                            })
+                        end
+                    end
+                    
+                    getgenv().MacroStatusText = "Idle"
+                    getgenv().MacroCurrentStep = 0
+                    getgenv().MacroTotalSteps = 0
+                    
+                    if getgenv().UpdateMacroStatus then
+                        getgenv().UpdateMacroStatus()
+                    end
+                    
+                    pcall(function()
+                        if getgenv().MacroRecordToggle then
+                            getgenv().MacroRecordToggle:UpdateState(false)
+                        end
+                    end)
+                end)
+            end
         end
-    end)
+    end))
     end)
 end
 
@@ -8903,6 +9540,7 @@ do
                     getgenv().WukongTrackedClones = {}
                     getgenv()._WukongLastSynthesisTime = 0
                     getgenv().SkeletonKnightLastUse = 0
+                    getgenv().AlucardHypnosisLastUse = 0
                     getgenv().OneEyeDevilCurrentIndex = 0 
                     getgenv().GriffithLightUsedThisRound = false
                 end
@@ -11189,10 +11827,16 @@ if not isInLobby then
         repeat 
             task.wait(0.5) 
             maxWait = maxWait + 0.5 
-        until LocalPlayer.PlayerGui:FindFirstChild("Settings") or maxWait > 30
+            local settings = LocalPlayer.PlayerGui:FindFirstChild("Settings")
+            if settings and settings:FindFirstChild("SeamlessRetry") then
+                break
+            end
+        until maxWait > 30
         
-        if not LocalPlayer.PlayerGui:FindFirstChild("Settings") then
-            warn("[Seamless Fix] Settings GUI not found after 30s, seamless fix may not work")
+        local settings = LocalPlayer.PlayerGui:FindFirstChild("Settings")
+        if not settings or not settings:FindFirstChild("SeamlessRetry") then
+            warn("[Seamless Fix] Settings.SeamlessRetry not found after 30s, seamless fix may not work")
+            warn("[Seamless Fix] Expected path: PlayerGui.Settings.SeamlessRetry")
             return
         end
         
@@ -11746,6 +12390,13 @@ if not isInLobby then
         end
         
         local function getPlacementPosition(slotNum, waypointIndex, distance)
+            if getgenv().AutoPlayConfig.autoPlaceAtPosition then
+                local customPos = getgenv().AutoPlayConfig.unitPositions[slotNum]
+                if customPos then
+                    return CFrame.new(customPos)
+                end
+            end
+            
             local waypoints = getWaypoints()
             if #waypoints == 0 then return nil end
             
