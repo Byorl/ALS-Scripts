@@ -1838,6 +1838,24 @@ local function updateGameState()
                 getgenv()._EtoEvoAbilityUsed = {}
             end
             
+            if getgenv().FinalExpChestRewards then
+                getgenv().FinalExpChestRewards = nil
+            end
+            
+            if getgenv()._WebhookInitialData then
+                getgenv()._WebhookInitialData = nil
+            end
+            
+            if getgenv().MacroActionsV2 and #getgenv().MacroActionsV2 > 500 then
+                print("[Memory] MacroActionsV2 has " .. #getgenv().MacroActionsV2 .. " actions, clearing old ones")
+                local temp = {}
+                local startIdx = math.max(1, #getgenv().MacroActionsV2 - 300)
+                for i = startIdx, #getgenv().MacroActionsV2 do
+                    table.insert(temp, getgenv().MacroActionsV2[i])
+                end
+                getgenv().MacroActionsV2 = temp
+            end
+            
             pcall(function()
                 for i = 1, 3 do
                     safeGarbageCollect()
@@ -5164,9 +5182,11 @@ task.spawn(function()
                                 local summonSection = Tabs.Abilities:Section({ Side = "Right" })
                                 table.insert(getgenv()._AbilityUIElements["Right"], summonSection)
                                 
-                                summonSection:Header({ Text = "🔮 " .. displayName .. " (Summon)" })
-                                summonSection:SubLabel({ Text = "Auto-detected summon unit" })
-                                summonSection:Divider()
+                                local headerElement = summonSection:Header({ Text = "🔮 " .. displayName .. " (Summon)" })
+                                local sublabelElement = summonSection:SubLabel({ Text = "Auto-detected summon unit" })
+                                local dividerElement = summonSection:Divider()
+                                
+                                local sectionElements = {headerElement, sublabelElement, dividerElement}
                                 
                                 if not getgenv().UnitAbilities then getgenv().UnitAbilities = {} end
                                 if not getgenv().UnitAbilities[unitName] then getgenv().UnitAbilities[unitName] = {} end
@@ -5206,7 +5226,7 @@ task.spawn(function()
                                     local cdText = abilityData.cooldown and ("CD: " .. abilityData.cooldown .. "s") or ""
                                     local globalText = abilityData.isGlobal and " (Global)" or ""
                                     
-                                    createToggle(
+                                    local toggleElement = createToggle(
                                         summonSection,
                                         "⚡ " .. abilityName .. " (" .. cdText .. ")" .. globalText,
                                         unitName .. "_" .. abilityName .. "_Toggle",
@@ -5219,6 +5239,7 @@ task.spawn(function()
                                         end,
                                         cfg.enabled
                                     )
+                                    table.insert(sectionElements, toggleElement)
                                 end
                                 
                                 if not getgenv()._DynamicSummonSections then
@@ -5227,7 +5248,7 @@ task.spawn(function()
                                 
                                 getgenv()._DynamicSummonSections[unitName] = {
                                     section = summonSection,
-                                    elements = {}
+                                    elements = sectionElements
                                 }
                                 trackedSummons[unitName] = true
                                 
@@ -5248,6 +5269,19 @@ task.spawn(function()
                     if getgenv()._DynamicSummonSections and getgenv()._DynamicSummonSections[unitName] then
                         pcall(function()
                             local sectionData = getgenv()._DynamicSummonSections[unitName]
+                            
+                            if sectionData and sectionData.elements then
+                                for _, element in ipairs(sectionData.elements) do
+                                    pcall(function()
+                                        if element and element.SetVisiblity then
+                                            element:SetVisiblity(false)
+                                        elseif element and element.SetVisibility then
+                                            element:SetVisibility(false)
+                                        end
+                                    end)
+                                end
+                            end
+                            
                             if sectionData and sectionData.section then
                                 for i = #getgenv()._AbilityUIElements["Right"], 1, -1 do
                                     if getgenv()._AbilityUIElements["Right"][i] == sectionData.section then
@@ -10978,7 +11012,24 @@ do
                 end
                 
                 getgenv().WebhookProcessing = true
-                task.wait(2)
+                
+                local promptClosed = false
+                local maxWait = 0
+                task.spawn(function()
+                    while maxWait < 3 and not promptClosed do
+                        task.wait(0.1)
+                        maxWait = maxWait + 0.1
+                        if not LocalPlayer.PlayerGui:FindFirstChild("Prompt") then
+                            promptClosed = true
+                        end
+                    end
+                end)
+                
+                while not promptClosed and maxWait < 3 do
+                    task.wait(0.1)
+                end
+                
+                task.wait(0.5)
                 sendWebhook()
             end
         end))
@@ -12210,6 +12261,55 @@ do
                 vu:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
             end
         end)
+    end)
+end
+
+do
+    task.spawn(function()
+        while true do
+            task.wait(300) 
+            
+            pcall(function()
+                if towerTracker and towerTracker.upgradeConnections then
+                    for tower, conn in pairs(towerTracker.upgradeConnections) do
+                        if not tower or not tower.Parent then
+                            if conn then conn:Disconnect() end
+                            towerTracker.upgradeConnections[tower] = nil
+                        end
+                    end
+                end
+                
+                if getgenv()._DynamicSummonSections then
+                    for unitName, data in pairs(getgenv()._DynamicSummonSections) do
+                        local stillExists = false
+                        if workspace:FindFirstChild("Towers") then
+                            for _, tower in pairs(workspace.Towers:GetChildren()) do
+                                if tower.Name == unitName then
+                                    local owner = tower:FindFirstChild("Owner")
+                                    if owner and owner.Value == LocalPlayer then
+                                        stillExists = true
+                                        break
+                                    end
+                                end
+                            end
+                        end
+                        
+                        if not stillExists and data.elements then
+                            for _, element in ipairs(data.elements) do
+                                pcall(function()
+                                    if element and element.SetVisiblity then
+                                        element:SetVisiblity(false)
+                                    end
+                                end)
+                            end
+                            getgenv()._DynamicSummonSections[unitName] = nil
+                        end
+                    end
+                end
+                
+                safeGarbageCollect()
+            end)
+        end
     end)
 end
 
