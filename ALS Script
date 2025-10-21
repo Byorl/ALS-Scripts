@@ -4880,7 +4880,7 @@ task.spawn(function()
                     if isSummonUnit(unitName) and not isSummonBlacklisted(unitName) then
                         currentSummons[unitName] = true
                         
-                        if not trackedSummons[unitName] then
+                        if not trackedSummons[unitName] and not getgenv()._DynamicSummonSections[unitName] then
                             
                             local abilities = getAllAbilities(unitName)
                             
@@ -4947,7 +4947,14 @@ task.spawn(function()
                                     )
                                 end
                                 
-                                getgenv()._DynamicSummonSections[unitName] = summonSection
+                                if not getgenv()._DynamicSummonSections then
+                                    getgenv()._DynamicSummonSections = {}
+                                end
+                                
+                                getgenv()._DynamicSummonSections[unitName] = {
+                                    section = summonSection,
+                                    elements = {}
+                                }
                                 trackedSummons[unitName] = true
                                 
                                 Window:Notify({
@@ -4964,14 +4971,22 @@ task.spawn(function()
             for unitName, _ in pairs(trackedSummons) do
                 if not currentSummons[unitName] then
                     
-                    if getgenv()._DynamicSummonSections[unitName] then
+                    if getgenv()._DynamicSummonSections and getgenv()._DynamicSummonSections[unitName] then
                         pcall(function()
-                            getgenv()._DynamicSummonSections[unitName]:Destroy()
+                            local sectionData = getgenv()._DynamicSummonSections[unitName]
+                            if sectionData and sectionData.section then
+                                for i = #getgenv()._AbilityUIElements["Right"], 1, -1 do
+                                    if getgenv()._AbilityUIElements["Right"][i] == sectionData.section then
+                                        table.remove(getgenv()._AbilityUIElements["Right"], i)
+                                        break
+                                    end
+                                end
+                            end
                         end)
                         getgenv()._DynamicSummonSections[unitName] = nil
                     end
                     
-                    if getgenv().UnitAbilities[unitName] then
+                    if getgenv().UnitAbilities and getgenv().UnitAbilities[unitName] then
                         getgenv().UnitAbilities[unitName] = nil
                     end
                     
