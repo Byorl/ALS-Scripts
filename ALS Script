@@ -13,7 +13,7 @@ end
 
 task.spawn(function()
     while true do
-        task.wait(30)
+        task.wait(15)
         pcall(function()
             local cleaned = 0
             for i = #getgenv()._GlobalConnections, 1, -1 do
@@ -24,28 +24,46 @@ task.spawn(function()
                 end
             end
             
-            if getgenv().MacroCashHistory and #getgenv().MacroCashHistory > 10 then
+            if getgenv().MacroCashHistory and #getgenv().MacroCashHistory > 5 then
                 local temp = {}
-                for i = 1, 10 do
+                for i = 1, 5 do
                     temp[i] = getgenv().MacroCashHistory[i]
                 end
                 getgenv().MacroCashHistory = temp
             end
             
-            if getgenv().SmartCardPicked and #getgenv().SmartCardPicked > 5 then
+            if getgenv().SmartCardPicked and #getgenv().SmartCardPicked > 3 then
                 getgenv().SmartCardPicked = {}
             end
             
-            if getgenv().SlowerCardPicked and #getgenv().SlowerCardPicked > 5 then
+            if getgenv().SlowerCardPicked and #getgenv().SlowerCardPicked > 3 then
                 getgenv().SlowerCardPicked = {}
             end
             
-            if getgenv().MacroDataV2 and #getgenv().MacroDataV2 > 1000 and not getgenv().MacroRecordingV2 then
+            if getgenv().MacroDataV2 and #getgenv().MacroDataV2 > 500 and not getgenv().MacroRecordingV2 then
                 local temp = {}
-                for i = 1, 500 do
-                    temp[i] = getgenv().MacroDataV2[i]
+                for i = math.max(1, #getgenv().MacroDataV2 - 250), #getgenv().MacroDataV2 do
+                    table.insert(temp, getgenv().MacroDataV2[i])
                 end
                 getgenv().MacroDataV2 = temp
+            end
+            
+            if getgenv().MacroActionsV2 and #getgenv().MacroActionsV2 > 200 and not getgenv().MacroRecordingV2 then
+                local temp = {}
+                for i = math.max(1, #getgenv().MacroActionsV2 - 100), #getgenv().MacroActionsV2 do
+                    table.insert(temp, getgenv().MacroActionsV2[i])
+                end
+                getgenv().MacroActionsV2 = temp
+            end
+            
+            if not getgenv().MacroPlaybackActive and getgenv().MacroPlaybackMacroData then
+                getgenv().MacroPlaybackMacroData = nil
+            end
+            
+            if getgenv()._lastWebhookHashList and #getgenv()._lastWebhookHashList > 5 then
+                while #getgenv()._lastWebhookHashList > 3 do
+                    table.remove(getgenv()._lastWebhookHashList, 1)
+                end
             end
             
             if getgenv().WukongTrackedClones then
@@ -56,28 +74,38 @@ task.spawn(function()
                 end
             end
             
-            collectgarbage("collect")
-            
-            local heartbeatConns = 0
-            for _, conn in pairs(getconnections(game:GetService("RunService").Heartbeat)) do
-                if conn.Function then
-                    heartbeatConns = heartbeatConns + 1
+            if getgenv()._PositionHolograms then
+                for key, hologramData in pairs(getgenv()._PositionHolograms) do
+                    if hologramData.part and not hologramData.part.Parent then
+                        if hologramData.part then pcall(function() hologramData.part:Destroy() end) end
+                        if hologramData.beam then pcall(function() hologramData.beam:Destroy() end) end
+                        getgenv()._PositionHolograms[key] = nil
+                    end
                 end
             end
             
-            if heartbeatConns > 50 then
-                print("[Memory] WARNING: " .. heartbeatConns .. " Heartbeat connections detected!")
-                local disconnected = 0
+            local heartbeatConns = 0
+            if getconnections then
                 for _, conn in pairs(getconnections(game:GetService("RunService").Heartbeat)) do
-                    if disconnected >= 20 then break end
-                    pcall(function()
-                        if conn.Function and not conn.Disabled then
-                            conn:Disable()
-                            disconnected = disconnected + 1
-                        end
-                    end)
+                    if conn.Function then
+                        heartbeatConns = heartbeatConns + 1
+                    end
                 end
-                print("[Memory] Disabled " .. disconnected .. " old Heartbeat connections")
+                
+                if heartbeatConns > 30 then
+                    print("[Memory] WARNING: " .. heartbeatConns .. " Heartbeat connections detected!")
+                    local disconnected = 0
+                    for _, conn in pairs(getconnections(game:GetService("RunService").Heartbeat)) do
+                        if disconnected >= 15 then break end
+                        pcall(function()
+                            if conn.Function and not conn.Disabled then
+                                conn:Disable()
+                                disconnected = disconnected + 1
+                            end
+                        end)
+                    end
+                    print("[Memory] Disabled " .. disconnected .. " old Heartbeat connections")
+                end
             end
             
             if cleaned > 0 then
@@ -88,7 +116,7 @@ task.spawn(function()
             local debrisFolder = workspace:FindFirstChild("Debris")
             if debrisFolder then
                 local debrisCount = #debrisFolder:GetChildren()
-                if debrisCount > 50 then
+                if debrisCount > 30 then
                     for _, item in pairs(debrisFolder:GetChildren()) do
                         pcall(function() item:Destroy() end)
                     end
@@ -111,9 +139,8 @@ task.spawn(function()
             end
             
             collectgarbage("collect")
-            collectgarbage("collect")
             
-            print("[Memory] Cleanup complete - Heartbeat: " .. heartbeatConns)
+            print("[Memory] Cleanup complete - Heartbeat: " .. heartbeatConns .. " | Connections: " .. #getgenv()._GlobalConnections)
         end)
     end
 end)
@@ -151,7 +178,11 @@ if not getgenv()._AutoRejoinSetup then
         end
     end
     
-    game:GetService("CoreGui").ChildAdded:Connect(function(child)
+    if not getgenv()._AutoRejoinConnections then
+        getgenv()._AutoRejoinConnections = {}
+    end
+    
+    table.insert(getgenv()._AutoRejoinConnections, game:GetService("CoreGui").ChildAdded:Connect(function(child)
         if child.Name == "RobloxPromptGui" then
             task.wait(0.5)
             
@@ -178,21 +209,21 @@ if not getgenv()._AutoRejoinSetup then
                 end
             end
         end
-    end)
+    end))
     
-    game:GetService("GuiService").ErrorMessageChanged:Connect(function()
+    table.insert(getgenv()._AutoRejoinConnections, game:GetService("GuiService").ErrorMessageChanged:Connect(function()
         print("[Auto Rejoin] Error message detected, rejoining...")
         task.wait(1)
         autoRejoin()
-    end)
+    end))
     
-    LocalPlayer.OnTeleport:Connect(function(State)
+    table.insert(getgenv()._AutoRejoinConnections, LocalPlayer.OnTeleport:Connect(function(State)
         if State == Enum.TeleportState.Failed then
             print("[Auto Rejoin] Teleport failed, rejoining...")
             task.wait(2)
             autoRejoin()
         end
-    end)
+    end))
     
     print("[Auto Rejoin] System active - will auto-rejoin on any disconnect")
 end
@@ -428,6 +459,18 @@ Window.onUnloaded(function()
                     conn:Disconnect()
                 end
             end
+            getgenv()._GlobalConnections = {}
+        end
+    end)
+    
+    pcall(function()
+        if getgenv()._AutoRejoinConnections then
+            for _, conn in pairs(getgenv()._AutoRejoinConnections) do
+                if conn and conn.Disconnect then
+                    conn:Disconnect()
+                end
+            end
+            getgenv()._AutoRejoinConnections = {}
         end
     end)
     
@@ -457,10 +500,12 @@ Window.onUnloaded(function()
     getgenv().MacroRemoteCache = nil
     getgenv().MacroCashHistory = nil
     getgenv().MacroDataV2 = nil
+    getgenv().MacroActionsV2 = nil
+    getgenv().MacroPlaybackMacroData = nil
     getgenv().WukongTrackedClones = nil
     getgenv().SmartCardPicked = nil
     getgenv().SlowerCardPicked = nil
-    getgenv()._GlobalConnections = nil
+    getgenv()._lastWebhookHashList = nil
     getgenv()._AbilityUIElements = nil
     
     for i = 1, 3 do
@@ -475,6 +520,7 @@ task.spawn(function()
     local highPingCount = 0
     local connectionCheckCount = 0
     local startTime = tick()
+    local lastMemoryCleanup = tick()
     
     while task.wait(5) do
         pcall(function()
@@ -500,9 +546,10 @@ task.spawn(function()
                 print(string.format("[Network] Uptime: %.1fh | Ping: %dms", uptime, math.floor(ping)))
             end
             
-            if uptime > 5.5 then
-                print("[Network] 5.5h uptime - preemptive memory cleanup")
+            if uptime > 2 and (tick() - lastMemoryCleanup) > 1800 then
+                print("[Network] 30min since last cleanup - running memory cleanup")
                 safeGarbageCollect()
+                lastMemoryCleanup = tick()
             end
             
             lastPing = ping
@@ -1420,7 +1467,7 @@ end
 getgenv().MacroCurrentCash = 0
 getgenv().MacroLastCash = 0
 getgenv().MacroCashHistory = {}
-local MAX_CASH_HISTORY = 30
+local MAX_CASH_HISTORY = 5
 
 local cashConnection
 pcall(function()
@@ -2145,6 +2192,12 @@ local function processRemoteCall(remoteName, method, args)
                     return
                 end
                 
+                if #getgenv().MacroDataV2 >= 5000 then
+                    warn("[Macro] Recording limit reached (5000 steps). Stopping recording.")
+                    getgenv().MacroRecordingV2 = false
+                    return
+                end
+                
                 table.insert(getgenv().MacroDataV2, {
                     RemoteName = remoteName,
                     Args = savedArgs,
@@ -2321,6 +2374,11 @@ local function setupRecordingHook()
                                 cost = getgenv().GetPlaceCost(towerName)
                             end
                             
+                            if #getgenv().MacroDataV2 >= 5000 then
+                                warn("[Macro] Recording limit reached (5000 steps). Stopping recording.")
+                                getgenv().MacroRecordingV2 = false
+                                return
+                            end
                             
                             local cframe = newestTower:GetPivot()
                             local savedArgs = {towerName, {cframe:GetComponents()}}
@@ -3075,6 +3133,7 @@ local function playMacroV2()
         end
         
         getgenv().MacroPlaybackActive = false
+        getgenv().MacroPlaybackMacroData = nil
     end)
 end
 
@@ -5606,6 +5665,9 @@ getgenv().AutoPlayConfig = getgenv().AutoPlayConfig or {
     unitPositions = {}
 }
 
+getgenv().Config.autoPlay = getgenv().Config.autoPlay or {}
+getgenv().Config.autoPlay.unitPositions = getgenv().Config.autoPlay.unitPositions or {}
+
 getgenv().AutoPlayConfig.autoPlace = getgenv().Config.toggles.AutoPlayPlace or false
 getgenv().AutoPlayConfig.autoUpgrade = getgenv().Config.toggles.AutoPlayUpgrade or false
 getgenv().AutoPlayConfig.autoUpgradePriority = getgenv().Config.toggles.AutoPlayUpgradePriority or false
@@ -5614,6 +5676,13 @@ getgenv().AutoPlayConfig.hologram = getgenv().Config.toggles.AutoPlayHologram or
 getgenv().AutoPlayConfig.placeBeforeUpgrade = getgenv().Config.toggles.AutoPlayPlaceBeforeUpgrade or false
 getgenv().AutoPlayConfig.pathPercentage = tonumber(getgenv().Config.inputs.AutoPlayPathPercentage) or 1
 getgenv().AutoPlayConfig.distanceFromPath = tonumber(getgenv().Config.inputs.AutoPlayDistanceFromPath) or 0
+
+for i = 1, 6 do
+    if getgenv().Config.autoPlay.unitPositions[i] then
+        local savedPos = getgenv().Config.autoPlay.unitPositions[i]
+        getgenv().AutoPlayConfig.unitPositions[i] = Vector3.new(savedPos.X, savedPos.Y, savedPos.Z)
+    end
+end
 
 for i = 1, 6 do
     local savedCap = tonumber(getgenv().Config.inputs["AutoPlayPlaceCap" .. i])
@@ -5658,11 +5727,19 @@ createToggle(
     "AutoPlayPlaceAtPosition",
     function(value)
         getgenv().AutoPlayConfig.autoPlaceAtPosition = value
+        
+        if value and not getgenv().AutoPlayConfig.autoPlace then
+            Window:Notify({
+                Title = "Auto Place at Position",
+                Description = "Remember to also enable 'Auto Place' above!",
+                Lifetime = 4
+            })
+        end
     end,
     getgenv().AutoPlayConfig.autoPlaceAtPosition
 )
 
-Sections.AutoPlayLeft:SubLabel({ Text = "Position mode uses saved unit positions instead of path" })
+Sections.AutoPlayLeft:SubLabel({ Text = "Requires 'Auto Place' enabled. Uses saved positions instead of path" })
 
 Sections.AutoPlayLeft:Divider()
 Sections.AutoPlayLeft:Header({ Text = "⬆️ Upgrade Settings" })
@@ -5810,47 +5887,26 @@ Sections.AutoPlayLeft:Divider()
 Sections.AutoPlayLeft:Header({ Text = "📍 Custom Unit Positions" })
 Sections.AutoPlayLeft:SubLabel({ Text = "Stand where you want each unit, then click Set Position" })
 
-createToggle(
-    Sections.AutoPlayLeft,
-    "Enable Position Hologram",
-    "AutoPlayPositionHologram",
-    function(value)
-        getgenv().AutoPlayConfig.positionHologram = value
-        if not value then
-            if getgenv()._PositionHolograms then
-                for _, hologramData in pairs(getgenv()._PositionHolograms) do
-                    pcall(function()
-                        if hologramData.part then hologramData.part:Destroy() end
-                        if hologramData.beam then hologramData.beam:Destroy() end
-                    end)
-                end
-                getgenv()._PositionHolograms = {}
-            end
-        else
-            task.spawn(function()
-                if not getgenv()._PositionHolograms then
-                    getgenv()._PositionHolograms = {}
-                end
-                for i = 1, 6 do
-                    local pos = getgenv().AutoPlayConfig.unitPositions[i]
-                    if pos then
-                        updatePositionHologram(i)
-                    end
-                end
-            end)
-        end
-    end,
-    getgenv().AutoPlayConfig.positionHologram
-)
-
-Sections.AutoPlayLeft:SubLabel({ Text = "Shows markers at saved positions" })
-
 if not getgenv()._PositionHolograms then
     getgenv()._PositionHolograms = {}
 end
 
 if not getgenv().AutoPlayConfig.unitPositions then
     getgenv().AutoPlayConfig.unitPositions = {}
+end
+
+local function getUnitNameForSlot(slotIndex)
+    local clientData = getClientData()
+    if not clientData or not clientData.Slots then return nil end
+    
+    local sortedSlots = {"Slot1", "Slot2", "Slot3", "Slot4", "Slot5", "Slot6"}
+    local slotData = clientData.Slots[sortedSlots[slotIndex]]
+    
+    if slotData and slotData.Value and slotData.Value ~= "" then
+        return slotData.Value
+    end
+    
+    return nil
 end
 
 local function updatePositionHologram(slotIndex)
@@ -5900,7 +5956,14 @@ local function updatePositionHologram(slotIndex)
             label.Size = UDim2.new(1, 0, 1, 0)
             label.BackgroundTransparency = 0.3
             label.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-            label.Text = "Unit " .. slotIndex
+            
+            local unitName = getUnitNameForSlot(slotIndex)
+            if unitName then
+                label.Text = unitName .. " (Slot " .. slotIndex .. ")"
+            else
+                label.Text = "Unit " .. slotIndex
+            end
+            
             label.TextColor3 = Color3.fromRGB(0, 255, 100)
             label.TextScaled = true
             label.Font = Enum.Font.GothamBold
@@ -5918,8 +5981,43 @@ local function updatePositionHologram(slotIndex)
     end)
 end
 
+createToggle(
+    Sections.AutoPlayLeft,
+    "Enable Position Hologram",
+    "AutoPlayPositionHologram",
+    function(value)
+        getgenv().AutoPlayConfig.positionHologram = value
+        if not value then
+            if getgenv()._PositionHolograms then
+                for _, hologramData in pairs(getgenv()._PositionHolograms) do
+                    pcall(function()
+                        if hologramData.part then hologramData.part:Destroy() end
+                        if hologramData.beam then hologramData.beam:Destroy() end
+                    end)
+                end
+                getgenv()._PositionHolograms = {}
+            end
+        else
+            task.spawn(function()
+                if not getgenv()._PositionHolograms then
+                    getgenv()._PositionHolograms = {}
+                end
+                for i = 1, 6 do
+                    local pos = getgenv().AutoPlayConfig.unitPositions[i]
+                    if pos then
+                        updatePositionHologram(i)
+                    end
+                end
+            end)
+        end
+    end,
+    getgenv().AutoPlayConfig.positionHologram
+)
+
+Sections.AutoPlayLeft:SubLabel({ Text = "Shows markers at saved positions" })
+
 for i = 1, 6 do
-    Sections.AutoPlayLeft:Label({ Text = "Unit " .. i })
+    Sections.AutoPlayLeft:Label({ Text = "Slot " .. i })
     
     Sections.AutoPlayLeft:Button({
         Name = "  Set Position",
@@ -5928,6 +6026,9 @@ for i = 1, 6 do
             if char and char:FindFirstChild("HumanoidRootPart") then
                 local pos = char.HumanoidRootPart.Position
                 getgenv().AutoPlayConfig.unitPositions[i] = pos
+                
+                getgenv().Config.autoPlay.unitPositions[i] = {X = pos.X, Y = pos.Y, Z = pos.Z}
+                saveConfig(getgenv().Config)
                 
                 updatePositionHologram(i)
                 
@@ -5950,6 +6051,9 @@ for i = 1, 6 do
         Name = "  Reset Position",
         Callback = function()
             getgenv().AutoPlayConfig.unitPositions[i] = nil
+            
+            getgenv().Config.autoPlay.unitPositions[i] = nil
+            saveConfig(getgenv().Config)
             
             if getgenv()._PositionHolograms[i] then
                 pcall(function()
@@ -10647,6 +10751,7 @@ end
 
 local function formatNumber(num)
     if not num then return "0" end
+    num = math.floor(num + 0.5)
     local s = tostring(num)
     s = s:reverse():gsub("(%d%d%d)", "%1,"):reverse()
     if s:sub(1,1) == "," then s = s:sub(2) end
@@ -11009,32 +11114,32 @@ do
                             end
                         end
                         
-                        local total = initialValue + r.amount
+                        local total = currentValue
                         rewardsText = rewardsText .. "+" .. formatNumber(r.amount) .. " " .. itemName .. " [ Total: " .. formatNumber(total) .. " ]\n"
                     elseif clientData[itemKey] and type(clientData[itemKey]) == "number" then
                         currentValue = clientData[itemKey]
                         initialValue = (getgenv()._WebhookInitialData and getgenv()._WebhookInitialData[itemKey]) or 0
-                        local total = currentValue 
+                        local total = currentValue
                         rewardsText = rewardsText .. "+" .. formatNumber(r.amount) .. " " .. itemName .. " [ Total: " .. formatNumber(total) .. " ]\n"
                     elseif clientData.ItemData and clientData.ItemData[itemKey] then
                         currentValue = clientData.ItemData[itemKey].Amount or 0
                         initialValue = (getgenv()._WebhookInitialData and getgenv()._WebhookInitialData.ItemData and getgenv()._WebhookInitialData.ItemData[itemKey]) or 0
-                        local total = currentValue 
+                        local total = currentValue
                         rewardsText = rewardsText .. "+" .. formatNumber(r.amount) .. " " .. itemName .. " [ Total: " .. formatNumber(total) .. " ]\n"
                     elseif clientData.ExperienceItemsData and clientData.ExperienceItemsData[itemKey] then
                         currentValue = clientData.ExperienceItemsData[itemKey].Amount or 0
                         initialValue = (getgenv()._WebhookInitialData and getgenv()._WebhookInitialData.ExperienceItemsData and getgenv()._WebhookInitialData.ExperienceItemsData[itemKey]) or 0
-                        local total = currentValue 
+                        local total = currentValue
                         rewardsText = rewardsText .. "+" .. formatNumber(r.amount) .. " " .. itemName .. " [ Total: " .. formatNumber(total) .. " ]\n"
                     elseif itemName:find("Candy Basket") then
                         currentValue = clientData.CandyBasket or 0
                         initialValue = (getgenv()._WebhookInitialData and getgenv()._WebhookInitialData.CandyBasket) or 0
-                        local total = currentValue 
+                        local total = currentValue
                         rewardsText = rewardsText .. "+" .. formatNumber(r.amount) .. " " .. itemName .. " [ Total: " .. formatNumber(total) .. " ]\n"
                     elseif itemName:find("Bingo Stamp") and clientData.ItemData and clientData.ItemData.HallowenBingoStamp then
                         currentValue = clientData.ItemData.HallowenBingoStamp.Amount or 0
                         initialValue = (getgenv()._WebhookInitialData and getgenv()._WebhookInitialData.ItemData and getgenv()._WebhookInitialData.ItemData.HallowenBingoStamp) or 0
-                        local total = currentValue 
+                        local total = currentValue
                         rewardsText = rewardsText .. "+" .. formatNumber(r.amount) .. " " .. itemName .. " [ Total: " .. formatNumber(total) .. " ]\n"
                     else
                         local total = r.amount
@@ -12541,7 +12646,7 @@ if not isInLobby then
             end
         end)
         
-        LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
+        trackConnection(LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
             pcall(function()
                 if child.Name == "EndGameUI" then
                     local currentTime = tick()
@@ -12605,23 +12710,23 @@ if not isInLobby then
                     end
                 end
             end)
-        end)
+        end))
         
-        LocalPlayer.PlayerGui.ChildRemoved:Connect(function(child) 
+        trackConnection(LocalPlayer.PlayerGui.ChildRemoved:Connect(function(child) 
             if child.Name == "EndGameUI" then 
                 task.wait(3) 
                 hasRun = false 
             end 
-        end)
+        end))
         
-        LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
+        trackConnection(LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
             if child.Name == "TeleportUI" and maxRoundsReached then
                 endgameCount = 0
                 maxRoundsReached = false
                 task.wait(2)
                 enableSeamlessIfNeeded()
             end
-        end)
+        end))
     end)
     
 end
@@ -13058,6 +13163,8 @@ if not isInLobby then
                 local customPos = getgenv().AutoPlayConfig.unitPositions[slotNum]
                 if customPos then
                     return CFrame.new(customPos)
+                else
+                    return nil
                 end
             end
             
@@ -13385,7 +13492,7 @@ if not isInLobby then
                 for _, unitData in ipairs(unitsToPlace) do
                     currentCash = tonumber(getgenv().MacroCurrentCash) or 0
                     
-                    if currentCash >= unitData.cost then                        
+                    if currentCash >= unitData.cost then
                         local position = getPlacementPosition(unitData.slotNum, pathIndex, distance)
                         if position then
                             if placeTower(unitData.unitName, position, unitData.slotNum) then
