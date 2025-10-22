@@ -1162,8 +1162,6 @@ local function convertOldMacroFormat(oldData)
     end
     table.sort(sortedKeys)
     
-    print("[Macro Converter] Converting " .. #sortedKeys .. " steps from Buang format")
-    
     for _, key in ipairs(sortedKeys) do
         local step = oldData[tostring(key)]
         if step and step.type and step.unit then
@@ -1192,9 +1190,8 @@ local function convertOldMacroFormat(oldData)
                     newStep.TowerName = step.unit
                     newStep.Cost = tonumber(step.money) or 0
                     table.insert(newData, newStep)
-                    print("[Macro Converter] ✓ Converted SpawnUnit: " .. step.unit)
                 else
-                    warn("[Macro Converter] ✗ Invalid CFrame for SpawnUnit: " .. step.unit)
+                    warn("[Macro Converter] Invalid CFrame for SpawnUnit: " .. step.unit)
                 end
                 
             elseif step.type == "UpgradeUnit" then
@@ -1220,7 +1217,6 @@ local function convertOldMacroFormat(oldData)
                 end
                 
                 table.insert(newData, newStep)
-                print("[Macro Converter] ✓ Converted UpgradeUnit: " .. step.unit)
                 
             elseif step.type == "SellUnit" then
                 newStep.RemoteName = "Sell"
@@ -1245,14 +1241,12 @@ local function convertOldMacroFormat(oldData)
                 end
                 
                 table.insert(newData, newStep)
-                print("[Macro Converter] ✓ Converted SellUnit: " .. step.unit)
             else
-                warn("[Macro Converter] ✗ Unknown step type: " .. tostring(step.type))
+                warn("[Macro Converter] Unknown step type: " .. tostring(step.type))
             end
         end
     end
     
-    print("[Macro Converter] ✅ Conversion complete: " .. #newData .. " steps")
     return newData
 end
 
@@ -2472,58 +2466,66 @@ local function executeAction(action, retryCount)
             return true, "All " .. action.TowerName .. " already max level"
         end
         
-        local tower = nil
+        local selectedTower = nil
+        local selectionMethod = "lowest_level"
+        local placementCFrame = nil
         
-        if action.CFrame and #action.CFrame >= 12 and #allTowers > 1 then
-            local targetCFrame = CFrame.new(
-                action.CFrame[1], action.CFrame[2], action.CFrame[3],
-                action.CFrame[4], action.CFrame[5], action.CFrame[6],
-                action.CFrame[7], action.CFrame[8], action.CFrame[9],
-                action.CFrame[10], action.CFrame[11], action.CFrame[12]
-            )
-            
-            local closestTower = nil
-            local closestDistance = math.huge
-            
-            for _, towerData in ipairs(towers) do
-                local t = towerData.tower
-                local hrp = t:FindFirstChild("HumanoidRootPart")
-                if hrp then
-                    local distance = (hrp.CFrame.Position - targetCFrame.Position).Magnitude
-                    if distance < closestDistance then
-                        closestDistance = distance
-                        closestTower = towerData
+        if not action.CFrame and getgenv().MacroPlaybackMacroData then
+            for i = 1, getgenv().MacroCurrentStep - 1 do
+                local prevAction = getgenv().MacroPlaybackMacroData[i]
+                if prevAction and prevAction.ActionType == "Place" and prevAction.TowerName == action.TowerName then
+                    if prevAction.Args and prevAction.Args[2] and type(prevAction.Args[2]) == "table" and #prevAction.Args[2] >= 12 then
+                        placementCFrame = prevAction.Args[2]
+                        break
                     end
                 end
             end
+        else
+            placementCFrame = action.CFrame
+        end
+        
+        if placementCFrame and type(placementCFrame) == "table" and #placementCFrame >= 12 then
+            local success, targetCFrame = pcall(function()
+                return CFrame.new(
+                    placementCFrame[1], placementCFrame[2], placementCFrame[3],
+                    placementCFrame[4], placementCFrame[5], placementCFrame[6],
+                    placementCFrame[7], placementCFrame[8], placementCFrame[9],
+                    placementCFrame[10], placementCFrame[11], placementCFrame[12]
+                )
+            end)
             
-            if closestTower and closestDistance < 5 then
-                tower = closestTower.tower
+            if success and targetCFrame then
+                local closestTower = nil
+                local closestDistance = math.huge
+                
+                for _, towerData in ipairs(towers) do
+                    local t = towerData.tower
+                    local hrp = t:FindFirstChild("HumanoidRootPart")
+                    if hrp and hrp:IsA("BasePart") then
+                        local distance = (hrp.CFrame.Position - targetCFrame.Position).Magnitude
+                        if distance < closestDistance then
+                            closestDistance = distance
+                            closestTower = towerData
+                        end
+                    end
+                end
+                
+                if closestTower and closestDistance < 10 then
+                    selectedTower = closestTower
+                    selectionMethod = "cframe_match"
+                end
             end
         end
         
-        if not tower then
+        if not selectedTower then
             table.sort(towers, function(a, b)
                 return a.level < b.level
             end)
-            tower = towers[1].tower
+            selectedTower = towers[1]
         end
         
-        local cash = tonumber(getgenv().MacroCurrentCash) or 0
-        local cost = tonumber(action.Cost) or 0
-        
-        if cost > 0 and cash < cost then
-            if retryCount == 0 then
-                task.wait(0.3)
-                cash = tonumber(getgenv().MacroCurrentCash) or 0
-            end
-            
-            if cash < cost then
-                return false, "Not enough cash: need $" .. cost .. ", have $" .. cash
-            end
-        end
-        
-        local oldLevel = towerData.level
+        local tower = selectedTower.tower
+        local oldLevel = selectedTower.level
         
         if remote:IsA("RemoteFunction") then
             remote:InvokeServer(tower)
@@ -2545,7 +2547,6 @@ local function executeAction(action, retryCount)
         end
         
     elseif action.ActionType == "Sell" then
-        local tower = nil
         local allTowers = {}
         
         for _, t in pairs(workspace.Towers:GetChildren()) do
@@ -2558,30 +2559,51 @@ local function executeAction(action, retryCount)
             return false, "Tower not found for sell: " .. action.TowerName
         end
         
-        if action.CFrame and #action.CFrame >= 12 and #allTowers > 1 then
-            local targetCFrame = CFrame.new(
-                action.CFrame[1], action.CFrame[2], action.CFrame[3],
-                action.CFrame[4], action.CFrame[5], action.CFrame[6],
-                action.CFrame[7], action.CFrame[8], action.CFrame[9],
-                action.CFrame[10], action.CFrame[11], action.CFrame[12]
-            )
-            
-            local closestTower = nil
-            local closestDistance = math.huge
-            
-            for _, t in ipairs(allTowers) do
-                local hrp = t:FindFirstChild("HumanoidRootPart")
-                if hrp then
-                    local distance = (hrp.CFrame.Position - targetCFrame.Position).Magnitude
-                    if distance < closestDistance then
-                        closestDistance = distance
-                        closestTower = t
+        local tower = nil
+        local placementCFrame = nil
+        
+        if not action.CFrame and getgenv().MacroPlaybackMacroData then
+            for i = 1, getgenv().MacroCurrentStep - 1 do
+                local prevAction = getgenv().MacroPlaybackMacroData[i]
+                if prevAction and prevAction.ActionType == "Place" and prevAction.TowerName == action.TowerName then
+                    if prevAction.Args and prevAction.Args[2] and type(prevAction.Args[2]) == "table" and #prevAction.Args[2] >= 12 then
+                        placementCFrame = prevAction.Args[2]
+                        break
                     end
                 end
             end
+        else
+            placementCFrame = action.CFrame
+        end
+        
+        if placementCFrame and type(placementCFrame) == "table" and #placementCFrame >= 12 and #allTowers > 1 then
+            local success, targetCFrame = pcall(function()
+                return CFrame.new(
+                    placementCFrame[1], placementCFrame[2], placementCFrame[3],
+                    placementCFrame[4], placementCFrame[5], placementCFrame[6],
+                    placementCFrame[7], placementCFrame[8], placementCFrame[9],
+                    placementCFrame[10], placementCFrame[11], placementCFrame[12]
+                )
+            end)
             
-            if closestTower and closestDistance < 5 then
-                tower = closestTower
+            if success and targetCFrame then
+                local closestTower = nil
+                local closestDistance = math.huge
+                
+                for _, t in ipairs(allTowers) do
+                    local hrp = t:FindFirstChild("HumanoidRootPart")
+                    if hrp and hrp:IsA("BasePart") then
+                        local distance = (hrp.CFrame.Position - targetCFrame.Position).Magnitude
+                        if distance < closestDistance then
+                            closestDistance = distance
+                            closestTower = t
+                        end
+                    end
+                end
+                
+                if closestTower and closestDistance < 10 then
+                    tower = closestTower
+                end
             end
         end
         
@@ -2764,6 +2786,8 @@ local function playMacroV2()
             getgenv().MacroPlaybackActive = false
             return
         end
+        
+        getgenv().MacroPlaybackMacroData = macroData
         
         local valid, err = validateMacro(macroData)
         if not valid then
