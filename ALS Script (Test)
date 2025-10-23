@@ -5528,7 +5528,6 @@ task.spawn(function()
         end
         
         lastGameStartedForMonitor = currentGameStarted
-        end
     end
 end)
 
