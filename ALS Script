@@ -13602,6 +13602,7 @@ if not isInLobby then
         local DEBOUNCE_TIME = 3
         local lastEndGameUIState = false
         local newGameStartDetected = false
+        local lastWaveValue = 0
 
         local maxWait = 0
         local settingsFound = false
@@ -13650,6 +13651,10 @@ if not isInLobby then
         local function enableSeamlessIfNeeded()
             if not getgenv().SeamlessFixEnabled then return end
             local maxRounds = getgenv().SeamlessRounds or 4
+            
+            if getgenv()._SeamlessEndgameCount then
+                endgameCount = getgenv()._SeamlessEndgameCount
+            end
             
             if endgameCount < maxRounds then
                 if not getSeamlessValue() then
@@ -13702,6 +13707,37 @@ if not isInLobby then
                     end
                     
                     lastEndGameUIState = currentEndGameUIState
+                    
+                    local wave = RS:FindFirstChild("Wave")
+                    if wave and wave.Value then
+                        local currentWave = tonumber(wave.Value) or 0
+                        
+                        if lastWaveValue > 10 and currentWave <= 3 and currentWave > 0 then
+                            local currentTime = tick()
+                            if currentTime - lastEndgameTime >= DEBOUNCE_TIME then
+                                print("[Seamless Fix] 🔄 Wave restart detected (" .. lastWaveValue .. " → " .. currentWave .. ")")
+                                
+                                if not hasRun then
+                                    hasRun = true
+                                    lastEndgameTime = currentTime
+                                    endgameCount = endgameCount + 1
+                                    getgenv()._SeamlessEndgameCount = endgameCount
+                                    local maxRounds = getgenv().SeamlessRounds or 4
+                                    print("[Seamless Fix] 🏁 Restart counted. Seamless rounds: " .. endgameCount .. "/" .. maxRounds)
+                                    
+                                    task.wait(2)
+                                    enableSeamlessIfNeeded()
+                                    
+                                    task.spawn(function()
+                                        task.wait(5)
+                                        hasRun = false
+                                    end)
+                                end
+                            end
+                        end
+                        
+                        lastWaveValue = currentWave
+                    end
                 end)
             end
         end)
