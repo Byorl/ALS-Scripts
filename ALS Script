@@ -4348,6 +4348,7 @@ createInput(
 )
 
 
+do
 Sections.InfinityCastleLeft:Header({ Text = "🏯 Auto Join Infinity Castle" })
 Sections.InfinityCastleLeft:SubLabel({ Text = "Automatically join Infinity Castle with your preferred difficulty" })
 
@@ -4423,6 +4424,9 @@ task.spawn(function()
 end)
 
 
+end
+
+do
 Sections.EventLeft:Header({ Text = "🎃 Event Automation" })
 Sections.EventLeft:SubLabel({ Text = "Automatically join and start events" })
 
@@ -4666,6 +4670,9 @@ createCardPriorityInputs(Sections.EventRight, getgenv().OtherCards, getgenv().Ca
 
 
 
+end
+
+do
 Sections.Event2Left:Header({ Text = "🎃 Event 2 Automation" })
 Sections.Event2Left:SubLabel({ Text = "Halloween Part 2 automation features" })
 
@@ -4760,6 +4767,9 @@ createInput(
 
 
 
+end
+
+do
 Sections.SlimeRushLeft:Header({ Text = "🟢 Slime Rush Settings" })
 Sections.SlimeRushLeft:SubLabel({ Text = "Automatic card selection for Slime Rush" })
 
@@ -4891,6 +4901,9 @@ Sections.SlimeRushRight:Header({ Text = "💀 Sacrifice (Skip Recommended)" })
 createCardPriorityInputs(Sections.SlimeRushRight, getgenv().SlimeRushSacrifice, getgenv().SlimeRushCardPriority, "SlimeRush_")
 
 
+end
+
+do
 Sections.BossRushLeft:Header({ Text = "⚔️ Boss Rush Settings" })
 Sections.BossRushLeft:SubLabel({ Text = "Automatic card selection for Boss Rush" })
 
@@ -8154,6 +8167,7 @@ Sections.BreachRight:SubLabel({
 })
 
 
+do
 Sections.FinalExpeditionLeft:Header({ Text = "🏔️ Auto Join" })
 Sections.FinalExpeditionLeft:SubLabel({ Text = "Automatically join Final Expedition with your preferred difficulty" })
 
@@ -9269,11 +9283,22 @@ end
 getgenv()._AbilityHelpers3.isBossInRange = function(tower)
     local bossCF = getgenv()._AbilityHelpers3.getBossCFrame()
     local towerCF = getgenv()._AbilityHelpers3.getTowerCFrame(tower)
-    if not bossCF or not towerCF then return false end
+    if not bossCF or not towerCF then 
+        return false 
+    end
     local range = getgenv()._AbilityHelpers3.getTowerRange(tower)
-    if range <= 0 then return false end
+    if range <= 0 then 
+        return false 
+    end
     local distance = (bossCF.Position - towerCF.Position).Magnitude
-    return distance <= range
+    local inRange = distance <= range
+    
+    if getgenv().DebugMode then
+        print(string.format("[Boss Range] %s: Distance=%.1f, Range=%.1f, InRange=%s", 
+            tower.Name, distance, range, tostring(inRange)))
+    end
+    
+    return inRange
 end
 
 getgenv()._AbilityHelpers3.checkBossInRangeForDuration = function(tower, requiredDuration)
@@ -9394,17 +9419,22 @@ local function processAbility(tower, unitName, abilityName, cfg, currentWave, ha
         end
         
         local inRangeChecks = 0
-        for i = 1, 3 do
+        for i = 1, 5 do
             if funcs.checkBossInRangeForDuration(tower, 0) then
                 inRangeChecks = inRangeChecks + 1
             end
-            if i < 3 then
-                task.wait(0.1)
-            end
+            task.wait(0.15)
         end
         
-        if inRangeChecks < 2 then
+        if inRangeChecks < 4 then
+            if getgenv().DebugMode then
+                print(string.format("[Ability] %s: Boss not consistently in range (%d/5 checks)", tower.Name, inRangeChecks))
+            end
             return
+        end
+        
+        if getgenv().DebugMode then
+            print(string.format("[Ability] %s: Boss confirmed in range, using ability", tower.Name))
         end
     end
     
@@ -12439,15 +12469,6 @@ end
 
 
 task.spawn(function()
-    local eventsFolder = RS:FindFirstChild("Events")
-    local halloweenFolder = eventsFolder and eventsFolder:FindFirstChild("Hallowen2025")
-    local enterEvent = halloweenFolder and halloweenFolder:FindFirstChild("Enter")
-    
-    if not enterEvent then
-        warn("[Event 2] EnterEvent remote not found")
-        return
-    end
-    
     while true do
         task.wait(2)
         
@@ -12457,10 +12478,19 @@ task.spawn(function()
         end
         
         pcall(function()
-            local inLobby = LocalPlayer.PlayerGui:FindFirstChild("Lobby")
-            if inLobby and inLobby.Enabled then
+            local eventsFolder = RS:FindFirstChild("Events")
+            local halloweenFolder = eventsFolder and eventsFolder:FindFirstChild("Hallowen2025")
+            local enterEvent = halloweenFolder and halloweenFolder:FindFirstChild("Enter")
+            local startEvent = halloweenFolder and halloweenFolder:FindFirstChild("Start")
+            
+            if enterEvent and startEvent then
                 enterEvent:FireServer("Hallowen2025_P2")
-                print("[Event 2] Joined Halloween Part 2")
+                print("[Event 2] Entered Halloween Part 2")
+                
+                task.wait(0.5)
+                startEvent:FireServer()
+                print("[Event 2] Started event")
+                
                 task.wait(5)
             end
         end)
@@ -14729,4 +14759,6 @@ if not isInLobby then
         task.spawn(autoPlaceLoop)
         task.spawn(autoUpgradeLoop)
     end)
+end
+end
 end
