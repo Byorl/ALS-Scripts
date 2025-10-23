@@ -3163,32 +3163,45 @@ local function playMacroV2()
         getgenv().UpdateMacroStatus()
         
         local lastCashCheck = 0
-        local lastWaveCheck = getgenv().MacroGameState.currentWave
+        local lastGameStartedState = true
         
         while getgenv().MacroPlayEnabled and step <= #macroData do
             if getgenv().IsKilled and getgenv().IsKilled() then
                 break
             end
             
-            local currentWave = getgenv().MacroGameState.currentWave
-            local elapsedTime = 0
+            local gameStarted = true
             pcall(function()
-                local elapsed = RS:FindFirstChild("ElapsedTime")
-                if elapsed and elapsed.Value then
-                    elapsedTime = elapsed.Value
+                local gs = RS:FindFirstChild("GameStarted")
+                if gs and gs.Value ~= nil then
+                    gameStarted = gs.Value
                 end
             end)
             
-            if lastWaveCheck > 5 and currentWave == 1 and elapsedTime < 30 then
-                getgenv().MacroStatusText = "Wave Reset - Restarting Macro"
-                getgenv().MacroWaitingText = "Detected wave reset..."
+            if lastGameStartedState and not gameStarted and getgenv().SeamlessFixEnabled then
+                getgenv().MacroStatusText = "Seamless Restart - Resetting Macro"
+                getgenv().MacroWaitingText = "Waiting for new round..."
                 getgenv().UpdateMacroStatus()
+                print("[Macro] 🔄 Seamless restart detected (GameStarted = false), resetting to step 1")
+                
+                while not gameStarted and getgenv().MacroPlayEnabled do
+                    task.wait(0.3)
+                    pcall(function()
+                        local gs = RS:FindFirstChild("GameStarted")
+                        if gs and gs.Value ~= nil then
+                            gameStarted = gs.Value
+                        end
+                    end)
+                end
+                
+                if not getgenv().MacroPlayEnabled then break end
+                
                 step = 1
-                lastWaveCheck = currentWave
                 task.wait(2)
+                lastGameStartedState = gameStarted
                 continue
             end
-            lastWaveCheck = currentWave
+            lastGameStartedState = gameStarted
             
             if getgenv().MacroGameState.gameEnded or getgenv().MacroGameState.hasEndGameUI then
                 getgenv().MacroStatusText = "Game Ended"
@@ -9444,19 +9457,31 @@ local function processAbility(tower, unitName, abilityName, cfg, currentWave, ha
     end
 end
 
+local lastGameStartedForAbilities = true
+
 task.spawn(function()
     while true do
-        task.wait(1)
+        task.wait(0.3)
         pcall(function()
             checkGameEndedReset()
             local currentWave = funcs.getCurrentWave()
             local hasBoss = funcs.bossExists()
             
-            if currentWave < lastWave then
+            local gameStarted = true
+            pcall(function()
+                local gs = RS:FindFirstChild("GameStarted")
+                if gs and gs.Value ~= nil then
+                    gameStarted = gs.Value
+                end
+            end)
+            
+            if getgenv().SeamlessFixEnabled and lastGameStartedForAbilities and not gameStarted then
+                print("[Auto Abilities] 🔄 Seamless restart detected, resetting trackers")
                 funcs.resetRoundTrackers()
             end
+            lastGameStartedForAbilities = gameStarted
             
-            if getgenv().SeamlessFixEnabled and lastWave >= 50 and currentWave < 50 then
+            if currentWave < lastWave then
                 funcs.resetRoundTrackers()
             end
             
@@ -10247,9 +10272,10 @@ do
         local lastWave = 0
         local isWaitingForPrompt = false
         local promptWaitStart = 0
+        local lastGameStartedForEto = true
         
         while true do
-            task.wait(0.5)
+            task.wait(0.3)
             
             if not getgenv().OneEyeDevilEnabled then
                 task.wait(2)
@@ -10257,6 +10283,21 @@ do
             end
             
             pcall(function()
+                local gameStarted = true
+                pcall(function()
+                    local gs = RS:FindFirstChild("GameStarted")
+                    if gs and gs.Value ~= nil then
+                        gameStarted = gs.Value
+                    end
+                end)
+                
+                if getgenv().SeamlessFixEnabled and lastGameStartedForEto and not gameStarted then
+                    print("[Eto Evo] 🔄 Seamless restart detected, resetting cooldowns")
+                    resetEtoEvoCooldowns()
+                    isWaitingForPrompt = false
+                end
+                lastGameStartedForEto = gameStarted
+                
                 local currentWave = 0
                 pcall(function()
                     local wave = RS:FindFirstChild("Wave")
@@ -10266,16 +10307,6 @@ do
                 end)
                 
                 if currentWave < lastWave then
-                    resetEtoEvoCooldowns()
-                    isWaitingForPrompt = false
-                end
-                
-                if getgenv().SeamlessFixEnabled and lastWave >= 50 and currentWave < 50 then
-                    resetEtoEvoCooldowns()
-                    isWaitingForPrompt = false
-                end
-                
-                if currentWave == 1 and lastWave > 10 then
                     resetEtoEvoCooldowns()
                     isWaitingForPrompt = false
                 end
@@ -10501,9 +10532,10 @@ do
         local promptWaitStart = 0
         local cashAboveThresholdStart = 0
         local CASH_STABILITY_DURATION = 3
+        local lastGameStartedForGriffith = true
         
         while true do
-            task.wait(0.5)
+            task.wait(0.3)
             
             if not getgenv().GriffithLightEnabled then
                 task.wait(2)
@@ -10511,6 +10543,22 @@ do
             end
             
             pcall(function()
+                local gameStarted = true
+                pcall(function()
+                    local gs = RS:FindFirstChild("GameStarted")
+                    if gs and gs.Value ~= nil then
+                        gameStarted = gs.Value
+                    end
+                end)
+                
+                if getgenv().SeamlessFixEnabled and lastGameStartedForGriffith and not gameStarted then
+                    print("[Griffith Light] 🔄 Seamless restart detected, resetting state")
+                    getgenv().GriffithLightUsedThisRound = false
+                    isWaitingForPrompt = false
+                    cashAboveThresholdStart = 0
+                end
+                lastGameStartedForGriffith = gameStarted
+                
                 local currentWave = 0
                 pcall(function()
                     local wave = RS:FindFirstChild("Wave")
@@ -10520,18 +10568,6 @@ do
                 end)
                 
                 if currentWave < lastWave then
-                    getgenv().GriffithLightUsedThisRound = false
-                    isWaitingForPrompt = false
-                    cashAboveThresholdStart = 0
-                end
-                
-                if getgenv().SeamlessFixEnabled and lastWave >= 50 and currentWave < 50 then
-                    getgenv().GriffithLightUsedThisRound = false
-                    isWaitingForPrompt = false
-                    cashAboveThresholdStart = 0
-                end
-                
-                if currentWave == 1 and lastWave > 10 then
                     getgenv().GriffithLightUsedThisRound = false
                     isWaitingForPrompt = false
                     cashAboveThresholdStart = 0
@@ -13683,9 +13719,12 @@ if not isInLobby then
             end
         end)
         
+        local lastGameStartedState = true
+        getgenv()._SeamlessRestartDetected = false
+        
         task.spawn(function()
             while true do
-                task.wait(0.5) 
+                task.wait(0.3) 
                 
                 if not getgenv().SeamlessFixEnabled then
                     task.wait(2)
@@ -13693,6 +13732,42 @@ if not isInLobby then
                 end
                 
                 pcall(function()
+                    local gameStarted = true
+                    pcall(function()
+                        local gs = RS:FindFirstChild("GameStarted")
+                        if gs and gs.Value ~= nil then
+                            gameStarted = gs.Value
+                        end
+                    end)
+                    
+                    if lastGameStartedState and not gameStarted then
+                        local currentTime = tick()
+                        if currentTime - lastEndgameTime >= DEBOUNCE_TIME then
+                            print("[Seamless Fix] 🔄 Seamless restart detected (GameStarted = false)")
+                            
+                            if not hasRun then
+                                hasRun = true
+                                lastEndgameTime = currentTime
+                                endgameCount = endgameCount + 1
+                                getgenv()._SeamlessEndgameCount = endgameCount
+                                getgenv()._SeamlessRestartDetected = true
+                                local maxRounds = getgenv().SeamlessRounds or 4
+                                print("[Seamless Fix] 🏁 Restart counted. Seamless rounds: " .. endgameCount .. "/" .. maxRounds)
+                                
+                                task.wait(2)
+                                enableSeamlessIfNeeded()
+                                
+                                task.spawn(function()
+                                    task.wait(5)
+                                    hasRun = false
+                                    getgenv()._SeamlessRestartDetected = false
+                                end)
+                            end
+                        end
+                    end
+                    
+                    lastGameStartedState = gameStarted
+                    
                     local endGameUI = LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
                     local currentEndGameUIState = endGameUI and endGameUI.Enabled or false
                     
@@ -13707,37 +13782,6 @@ if not isInLobby then
                     end
                     
                     lastEndGameUIState = currentEndGameUIState
-                    
-                    local wave = RS:FindFirstChild("Wave")
-                    if wave and wave.Value then
-                        local currentWave = tonumber(wave.Value) or 0
-                        
-                        if lastWaveValue > 10 and currentWave <= 3 and currentWave > 0 then
-                            local currentTime = tick()
-                            if currentTime - lastEndgameTime >= DEBOUNCE_TIME then
-                                print("[Seamless Fix] 🔄 Wave restart detected (" .. lastWaveValue .. " → " .. currentWave .. ")")
-                                
-                                if not hasRun then
-                                    hasRun = true
-                                    lastEndgameTime = currentTime
-                                    endgameCount = endgameCount + 1
-                                    getgenv()._SeamlessEndgameCount = endgameCount
-                                    local maxRounds = getgenv().SeamlessRounds or 4
-                                    print("[Seamless Fix] 🏁 Restart counted. Seamless rounds: " .. endgameCount .. "/" .. maxRounds)
-                                    
-                                    task.wait(2)
-                                    enableSeamlessIfNeeded()
-                                    
-                                    task.spawn(function()
-                                        task.wait(5)
-                                        hasRun = false
-                                    end)
-                                end
-                            end
-                        end
-                        
-                        lastWaveValue = currentWave
-                    end
                 end)
             end
         end)
