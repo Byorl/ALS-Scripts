@@ -3119,55 +3119,38 @@ local function playMacroV2()
             
         end
         
-        local elapsedTime = 0
-        local currentWave = 0
+        local gameStarted = false
+        local waitStartTime = tick()
         
-        pcall(function()
-            local elapsed = RS:FindFirstChild("ElapsedTime")
-            if elapsed and elapsed.Value then
-                elapsedTime = elapsed.Value
+        print("[Macro] Waiting for game to start...")
+        
+        while getgenv().MacroPlayEnabled do
+            local gs = false
+            pcall(function()
+                local gameStartedValue = RS:FindFirstChild("GameStarted")
+                if gameStartedValue and gameStartedValue.Value ~= nil then
+                    gs = gameStartedValue.Value
+                end
+            end)
+            
+            if gs then
+                gameStarted = true
+                print("[Macro] ✅ Game started, beginning macro playback")
+                break
             end
             
-            local wave = RS:FindFirstChild("Wave")
-            if wave and wave.Value then
-                currentWave = wave.Value
-            end
-        end)
-        
-        if currentWave > 0 and elapsedTime > 0 then
-        else
-            local waitStartTime = tick()
+            getgenv().MacroStatusText = "Waiting for Start"
+            getgenv().MacroWaitingText = "Game not started..."
+            getgenv().UpdateMacroStatus()
             
-            while getgenv().MacroPlayEnabled do
-                pcall(function()
-                    local elapsed = RS:FindFirstChild("ElapsedTime")
-                    if elapsed and elapsed.Value then
-                        elapsedTime = elapsed.Value
-                    end
-                    
-                    local wave = RS:FindFirstChild("Wave")
-                    if wave and wave.Value then
-                        currentWave = wave.Value
-                    end
-                end)
-                
-                if currentWave > 0 and elapsedTime > 0 then
-                    break
-                end
-                
-                getgenv().MacroStatusText = "Waiting for Start"
-                getgenv().MacroWaitingText = "Round not started..."
-                getgenv().UpdateMacroStatus()
-                
-                local elapsed = tick() - waitStartTime
-                if elapsed > 300 then
-                    warn("[Macro] Timeout waiting for round start (5 min)")
-                    getgenv().MacroPlaybackActive = false
-                    return
-                end
-                
-                task.wait(0.5)
+            local elapsed = tick() - waitStartTime
+            if elapsed > 300 then
+                warn("[Macro] Timeout waiting for game start (5 min)")
+                getgenv().MacroPlaybackActive = false
+                return
             end
+            
+            task.wait(0.3)
         end
         
         if not getgenv().MacroPlayEnabled then
@@ -3175,7 +3158,8 @@ local function playMacroV2()
             return
         end
         
-        task.wait(0.3)
+        task.wait(1.5)
+        print("[Macro] Initializing cash tracking...")
         
         if not getgenv().MacroPlayEnabled then
             getgenv().MacroPlaybackActive = false
@@ -14050,74 +14034,54 @@ end
 do
     task.spawn(function()
         while true do
-            task.wait(0.25) 
+            task.wait(0.5) 
             if getgenv().RemoveEnemiesEnabled then
                 pcall(function()
                     local enemies = workspace:FindFirstChild("Enemies")
                     if enemies then
-                        for _, enemy in pairs(enemies:GetChildren()) do
+                        local enemyList = enemies:GetChildren()
+                        for i = 1, #enemyList do
+                            local enemy = enemyList[i]
                             pcall(function()
                                 if enemy and enemy.Parent and enemy:IsA("Model") then
                                     local isBoss = enemy:FindFirstChild("Boss")
                                     if not isBoss or not isBoss.Value then
-                                        for _, desc in pairs(enemy:GetDescendants()) do
-                                            pcall(function()
-                                                if desc:IsA("ParticleEmitter") or desc:IsA("Trail") or desc:IsA("Beam") then
-                                                    desc.Enabled = false
-                                                    desc:Destroy()
-                                                elseif desc:IsA("Sound") then
-                                                    desc:Stop()
-                                                    desc:Destroy()
-                                                end
-                                            end)
-                                        end
                                         enemy:Destroy()
                                     end
                                 end
                             end)
+                            if i % 10 == 0 then
+                                task.wait()
+                            end
                         end
                     end
                     
                     local spawnedunits = workspace:FindFirstChild("SpawnedUnits")
                     if spawnedunits then
-                        for _, su in pairs(spawnedunits:GetChildren()) do
+                        local unitList = spawnedunits:GetChildren()
+                        for i = 1, #unitList do
+                            local su = unitList[i]
                             pcall(function()
                                 if su and su.Parent and su:IsA("Model") then
-                                    for _, desc in pairs(su:GetDescendants()) do
-                                        pcall(function()
-                                            if desc:IsA("ParticleEmitter") or desc:IsA("Trail") or desc:IsA("Beam") then
-                                                desc.Enabled = false
-                                                desc:Destroy()
-                                            elseif desc:IsA("Sound") then
-                                                desc:Stop()
-                                                desc:Destroy()
-                                            end
-                                        end)
-                                    end
                                     su:Destroy()
                                 end
                             end)
+                            if i % 10 == 0 then
+                                task.wait()
+                            end
                         end
                     end
                     
                     local debris = workspace:FindFirstChild("Debris")
                     if debris then
-                        for _, item in pairs(debris:GetChildren()) do
+                        local debrisList = debris:GetChildren()
+                        for i = 1, #debrisList do
                             pcall(function() 
-                                if item then
-                                    item:Destroy()
+                                if debrisList[i] then
+                                    debrisList[i]:Destroy()
                                 end
                             end)
                         end
-                    end
-                    
-                    for _, obj in pairs(workspace:GetChildren()) do
-                        pcall(function()
-                            if obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Beam") then
-                                obj.Enabled = false
-                                obj:Destroy()
-                            end
-                        end)
                     end
                 end)
             end
@@ -14140,26 +14104,31 @@ end
 if not isInLobby then
     task.spawn(function()
         while true do
-            task.wait(1)
+            task.wait(2)
             pcall(function()
-                for _, obj in pairs(workspace:GetDescendants()) do
-                    pcall(function()
-                        if obj:IsA("ParticleEmitter") then
-                            if obj.Rate > 100 then 
-                                obj.Enabled = false
-                                obj:Destroy()
-                            end
-                        elseif obj:IsA("Trail") or obj:IsA("Beam") then
-                            obj.Enabled = false
-                        elseif obj:IsA("Sound") then
-                            if obj.Volume > 0.5 then
-                                obj.Volume = 0
-                            end
-                        elseif obj:IsA("Fire") or obj:IsA("Smoke") or obj:IsA("Sparkles") then
-                            obj.Enabled = false
-                            obj:Destroy()
+                local targets = {workspace.Enemies, workspace.Towers, workspace:FindFirstChild("Effects")}
+                for _, parent in pairs(targets) do
+                    if parent then
+                        for _, obj in pairs(parent:GetDescendants()) do
+                            pcall(function()
+                                if obj:IsA("ParticleEmitter") then
+                                    if obj.Rate > 100 then 
+                                        obj.Enabled = false
+                                        obj:Destroy()
+                                    end
+                                elseif obj:IsA("Trail") or obj:IsA("Beam") then
+                                    obj.Enabled = false
+                                elseif obj:IsA("Sound") then
+                                    if obj.Volume > 0.5 then
+                                        obj.Volume = 0
+                                    end
+                                elseif obj:IsA("Fire") or obj:IsA("Smoke") or obj:IsA("Sparkles") then
+                                    obj.Enabled = false
+                                    obj:Destroy()
+                                end
+                            end)
                         end
-                    end)
+                    end
                 end
                 
                 local camera = workspace.CurrentCamera
