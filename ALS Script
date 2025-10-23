@@ -1,7 +1,115 @@
 repeat task.wait() until game:IsLoaded()
 
+getgenv().DebugMode = getgenv().DebugMode or false
+
+local function debugPrint(...)
+    if getgenv().DebugMode then
+        print(...)
+    end
+end
+
+getgenv().DebugPrint = debugPrint
+
 if not getgenv()._GlobalConnections then
     getgenv()._GlobalConnections = {}
+end
+
+if not getgenv()._MemoryProfiler then
+    getgenv()._MemoryProfiler = {
+        features = {},
+        baseline = 0,
+        lastCheck = tick(),
+        baselineSet = false
+    }
+end
+
+local function getMemoryUsageMB()
+    local stats = game:GetService("Stats")
+    local memoryMB = 0
+    pcall(function()
+        memoryMB = stats:GetTotalMemoryUsageMb()
+    end)
+    if memoryMB == 0 then
+        pcall(function()
+            memoryMB = stats.MemoryUsageMb
+        end)
+    end
+    return memoryMB
+end
+
+local function startMemoryTracking(featureName)
+    if not getgenv()._MemoryProfiler.baselineSet then
+        pcall(function() collectgarbage("collect") end)
+        task.wait(0.1)
+        getgenv()._MemoryProfiler.baseline = getMemoryUsageMB()
+        getgenv()._MemoryProfiler.baselineSet = true
+    end
+    
+    pcall(function() collectgarbage("collect") end)
+    task.wait(0.05)
+    
+    local memBefore = getMemoryUsageMB()
+    getgenv()._MemoryProfiler.features[featureName] = {
+        startMemory = memBefore,
+        currentMemory = memBefore,
+        peakMemory = memBefore,
+        enabled = true,
+        startTime = tick()
+    }
+    
+    return memBefore
+end
+
+local function updateMemoryTracking(featureName)
+    if not getgenv()._MemoryProfiler.features[featureName] then return end
+    
+    local currentMem = getMemoryUsageMB()
+    local feature = getgenv()._MemoryProfiler.features[featureName]
+    
+    feature.currentMemory = currentMem
+    if currentMem > feature.peakMemory then
+        feature.peakMemory = currentMem
+    end
+end
+
+local function stopMemoryTracking(featureName)
+    if not getgenv()._MemoryProfiler.features[featureName] then return end
+    
+    getgenv()._MemoryProfiler.features[featureName].enabled = false
+    getgenv()._MemoryProfiler.features[featureName].endTime = tick()
+end
+
+local function getMemoryReport()
+    local report = "\n=== Memory Usage Report ===\n"
+    
+    local currentMem = getMemoryUsageMB()
+    local baseline = getgenv()._MemoryProfiler.baseline or 0
+    
+    report = report .. string.format("Current Memory: %.1f MB\n", currentMem)
+    if baseline > 0 then
+        report = report .. string.format("Baseline Memory: %.1f MB\n", baseline)
+        report = report .. string.format("Memory Growth: +%.1f MB\n", currentMem - baseline)
+    end
+    
+    report = report .. string.format("\nGlobal Connections: %d\n", #(getgenv()._GlobalConnections or {}))
+    
+    local towerConns = 0
+    if getgenv()._TowerUpgradeConnections then
+        for _ in pairs(getgenv()._TowerUpgradeConnections) do
+            towerConns = towerConns + 1
+        end
+    end
+    report = report .. string.format("Tower Connections: %d\n", towerConns)
+    
+    local macroDataSize = getgenv().MacroDataV2 and #getgenv().MacroDataV2 or 0
+    report = report .. string.format("Macro Data Size: %d steps\n", macroDataSize)
+    
+    local cashHistorySize = getgenv().MacroCashHistory and #getgenv().MacroCashHistory or 0
+    report = report .. string.format("Cash History Size: %d entries\n", cashHistorySize)
+    
+    report = report .. "========================\n"
+    
+    return report
 end
 
 local function trackConnection(connection)
@@ -13,7 +121,7 @@ end
 
 task.spawn(function()
     while true do
-        task.wait(15)
+        task.wait(10)
         pcall(function()
             local cleaned = 0
             for i = #getgenv()._GlobalConnections, 1, -1 do
@@ -67,10 +175,54 @@ task.spawn(function()
             end
             
             if getgenv().WukongTrackedClones then
-                for clone, _ in pairs(getgenv().WukongTrackedClones) do
-                    if not clone or not clone.Parent then
-                        getgenv().WukongTrackedClones[clone] = nil
+                local toRemove = {}
+                for cloneId, _ in pairs(getgenv().WukongTrackedClones) do
+                    if type(cloneId) == "string" then
+                    else
+                        table.insert(toRemove, cloneId)
                     end
+                end
+                for _, key in ipairs(toRemove) do
+                    getgenv().WukongTrackedClones[key] = nil
+                end
+            end
+            
+            if getgenv()._TowerTrackerPendingActions then
+                local now = tick()
+                for key, timestamp in pairs(getgenv()._TowerTrackerPendingActions) do
+                    if type(timestamp) == "number" and (now - timestamp) > 30 then
+                        getgenv()._TowerTrackerPendingActions[key] = nil
+                    end
+                end
+            end
+            
+            if getgenv()._TowerUpgradeConnections then
+                local cleaned = 0
+                local toRemove = {}
+                for tower, conn in pairs(getgenv()._TowerUpgradeConnections) do
+                    if not tower or not tower.Parent or not conn or not conn.Connected then
+                        if conn and conn.Connected then
+                            pcall(function() conn:Disconnect() end)
+                        end
+                        table.insert(toRemove, tower)
+                        cleaned = cleaned + 1
+                    end
+                end
+                for _, tower in ipairs(toRemove) do
+                    getgenv()._TowerUpgradeConnections[tower] = nil
+                end
+                if cleaned > 0 then
+                    debugPrint("[Memory] Cleaned " .. cleaned .. " dead tower connections")
+                end
+            end
+            
+            if getgenv()._TowerUpgradeConnections and type(getgenv()._TowerUpgradeConnections) == "table" then
+                local count = 0
+                for _ in pairs(getgenv()._TowerUpgradeConnections) do
+                    count = count + 1
+                end
+                if count > 100 then
+                    debugPrint("[Memory] WARNING: " .. count .. " tower connections tracked!")
                 end
             end
             
@@ -109,7 +261,7 @@ task.spawn(function()
             end
             
             if cleaned > 0 then
-                print("[Memory] Cleaned up " .. cleaned .. " dead connections")
+                debugPrint("[Memory] Cleaned up " .. cleaned .. " dead connections")
             end
             
             local workspace = game:GetService("Workspace")
@@ -120,7 +272,7 @@ task.spawn(function()
                     for _, item in pairs(debrisFolder:GetChildren()) do
                         pcall(function() item:Destroy() end)
                     end
-                    print("[Memory] Cleared " .. debrisCount .. " debris items")
+                    debugPrint("[Memory] Cleared " .. debrisCount .. " debris items")
                 end
             end
             
@@ -135,12 +287,17 @@ task.spawn(function()
                 end)
             end
             if effectsCleared > 0 then
-                print("[Memory] Cleared " .. effectsCleared .. " loose effects")
+                debugPrint("[Memory] Cleared " .. effectsCleared .. " loose effects")
             end
             
-            collectgarbage("collect")
+            pcall(function() collectgarbage("collect") end)
             
-            print("[Memory] Cleanup complete - Heartbeat: " .. heartbeatConns .. " | Connections: " .. #getgenv()._GlobalConnections)
+            debugPrint("[Memory] Cleanup complete - Heartbeat: " .. heartbeatConns .. " | Connections: " .. #getgenv()._GlobalConnections)
+            
+            if tick() - getgenv()._MemoryProfiler.lastCheck > 60 then
+                getgenv()._MemoryProfiler.lastCheck = tick()
+                print(getMemoryReport()) 
+            end
         end)
     end
 end)
@@ -154,11 +311,15 @@ if not getgenv()._AutoRejoinSetup then
     local GuiService = game:GetService("GuiService")
     
     local function autoRejoin()
-        print("[Auto Rejoin] Attempting to rejoin game...")
+        print("[Auto Rejoin] Reconnecting to game...")
         
-        if queueteleport then
-            queueteleport('loadstring(game:HttpGet("https://raw.githubusercontent.com/Byorl/ALS-Scripts/refs/heads/main/Maclib.lua"))()')
-        end
+        pcall(function()
+            if queueteleport then
+                queueteleport('loadstring(game:HttpGet("https://raw.githubusercontent.com/Byorl/ALS-Scripts/refs/heads/main/Maclib.lua"))()')
+            elseif queue_on_teleport then
+                queue_on_teleport('loadstring(game:HttpGet("https://raw.githubusercontent.com/Byorl/ALS-Scripts/refs/heads/main/Maclib.lua"))()')
+            end
+        end)
         
         task.wait(0.5)
         
@@ -169,7 +330,7 @@ if not getgenv()._AutoRejoinSetup then
         end)
         
         if not success then
-            print("[Auto Rejoin] First attempt failed, retrying in 3s...")
+            debugPrint("[Auto Rejoin] Retrying in 3s...")
             task.wait(3)
             
             pcall(function()
@@ -200,7 +361,7 @@ if not getgenv()._AutoRejoinSetup then
                            text:find("connection attempt failed") or
                            text:find("error code") then
                             
-                            print("[Auto Rejoin] Disconnect detected: " .. descendant.Text)
+                            print("[Auto Rejoin] Connection lost - rejoining...")
                             task.wait(1)
                             autoRejoin()
                             break
@@ -212,20 +373,18 @@ if not getgenv()._AutoRejoinSetup then
     end))
     
     table.insert(getgenv()._AutoRejoinConnections, game:GetService("GuiService").ErrorMessageChanged:Connect(function()
-        print("[Auto Rejoin] Error message detected, rejoining...")
+        print("[Auto Rejoin] Error detected - rejoining...")
         task.wait(1)
         autoRejoin()
     end))
     
     table.insert(getgenv()._AutoRejoinConnections, LocalPlayer.OnTeleport:Connect(function(State)
         if State == Enum.TeleportState.Failed then
-            print("[Auto Rejoin] Teleport failed, rejoining...")
+            print("[Auto Rejoin] Teleport failed - rejoining...")
             task.wait(2)
             autoRejoin()
         end
     end))
-    
-    print("[Auto Rejoin] System active - will auto-rejoin on any disconnect")
 end
 
 if getgenv().ALSScriptLoaded then
@@ -341,6 +500,8 @@ getgenv().Config.autoJoin = getgenv().Config.autoJoin or {}
 getgenv().SaveConfig = saveConfig
 getgenv().LoadConfig = loadConfig
 
+getgenv().DebugMode = getgenv().Config.toggles.DebugMode or false
+
 local function safeGarbageCollect()
     pcall(function()
         gcinfo()
@@ -437,7 +598,7 @@ local globalSettings = {
 }
 
 Window.onUnloaded(function()
-    print("[Cleanup] Unloading script and cleaning up resources...")
+    debugPrint("[Cleanup] Unloading script...")
     
     getgenv().ALSScriptLoaded = false
     getgenv().MacroPlayEnabled = false
@@ -512,7 +673,7 @@ Window.onUnloaded(function()
         safeGarbageCollect()
     end
     
-    print("[Cleanup] Complete")
+    debugPrint("[Cleanup] Complete")
 end)
 
 task.spawn(function()
@@ -542,12 +703,12 @@ task.spawn(function()
                 highPingCount = 0
             end
             
-            if connectionCheckCount % 360 == 0 then
-                print(string.format("[Network] Uptime: %.1fh | Ping: %dms", uptime, math.floor(ping)))
+            if connectionCheckCount % 720 == 0 then
+                print(string.format("[Status] Uptime: %.1fh | Ping: %dms", uptime, math.floor(ping)))
             end
             
             if uptime > 2 and (tick() - lastMemoryCleanup) > 1800 then
-                print("[Network] 30min since last cleanup - running memory cleanup")
+                debugPrint("[Memory] 30min cleanup cycle")
                 safeGarbageCollect()
                 lastMemoryCleanup = tick()
             end
@@ -803,6 +964,14 @@ local Tabs = {
         Name = "Event", 
         Image = "rbxassetid://10734952273" 
     }),
+    Event2 = TabGroup2:Tab({ 
+        Name = "Event 2", 
+        Image = "rbxassetid://10734952273" 
+    }),
+    SlimeRush = TabGroup2:Tab({ 
+        Name = "Slime Rush", 
+        Image = "rbxassetid://10734923549" 
+    }),
     BossRush = TabGroup2:Tab({ 
         Name = "Boss Rush", 
         Image = "rbxassetid://10734923549" 
@@ -900,6 +1069,12 @@ local Sections = {
     EventLeft = Tabs.Event:Section({ Side = "Left" }),
     EventRight = Tabs.Event:Section({ Side = "Right" }),
     
+    Event2Left = Tabs.Event2:Section({ Side = "Left" }),
+    Event2Right = Tabs.Event2:Section({ Side = "Right" }),
+    
+    SlimeRushLeft = Tabs.SlimeRush:Section({ Side = "Left" }),
+    SlimeRushRight = Tabs.SlimeRush:Section({ Side = "Right" }),
+    
     WebhookLeft = Tabs.Webhook:Section({ Side = "Left" }),
     
     SeamlessFixLeft = Tabs.SeamlessFix:Section({ Side = "Left" }),
@@ -929,6 +1104,7 @@ local function createToggle(section, name, flag, callback, default)
         Callback = function(value)
             getgenv().Config.toggles[flag] = value
             saveConfig(getgenv().Config)
+            
             if callback then 
                 callback(value) 
             end
@@ -1332,7 +1508,7 @@ local function loadMacros()
                     local isSettings = (data.playMacroEnabled ~= nil or data.selectedMacro ~= nil or data.macroMaps ~= nil)
                     if not isSettings then
                         if isOldMacroFormat(data) then
-                            print("[Macro] Converting old format: " .. fileName)
+                            debugPrint("[Macro] Converting old format: " .. fileName)
                             local convertedData = convertOldMacroFormat(data)
                             if #convertedData > 0 then
                                 getgenv().Macros[fileName] = convertedData
@@ -1371,7 +1547,7 @@ local function loadMacro(macroName)
         end)
         if ok and type(data) == "table" then
             if isOldMacroFormat(data) then
-                print("[Macro] Detected old format macro, converting: " .. macroName)
+                debugPrint("[Macro] Converting: " .. macroName)
                 local convertedData = convertOldMacroFormat(data)
                 
                 if #convertedData > 0 then
@@ -1380,7 +1556,7 @@ local function loadMacro(macroName)
                     
                     Window:Notify({
                         Title = "Macro Converter",
-                        Description = "Converted old format: " .. macroName .. " (" .. #convertedData .. " steps)",
+                        Description = "Converted: " .. macroName .. " (" .. #convertedData .. " steps)",
                         Lifetime = 5
                     })
                     
@@ -1728,6 +1904,10 @@ getgenv().AutoEventEnabled = getgenv().Config.toggles.AutoEventToggle or false
 getgenv().BingoEnabled = getgenv().Config.toggles.BingoToggle or false
 getgenv().CapsuleEnabled = getgenv().Config.toggles.CapsuleToggle or false
 
+getgenv().AutoEvent2Enabled = getgenv().Config.toggles.AutoEvent2Toggle or false
+getgenv().AutoCandyEnabled = getgenv().Config.toggles.AutoCandyToggle or false
+getgenv().Capsule2Enabled = getgenv().Config.toggles.Capsule2Toggle or false
+
 getgenv().RemoveEnemiesEnabled = getgenv().Config.toggles.RemoveEnemiesToggle or false
 getgenv().AntiAFKEnabled = getgenv().Config.toggles.AntiAFKToggle or false
 getgenv().BlackScreenEnabled = getgenv().Config.toggles.BlackScreenToggle or false
@@ -1747,13 +1927,13 @@ if queueteleport then
         if getgenv().AutoExecuteEnabled then
             pcall(function()
                 queueteleport('loadstring(game:HttpGet("https://raw.githubusercontent.com/Byorl/ALS-Scripts/refs/heads/main/Maclib.lua"))()')
-                print("[ALS] Auto Execute queued for next game")
+                debugPrint("[ALS] Auto Execute queued")
             end)
         end
     end)
     
     if getgenv().AutoExecuteEnabled then
-        print("[ALS] Auto Execute on Teleport is active")
+        debugPrint("[ALS] Auto Execute active")
     end
 else
     if getgenv().AutoExecuteEnabled then
@@ -1953,7 +2133,7 @@ local function updateGameState()
             end
             
             if getgenv().MacroActionsV2 and #getgenv().MacroActionsV2 > 500 then
-                print("[Memory] MacroActionsV2 has " .. #getgenv().MacroActionsV2 .. " actions, clearing old ones")
+                debugPrint("[Memory] Trimming MacroActionsV2: " .. #getgenv().MacroActionsV2 .. " actions")
                 local temp = {}
                 local startIdx = math.max(1, #getgenv().MacroActionsV2 - 300)
                 for i = startIdx, #getgenv().MacroActionsV2 do
@@ -2015,6 +2195,9 @@ local towerTracker = {
     upgradeConnections = {}
 }
 
+getgenv()._TowerTrackerPendingActions = towerTracker.pendingActions
+getgenv()._TowerUpgradeConnections = towerTracker.upgradeConnections
+
 local function cleanupTowerTracker()
     for tower, conn in pairs(towerTracker.upgradeConnections) do
         pcall(function() conn:Disconnect() end)
@@ -2025,6 +2208,9 @@ local function cleanupTowerTracker()
     towerTracker.lastUpgradeTime = {}
     towerTracker.pendingActions = {}
     towerTracker.upgradeConnections = {}
+    
+    getgenv()._TowerTrackerPendingActions = towerTracker.pendingActions
+    getgenv()._TowerUpgradeConnections = towerTracker.upgradeConnections
 end
 
 local function setupTowerUpgradeListener(tower)
@@ -2115,12 +2301,17 @@ local function setupTowerUpgradeListener(tower)
             if towerTracker.upgradeLevels[tower] then
                 towerTracker.upgradeLevels[tower] = nil
             end
+            if towerTracker.lastUpgradeTime[tower] then
+                towerTracker.lastUpgradeTime[tower] = nil
+            end
             if ancestryConnection then
                 ancestryConnection:Disconnect()
                 ancestryConnection = nil
             end
         end
     end)
+    
+    trackConnection(ancestryConnection)
 end
 
 task.spawn(function()    
@@ -2233,7 +2424,7 @@ local function processRemoteCall(remoteName, method, args)
             if towerName ~= "NarutoBaryonClone" and towerName ~= "WukongClone" then
                 local upgradeKey = tower .. "_" .. now
                 if not towerTracker.pendingActions[upgradeKey] then
-                    towerTracker.pendingActions[upgradeKey] = true
+                    towerTracker.pendingActions[upgradeKey] = now
                     
                     task.spawn(function()
                         if towerTracker.pendingActions[upgradeKey] then
@@ -2673,7 +2864,7 @@ local function executeAction(action, retryCount)
             return false, "Sell remote not found"
         end
         
-        print("[Macro] Selling tower: " .. action.TowerName)
+        debugPrint("[Macro] Selling: " .. action.TowerName)
         
         local sellSuccess = pcall(function()
             if remote:IsA("RemoteFunction") then
@@ -2923,7 +3114,7 @@ local function playMacroV2()
                 
                 local elapsed = tick() - waitStartTime
                 if elapsed > 300 then
-                    print("[Macro] ✗ Timeout waiting for round start (5 minutes)")
+                    warn("[Macro] Timeout waiting for round start (5 min)")
                     getgenv().MacroPlaybackActive = false
                     return
                 end
@@ -2942,6 +3133,29 @@ local function playMacroV2()
         if not getgenv().MacroPlayEnabled then
             getgenv().MacroPlaybackActive = false
             return
+        end
+        
+        local cashInitAttempts = 0
+        while cashInitAttempts < 10 do
+            local currentCash = tonumber(getgenv().MacroCurrentCash) or 0
+            if currentCash > 0 then
+                break
+            end
+            
+            pcall(function()
+                if LocalPlayer:FindFirstChild("Cash") then
+                    getgenv().MacroCurrentCash = LocalPlayer.Cash.Value
+                end
+            end)
+            
+            cashInitAttempts = cashInitAttempts + 1
+            task.wait(0.5)
+        end
+        
+        if (tonumber(getgenv().MacroCurrentCash) or 0) == 0 then
+            warn("[Macro] Failed to initialize cash after 5 seconds, starting anyway...")
+        else
+            print("[Macro] Cash initialized: $" .. getgenv().MacroCurrentCash)
         end
         
         getgenv().MacroStatusText = "Playing"
@@ -3087,10 +3301,10 @@ local function playMacroV2()
             if success and result then
                 actionSuccess = true
                 actionMessage = msg or "Success"
-                print("[Macro] Step", step, "SUCCESS")
+                debugPrint("[Macro] Step", step, "✓")
             else
                 actionMessage = msg or "Action failed"
-                print("[Macro] Step", step, "FAILED:", actionMessage)
+                debugPrint("[Macro] Step", step, "✗:", actionMessage)
             end
             
             if not actionSuccess then
@@ -3154,7 +3368,7 @@ task.spawn(function()
         end)
         
         if lastEndGameUIState and not currentEndGameUIState and getgenv().MacroPlayEnabled then
-            print("[Macro Auto-Restart] EndGameUI closed, restarting macro...")
+            debugPrint("[Macro] Auto-restarting...")
             task.wait(1)
             
             getgenv().MacroPlaybackActive = false
@@ -3172,7 +3386,7 @@ task.spawn(function()
             
             task.wait(0.5)
             
-            print("[Macro Auto-Restart] Starting playback...")
+            debugPrint("[Macro] Starting playback...")
             playMacroV2()
             lastRestartAttempt = tick()
         end
@@ -3182,7 +3396,7 @@ task.spawn(function()
         if getgenv().MacroPlayEnabled and not getgenv().MacroPlaybackActive then
             local now = tick()
             if now - lastRestartAttempt > 3 then
-                print("[Macro Auto-Restart] Playback not active but enabled, restarting...")
+                debugPrint("[Macro] Restarting playback...")
                 getgenv().MacroGameState.gameEnded = false
                 getgenv().MacroGameState.hasEndGameUI = false
                 getgenv().MacroGameState.lastGameEndedState = false
@@ -3817,8 +4031,54 @@ getgenv().BossRushCardPriority = getgenv().BossRushCardPriority or {}
 initializeCardPriorities(getgenv().BossRushGeneral, getgenv().BossRushCardPriority, "BossRush_")
 initializeCardPriorities(getgenv().BabyloniaCastle, getgenv().BossRushCardPriority, "BabyloniaCastle_")
 
+getgenv().SlimeRushBuffCards = {
+    ["Hasty I"] = 1,
+    ["Hasty II"] = 2,
+    ["Precision I"] = 3,
+    ["Precision II"] = 4,
+    ["True Sight I"] = 5,
+    ["True Sight II"] = 6,
+    ["Momentum"] = 7,
+    ["Fiery Surge I"] = 8,
+    ["Fiery Surge II"] = 9,
+    ["Hellish Warp I"] = 10,
+    ["Hellish Warp II"] = 11,
+    ["Entrepreneur"] = 12
+}
+
+getgenv().SlimeRushDebuffCards = {
+    ["Intimidation I"] = 1,
+    ["Intimidation II"] = 2,
+    ["Blinded I"] = 3,
+    ["Blinded II"] = 4,
+    ["Restriction I"] = 5,
+    ["Restriction II"] = 6,
+    ["Obstruction I"] = 7,
+    ["Obstruction II"] = 8,
+    ["Prevention I"] = 9,
+    ["Prevention II"] = 10
+}
+
+getgenv().SlimeRushSacrifice = {
+    ["Sacrifice"] = 999
+}
+
+getgenv().SlimeRushCardPriority = getgenv().SlimeRushCardPriority or {}
+initializeCardPriorities(getgenv().SlimeRushBuffCards, getgenv().SlimeRushCardPriority, "SlimeRush_")
+initializeCardPriorities(getgenv().SlimeRushDebuffCards, getgenv().SlimeRushCardPriority, "SlimeRush_")
+initializeCardPriorities(getgenv().SlimeRushSacrifice, getgenv().SlimeRushCardPriority, "SlimeRush_")
+
 getgenv().CardSelectionEnabled = getgenv().Config.toggles.CardSelectionToggle or false
+getgenv().SlimeRushEnabled = getgenv().Config.toggles.SlimeRushToggle or false
+getgenv().SlimeRushCardSelectionEnabled = getgenv().Config.toggles.SlimeRushCardToggle or false
+getgenv().SlimeRushSlowerCardSelectionEnabled = getgenv().Config.toggles.SlimeRushSlowerCardToggle or false
+getgenv().SlimeRushSmartCardSelectionEnabled = getgenv().Config.toggles.SlimeRushSmartCardToggle or false
 getgenv().SlowerCardSelectionEnabled = getgenv().Config.toggles.SlowerCardSelectionToggle or false
+
+print("[Init] Slime Rush Enabled:", getgenv().SlimeRushEnabled)
+print("[Init] Slime Rush Fast:", getgenv().SlimeRushCardSelectionEnabled)
+print("[Init] Slime Rush Slower:", getgenv().SlimeRushSlowerCardSelectionEnabled)
+print("[Init] Slime Rush Smart:", getgenv().SlimeRushSmartCardSelectionEnabled)
 
 local savedPortalConfig = getgenv().Config.portals or {}
 getgenv().PortalConfig = {
@@ -4406,6 +4666,231 @@ createCardPriorityInputs(Sections.EventRight, getgenv().OtherCards, getgenv().Ca
 
 
 
+Sections.Event2Left:Header({ Text = "🎃 Event 2 Automation" })
+Sections.Event2Left:SubLabel({ Text = "Halloween Part 2 automation features" })
+
+createToggle(
+    Sections.Event2Left,
+    "Auto Event Join (Part 2)",
+    "AutoEvent2Toggle",
+    function(value)
+        getgenv().AutoEvent2Enabled = value
+        Window:Notify({
+            Title = "Auto Event 2",
+            Description = value and "Enabled" or "Disabled",
+            Lifetime = 3
+        })
+    end,
+    getgenv().Config.toggles.AutoEvent2Toggle or false
+)
+
+createToggle(
+    Sections.Event2Left,
+    "Auto Candy Collector",
+    "AutoCandyToggle",
+    function(value)
+        getgenv().AutoCandyEnabled = value
+        Window:Notify({
+            Title = "Auto Candy",
+            Description = value and "Enabled" or "Disabled",
+            Lifetime = 3
+        })
+    end,
+    getgenv().Config.toggles.AutoCandyToggle or false
+)
+
+Sections.Event2Left:Divider()
+
+Sections.Event2Left:Header({ Text = "🎁 Auto Capsules (Part 2)" })
+Sections.Event2Left:SubLabel({ Text = "Open Halloween Part 2 capsules automatically" })
+
+createToggle(
+    Sections.Event2Left,
+    "Enable Auto Capsules",
+    "Capsule2Toggle",
+    function(value)
+        getgenv().Capsule2Enabled = value
+        Window:Notify({
+            Title = "Auto Capsules 2",
+            Description = value and "Enabled" or "Disabled",
+            Lifetime = 3
+        })
+    end,
+    getgenv().Config.toggles.Capsule2Toggle or false
+)
+
+Sections.Event2Left:Divider()
+
+Sections.Event2Left:Header({ Text = "🔄 Wave Restart" })
+Sections.Event2Left:SubLabel({
+    Text = "Automatically restart the match when reaching a specific wave"
+})
+
+createToggle(
+    Sections.Event2Left,
+    "Enable Wave Restart",
+    "InfiniteRestartToggle",
+    function(value)
+        getgenv().InfiniteRestartEnabled = value
+        Window:Notify({
+            Title = "Wave Restart",
+            Description = value and "Enabled - Will restart at wave " .. getgenv().InfiniteRestartWave or "Disabled",
+            Lifetime = 3
+        })
+    end,
+    getgenv().InfiniteRestartEnabled or false
+)
+
+createInput(
+    Sections.Event2Left,
+    "Restart at Wave",
+    "InfiniteRestartWave",
+    "Enter wave number (e.g., 50)",
+    "Numeric",
+    function(value)
+        getgenv().InfiniteRestartWave = tonumber(value) or 50
+        Window:Notify({
+            Title = "Wave Restart",
+            Description = "Will restart at wave " .. (tonumber(value) or 50),
+            Lifetime = 3
+        })
+    end,
+    tostring(getgenv().InfiniteRestartWave or 50)
+)
+
+
+
+Sections.SlimeRushLeft:Header({ Text = "🟢 Slime Rush Settings" })
+Sections.SlimeRushLeft:SubLabel({ Text = "Automatic card selection for Slime Rush" })
+
+createToggle(
+    Sections.SlimeRushLeft,
+    "Enable Slime Rush",
+    "SlimeRushToggle",
+    function(value)
+        getgenv().SlimeRushEnabled = value
+        Window:Notify({
+            Title = "Slime Rush",
+            Description = value and "Enabled" or "Disabled",
+            Lifetime = 3
+        })
+    end,
+    getgenv().Config.toggles.SlimeRushToggle or false
+)
+
+Sections.SlimeRushLeft:Divider()
+
+Sections.SlimeRushLeft:Header({ Text = "💡 How It Works" })
+Sections.SlimeRushLeft:SubLabel({ 
+    Text = "The script automatically selects cards by priority (1-999). Cards set to 999 are skipped. Adjust priorities on the right." 
+})
+
+Sections.SlimeRushLeft:Divider()
+
+Sections.SlimeRushLeft:Header({ Text = "⚙️ Card Selection Mode" })
+Sections.SlimeRushLeft:SubLabel({ Text = "Choose between fast or reliable selection" })
+
+local slimeFastModeToggle, slimeSlowerModeToggle, slimeSmartModeToggle
+
+slimeFastModeToggle = createToggle(
+    Sections.SlimeRushLeft,
+    "⚡ Fast Mode",
+    "SlimeRushCardToggle",
+    function(value)
+        getgenv().SlimeRushCardSelectionEnabled = value
+        if value then
+            if slimeSlowerModeToggle then
+                getgenv().SlimeRushSlowerCardSelectionEnabled = false
+                getgenv().Config.toggles.SlimeRushSlowerCardToggle = false
+                pcall(function() slimeSlowerModeToggle:UpdateState(false) end)
+            end
+            if slimeSmartModeToggle then
+                getgenv().SlimeRushSmartCardSelectionEnabled = false
+                getgenv().Config.toggles.SlimeRushSmartCardToggle = false
+                pcall(function() slimeSmartModeToggle:UpdateState(false) end)
+            end
+        end
+        Window:Notify({
+            Title = "Slime Rush Fast Mode",
+            Description = value and "Enabled" or "Disabled",
+            Lifetime = 3
+        })
+    end,
+    getgenv().SlimeRushCardSelectionEnabled
+)
+
+slimeSlowerModeToggle = createToggle(
+    Sections.SlimeRushLeft,
+    "🐌 Slower Mode (More Reliable)",
+    "SlimeRushSlowerCardToggle",
+    function(value)
+        getgenv().SlimeRushSlowerCardSelectionEnabled = value
+        if value then
+            if slimeFastModeToggle then
+                getgenv().SlimeRushCardSelectionEnabled = false
+                getgenv().Config.toggles.SlimeRushCardToggle = false
+                pcall(function() slimeFastModeToggle:UpdateState(false) end)
+            end
+            if slimeSmartModeToggle then
+                getgenv().SlimeRushSmartCardSelectionEnabled = false
+                getgenv().Config.toggles.SlimeRushSmartCardToggle = false
+                pcall(function() slimeSmartModeToggle:UpdateState(false) end)
+            end
+        end
+        Window:Notify({
+            Title = "Slime Rush Slower Mode",
+            Description = value and "Enabled" or "Disabled",
+            Lifetime = 3
+        })
+    end,
+    getgenv().SlimeRushSlowerCardSelectionEnabled
+)
+
+slimeSmartModeToggle = createToggle(
+    Sections.SlimeRushLeft,
+    "🧠 Smart Mode (Maximize Coins)",
+    "SlimeRushSmartCardToggle",
+    function(value)
+        getgenv().SlimeRushSmartCardSelectionEnabled = value
+        if value then
+            if slimeFastModeToggle then
+                getgenv().SlimeRushCardSelectionEnabled = false
+                getgenv().Config.toggles.SlimeRushCardToggle = false
+                pcall(function() slimeFastModeToggle:UpdateState(false) end)
+            end
+            if slimeSlowerModeToggle then
+                getgenv().SlimeRushSlowerCardSelectionEnabled = false
+                getgenv().Config.toggles.SlimeRushSlowerCardToggle = false
+                pcall(function() slimeSlowerModeToggle:UpdateState(false) end)
+            end
+        end
+        Window:Notify({
+            Title = "Slime Rush Smart Mode",
+            Description = value and "Enabled" or "Disabled",
+            Lifetime = 3
+        })
+    end,
+    getgenv().SlimeRushSmartCardSelectionEnabled
+)
+
+Sections.SlimeRushRight:Header({ Text = "📊 Card Priorities" })
+Sections.SlimeRushRight:SubLabel({ 
+    Text = "Lower number = higher priority (1 is best, 999 to skip)"
+})
+
+Sections.SlimeRushRight:Divider()
+Sections.SlimeRushRight:Header({ Text = "✨ Buff Cards" })
+createCardPriorityInputs(Sections.SlimeRushRight, getgenv().SlimeRushBuffCards, getgenv().SlimeRushCardPriority, "SlimeRush_")
+
+Sections.SlimeRushRight:Divider()
+Sections.SlimeRushRight:Header({ Text = "⚠️ Debuff Cards (Give Coins)" })
+createCardPriorityInputs(Sections.SlimeRushRight, getgenv().SlimeRushDebuffCards, getgenv().SlimeRushCardPriority, "SlimeRush_")
+
+Sections.SlimeRushRight:Divider()
+Sections.SlimeRushRight:Header({ Text = "💀 Sacrifice (Skip Recommended)" })
+createCardPriorityInputs(Sections.SlimeRushRight, getgenv().SlimeRushSacrifice, getgenv().SlimeRushCardPriority, "SlimeRush_")
+
+
 Sections.BossRushLeft:Header({ Text = "⚔️ Boss Rush Settings" })
 Sections.BossRushLeft:SubLabel({ Text = "Automatic card selection for Boss Rush" })
 
@@ -4984,13 +5469,13 @@ local function buildAutoAbilityUI()
                                             waveDefault
                                         )
                                     else
-                                        print("[Soul Check] ❌ Soul not equipped or wrong soul")
+                                        debugPrint("[Soul Check] Soul not equipped")
                                     end
                                 else
-                                    print("[Soul Check] ❌ UnitID not found or no UnitData")
+                                    debugPrint("[Soul Check] UnitID not found")
                                 end
                             else
-                                print("[Soul Check] ❌ Missing ClientData, UnitData, or Slots")
+                                debugPrint("[Soul Check] Missing data")
                             end
                         end)
                         
@@ -5728,10 +6213,10 @@ createToggle(
     function(value)
         getgenv().AutoPlayConfig.autoPlaceAtPosition = value
         
-        if value and not getgenv().AutoPlayConfig.autoPlace then
+        if value then
             Window:Notify({
                 Title = "Auto Place at Position",
-                Description = "Remember to also enable 'Auto Place' above!",
+                Description = "Will place units at saved positions. Make sure to save positions first!",
                 Lifetime = 4
             })
         end
@@ -5739,7 +6224,7 @@ createToggle(
     getgenv().AutoPlayConfig.autoPlaceAtPosition
 )
 
-Sections.AutoPlayLeft:SubLabel({ Text = "Requires 'Auto Place' enabled. Uses saved positions instead of path" })
+Sections.AutoPlayLeft:SubLabel({ Text = "Independent toggle - uses saved positions instead of path. No need to enable 'Auto Place'" })
 
 Sections.AutoPlayLeft:Divider()
 Sections.AutoPlayLeft:Header({ Text = "⬆️ Upgrade Settings" })
@@ -6366,7 +6851,7 @@ Sections.MacroLeft:Button({
             return
         end
         
-        print("[Equip Macro Units] Unequipping all units...")
+        debugPrint("[Equip] Unequipping all units...")
         local unequipped = 0
         for unitID, unitInfo in pairs(clientData.UnitData) do
             if unitInfo.Equipped then
@@ -6377,9 +6862,9 @@ Sections.MacroLeft:Button({
             end
         end
         
-        print("[Equip Macro Units] Unequipped " .. unequipped .. " units")
+        debugPrint("[Equip] Unequipped " .. unequipped .. " units")
         
-        print("[Equip Macro Units] Equipping macro units...")
+        debugPrint("[Equip] Equipping macro units...")
         local equipped = 0
         for i, macroUnit in ipairs(macroUnits) do
             if i <= 6 then
@@ -7063,9 +7548,9 @@ createToggle(
         local queueteleport = queue_on_teleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport)
         
         if value and queueteleport then
-            print("[ALS] Auto Execute on Teleport enabled")
+            debugPrint("[ALS] Auto Execute enabled")
         elseif value and not queueteleport then
-            warn("[ALS] Auto Execute enabled but queue_on_teleport not supported by your executor")
+            warn("[ALS] Auto Execute not supported by executor")
         end
         
         Window:Notify({
@@ -7139,7 +7624,7 @@ if not isInLobby then
                 local placeRemote = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("PlaceTower")
                 if placeRemote then
                     placeRemote:FireServer(unitName, unitCFrame)
-                    print("[Place Anywhere] Placed " .. unitName .. " at " .. tostring(unitCFrame.Position))
+                    debugPrint("[Place Anywhere] Placed " .. unitName)
                     
                     Window:Notify({
                         Title = "Place Anywhere",
@@ -7160,7 +7645,7 @@ if not isInLobby then
                 local placeRemote = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("PlaceTower")
                 if placeRemote then
                     placeRemote:FireServer(unitName, unitCFrame)
-                    print("[Place Anywhere] Placed " .. unitName .. " at " .. tostring(unitCFrame.Position))
+                    debugPrint("[Place Anywhere] Placed " .. unitName)
                     
                     Window:Notify({
                         Title = "Place Anywhere",
@@ -7211,7 +7696,7 @@ if not isInLobby then
                             
                             if volcanoRemote then
                                 volcanoRemote:FireServer(volcano)
-                                print("[Auto Volcano] Activated volcano")
+                                debugPrint("[Auto Volcano] Activated")
                             end
                         end
                     end
@@ -7269,7 +7754,7 @@ if not isInLobby then
                             
                             if interactEvent then
                                 interactEvent:FireServer(orb)
-                                print("[Auto Orb] Collected orb")
+                                debugPrint("[Auto Orb] Collected")
                             end
                         end
                     end
@@ -7315,7 +7800,7 @@ if not isInLobby then
                             
                             if hrp then
                                 hrp.CFrame = zoneHitbox.CFrame
-                                print("[Anti Magic Zone] Teleported to safe zone")
+                                debugPrint("[Anti Magic Zone] Teleported")
                             end
                         end
                     end
@@ -7341,6 +7826,25 @@ Sections.MiscRight:SubLabel({
 
 
 Sections.SettingsLeft:Header({ Text = "⚙️ UI Settings" })
+
+createToggle(
+    Sections.SettingsLeft,
+    "Debug Mode",
+    "DebugMode",
+    function(value)
+        getgenv().DebugMode = value
+        Window:Notify({
+            Title = "Debug Mode",
+            Description = (value and "Enabled" or "Disabled") .. " - Shows detailed console logs",
+            Lifetime = 3
+        })
+    end,
+    false
+)
+
+Sections.SettingsLeft:SubLabel({ Text = "Enable to see detailed console logs for troubleshooting" })
+
+Sections.SettingsLeft:Divider()
 
 local function getValidKeyCode(keyName, fallback)
     if not keyName or keyName == "" then return Enum.KeyCode[fallback] end
@@ -7462,6 +7966,42 @@ Sections.SettingsLeft:Button({
 })
 
 Sections.SettingsRight:Header({ Text = "🔧 Utility Actions" })
+
+Sections.SettingsRight:Button({
+    Name = "📊 Memory Report",
+    Callback = function()
+        local report = getMemoryReport()
+        print(report)
+        
+        Window:Notify({
+            Title = "Memory Report",
+            Description = "Check console (F9) for report",
+            Lifetime = 3
+        })
+    end
+})
+
+Sections.SettingsRight:Button({
+    Name = "🧹 Force Memory Cleanup",
+    Callback = function()
+        local beforeMem = getMemoryUsageMB()
+        
+        pcall(function() collectgarbage("collect") end)
+        task.wait(0.1)
+        pcall(function() collectgarbage("collect") end)
+        
+        local afterMem = getMemoryUsageMB()
+        local freed = beforeMem - afterMem
+        
+        Window:Notify({
+            Title = "Memory Cleanup",
+            Description = string.format("Freed %.1f MB", freed),
+            Lifetime = 3
+        })
+        
+        print(getMemoryReport())
+    end
+})
 
 Sections.SettingsRight:Button({
     Name = "🌐 Server Hop (Safe)",
@@ -7856,9 +8396,9 @@ Sections.SeamlessFixLeft:SubLabel({
     Text = "Script will automatically restart after this many rounds to prevent issues"
 })
 
-Sections.SeamlessFixRight:Header({ Text = "♾️ Infinite Mode Restart" })
+Sections.SeamlessFixRight:Header({ Text = "🔄 Wave Restart" })
 Sections.SeamlessFixRight:SubLabel({
-    Text = "Automatically restart the match when reaching a specific wave in Infinite mode"
+    Text = "Automatically restart the match when reaching a specific wave"
 })
 
 if not getgenv().InfiniteRestartEnabled then
@@ -7871,12 +8411,12 @@ end
 
 createToggle(
     Sections.SeamlessFixRight,
-    "Enable Infinite Restart",
+    "Enable Wave Restart",
     "InfiniteRestartToggle",
     function(value)
         getgenv().InfiniteRestartEnabled = value
         Window:Notify({
-            Title = "Infinite Restart",
+            Title = "Wave Restart",
             Description = value and "Enabled - Will restart at wave " .. getgenv().InfiniteRestartWave or "Disabled",
             Lifetime = 3
         })
@@ -7893,7 +8433,7 @@ createInput(
     function(value)
         getgenv().InfiniteRestartWave = tonumber(value) or 50
         Window:Notify({
-            Title = "Infinite Restart",
+            Title = "Wave Restart",
             Description = "Will restart at wave " .. (tonumber(value) or 50),
             Lifetime = 3
         })
@@ -7918,24 +8458,72 @@ if not isInLobby then
                         local targetWave = tonumber(getgenv().InfiniteRestartWave) or 50
                         
                         if currentWave >= targetWave then
-                            print("[Infinite Restart] Wave " .. currentWave .. " reached, restarting match...")
+                            print("[Wave Restart] Wave " .. currentWave .. " reached, restarting match...")
+                            
+                            if getgenv().SeamlessFixEnabled and getgenv()._SeamlessEndgameCount then
+                                getgenv()._SeamlessEndgameCount = getgenv()._SeamlessEndgameCount + 1
+                                local maxRounds = getgenv().SeamlessRounds or 4
+                                print("[Wave Restart] Seamless counter: " .. getgenv()._SeamlessEndgameCount .. "/" .. maxRounds)
+                            end
+                            
+                            if getgenv().WebhookEnabled and not getgenv().WebhookProcessing then
+                                print("[Wave Restart] Sending webhook before restart...")
+                                task.spawn(function()
+                                    pcall(function()
+                                        getgenv()._ForceWebhookSend = true
+                                        getgenv()._WebhookSeamlessRestart = true
+                                        
+                                        local matchTime = "00:00:00"
+                                        pcall(function()
+                                            local elapsed = RS:FindFirstChild("ElapsedTime")
+                                            if elapsed and elapsed.Value then
+                                                local seconds = math.floor(elapsed.Value)
+                                                local hours = math.floor(seconds / 3600)
+                                                local minutes = math.floor((seconds % 3600) / 60)
+                                                local secs = seconds % 60
+                                                matchTime = string.format("%02d:%02d:%02d", hours, minutes, secs)
+                                            end
+                                        end)
+                                        
+                                        print("[Wave Restart] Match time: " .. matchTime .. ", Wave: " .. currentWave)
+                                        
+                                        if getgenv()._SendWebhookManual then
+                                            getgenv()._SendWebhookManual()
+                                        end
+                                        
+                                        task.wait(2)
+                                    end)
+                                end)
+                                
+                                task.wait(3)
+                            end
                             
                             local remotes = RS:FindFirstChild("Remotes")
                             local restartRemote = remotes and remotes:FindFirstChild("RestartMatch")
                             
                             if restartRemote then
                                 restartRemote:FireServer()
-                                print("[Infinite Restart] ✅ Restart signal sent")
+                                print("[Wave Restart] ✅ Restart signal sent")
                                 
                                 Window:Notify({
-                                    Title = "Infinite Restart",
+                                    Title = "Wave Restart",
                                     Description = "Restarting at wave " .. currentWave,
                                     Lifetime = 3
                                 })
                                 
+                                getgenv()._ForceWebhookSend = false
+                                getgenv()._WebhookSeamlessRestart = false
+                                
+                                task.spawn(function()
+                                    task.wait(5)
+                                    if getgenv()._RefreshWebhookInitialData then
+                                        getgenv()._RefreshWebhookInitialData()
+                                    end
+                                end)
+                                
                                 task.wait(10)
                             else
-                                print("[Infinite Restart] ❌ RestartMatch remote not found")
+                                print("[Wave Restart] ❌ RestartMatch remote not found")
                             end
                         end
                     end
@@ -8788,13 +9376,34 @@ local function processAbility(tower, unitName, abilityName, cfg, currentWave, ha
     end
     
     if cfg.onlyOnBoss then
-        if not hasBoss or not funcs.bossReadyForAbilities() then
+        if not hasBoss then
             return
+        end
+        
+        if not funcs.bossReadyForAbilities() then
+            task.wait(0.5)
+            if not funcs.bossReadyForAbilities() then
+                return
+            end
         end
     end
     
     if cfg.requireBossInRange then
-        if not hasBoss or not funcs.checkBossInRangeForDuration(tower, 0) then
+        if not hasBoss then
+            return
+        end
+        
+        local inRangeChecks = 0
+        for i = 1, 3 do
+            if funcs.checkBossInRangeForDuration(tower, 0) then
+                inRangeChecks = inRangeChecks + 1
+            end
+            if i < 3 then
+                task.wait(0.1)
+            end
+        end
+        
+        if inRangeChecks < 2 then
             return
         end
     end
@@ -9070,7 +9679,7 @@ do
         for _, clone in ipairs(clones) do
             local cloneUpgrade = clone:FindFirstChild("Upgrade")
             if cloneUpgrade and cloneUpgrade.Value == 8 then
-                local cloneId = clone:GetDebugId()
+                local cloneId = tostring(clone:GetDebugId())
                 if not getgenv().WukongTrackedClones[cloneId] then
                     if useCloneDiffusion(clone) then
                         getgenv().WukongTrackedClones[cloneId] = true
@@ -11019,22 +11628,25 @@ do
                 return 
             end
             
-            if isProcessing and not getgenv().WebhookProcessing then 
-                return 
+            if not getgenv()._ForceWebhookSend then
+                if isProcessing and not getgenv().WebhookProcessing then 
+                    return 
+                end
+                
+                local currentTime = tick()
+                if currentTime - lastWebhookTime < WEBHOOK_COOLDOWN then 
+                    getgenv().WebhookProcessing = false
+                    return 
+                end
             end
             
-            local currentTime = tick()
-            if currentTime - lastWebhookTime < WEBHOOK_COOLDOWN then 
-                getgenv().WebhookProcessing = false
-                return 
-            end
-            
-            lastWebhookTime = currentTime
+            lastWebhookTime = tick()
             isProcessing = true
             if not getgenv().WebhookProcessing then
                 getgenv().WebhookProcessing = true
             end
             
+            local isSeamlessRestart = getgenv()._WebhookSeamlessRestart or false
             
             local rewards = getRewards()
             local matchTime, matchWave, matchResult = getMatchResult()
@@ -11045,6 +11657,28 @@ do
                 isProcessing = false
                 getgenv().WebhookProcessing = false
                 return
+            end
+            
+            if isSeamlessRestart then
+                pcall(function()
+                    local wave = RS:FindFirstChild("Wave")
+                    if wave and wave.Value then
+                        matchWave = tostring(wave.Value)
+                    end
+                    
+                    local elapsed = RS:FindFirstChild("ElapsedTime")
+                    if elapsed and elapsed.Value then
+                        local seconds = math.floor(elapsed.Value)
+                        local hours = math.floor(seconds / 3600)
+                        local minutes = math.floor((seconds % 3600) / 60)
+                        local secs = seconds % 60
+                        matchTime = string.format("%02d:%02d:%02d", hours, minutes, secs)
+                    end
+                    
+                    matchResult = "Seamless Restart"
+                end)
+                
+                print("[Webhook] Seamless restart - Wave: " .. matchWave .. ", Time: " .. matchTime)
             end
             
             if not matchWave or matchWave == "0" or matchWave == "" then
@@ -11087,11 +11721,18 @@ do
                 end
                 stats = stats .. "\n<:bingostamp:1426362482141954068> " .. formatNumber(bingoStamps)
                 
+                stats = stats .. "\n<:halloweencookies:1430910916534210580> " .. formatNumber(clientData.HalloweenCookies or 0)
+                
+                stats = stats .. "\n<:slimecoins:1430922724230037684> " .. formatNumber(clientData.MagicCoins or 0)
+                
                 return stats
             end
             
             local rewardsText = ""
-            if #rewards > 0 then
+            
+            if isSeamlessRestart then
+                rewardsText = "Seamless Restart - No EndGameUI rewards\nUpdated stats shown below"
+            elseif #rewards > 0 then
                 for _, r in ipairs(rewards) do
                     local initialValue = 0
                     local currentValue = 0
@@ -11456,12 +12097,73 @@ do
     
     setupWebhookTrigger()
     
+    getgenv()._SendWebhookManual = function()
+        if not getgenv().WebhookEnabled then
+            warn("[Webhook] Webhook is disabled")
+            return
+        end
+        
+        print("[Webhook] Manual trigger requested")
+        sendWebhook()
+    end
+    
+    getgenv()._RefreshWebhookInitialData = function()
+        print("[Webhook] Refreshing initial data...")
+        local clientData = getClientData()
+        if clientData then
+            getgenv()._WebhookInitialData.Jewels = clientData.Jewels or 0
+            getgenv()._WebhookInitialData.Gold = clientData.Gold or 0
+            getgenv()._WebhookInitialData.Emeralds = clientData.Emeralds or 0
+            getgenv()._WebhookInitialData.Rerolls = clientData.Rerolls or 0
+            getgenv()._WebhookInitialData.CandyBasket = clientData.CandyBasket or 0
+            getgenv()._WebhookInitialData.HeroTokens = clientData.HeroTokens or 0
+            getgenv()._WebhookInitialData.EXP = clientData.EXP or 0
+            
+            getgenv()._WebhookInitialData.ItemData = {}
+            if clientData.ItemData then
+                for itemName, itemInfo in pairs(clientData.ItemData) do
+                    if itemInfo.Amount then
+                        getgenv()._WebhookInitialData.ItemData[itemName] = itemInfo.Amount
+                    end
+                end
+            end
+            
+            getgenv()._WebhookInitialData.ExperienceItemsData = {}
+            if clientData.ExperienceItemsData then
+                for itemName, itemInfo in pairs(clientData.ExperienceItemsData) do
+                    if itemInfo.Amount then
+                        getgenv()._WebhookInitialData.ExperienceItemsData[itemName] = itemInfo.Amount
+                    end
+                end
+            end
+            
+            getgenv()._WebhookInitialData.UnitCounts = {}
+            if clientData.UnitData then
+                for unitID, unitInfo in pairs(clientData.UnitData) do
+                    if unitInfo.UnitName then
+                        local unitName = unitInfo.UnitName
+                        getgenv()._WebhookInitialData.UnitCounts[unitName] = (getgenv()._WebhookInitialData.UnitCounts[unitName] or 0) + 1
+                    end
+                end
+            end
+            
+            print("[Webhook] Initial data refreshed successfully")
+        else
+            warn("[Webhook] Failed to get client data")
+        end
+    end
+    
     trackConnection(LocalPlayer.PlayerGui.ChildRemoved:Connect(function(child)
         if child.Name == "EndGameUI" then
             task.wait(1)
             if getgenv().WebhookProcessing then
                 warn("[Webhook] Force clearing WebhookProcessing flag due to UI removal")
                 getgenv().WebhookProcessing = false
+            end
+            
+            if getgenv().WebhookEnabled then
+                task.wait(2)
+                getgenv()._RefreshWebhookInitialData()
             end
         end
     end))
@@ -11648,8 +12350,8 @@ if isInLobby then
     
     task.spawn(function()
         task.wait(1)
-        local PurchaseEvent = RS:WaitForChild("Events"):WaitForChild("Hallowen2025"):WaitForChild("Purchase")
-        local OpenCapsuleEvent = RS:WaitForChild("Remotes"):WaitForChild("OpenCapsule")
+        local Purchase = RS:WaitForChild("Events"):WaitForChild("Hallowen2025"):WaitForChild("Purchase")
+        local OpenCapsule = RS:WaitForChild("Remotes"):WaitForChild("OpenCapsule")
         
         local function clickButton(button)
             if not button then return false end
@@ -11705,11 +12407,11 @@ if isInLobby then
                     local candyBasket = clientData.CandyBasket or 0
                     
                     if candyBasket >= 100000 then
-                        pcall(function() PurchaseEvent:InvokeServer(1, 100) end)
+                        pcall(function() Purchase:InvokeServer(1, 100) end)
                     elseif candyBasket >= 10000 then
-                        pcall(function() PurchaseEvent:InvokeServer(1, 10) end)
+                        pcall(function() Purchase:InvokeServer(1, 10) end)
                     elseif candyBasket >= 1000 then
-                        pcall(function() PurchaseEvent:InvokeServer(1, 1) end)
+                        pcall(function() Purchase:InvokeServer(1, 1) end)
                     end
                     
                     if candyBasket < 1000 then
@@ -11721,7 +12423,7 @@ if isInLobby then
                         
                         if capsuleAmount > 0 then
                             pcall(function()
-                                OpenCapsuleEvent:FireServer("HalloweenCapsule2025", capsuleAmount)
+                                OpenCapsule:FireServer("HalloweenCapsule2025", capsuleAmount)
                             end)
                             task.wait(0.5)
                             clickAllPromptButtons()
@@ -11734,6 +12436,159 @@ if isInLobby then
     end
 end
 
+
+
+task.spawn(function()
+    local eventsFolder = RS:FindFirstChild("Events")
+    local halloweenFolder = eventsFolder and eventsFolder:FindFirstChild("Hallowen2025")
+    local enterEvent = halloweenFolder and halloweenFolder:FindFirstChild("Enter")
+    
+    if not enterEvent then
+        warn("[Event 2] EnterEvent remote not found")
+        return
+    end
+    
+    while true do
+        task.wait(2)
+        
+        if not getgenv().AutoEvent2Enabled then
+            task.wait(2)
+            continue
+        end
+        
+        pcall(function()
+            local inLobby = LocalPlayer.PlayerGui:FindFirstChild("Lobby")
+            if inLobby and inLobby.Enabled then
+                enterEvent:FireServer("Hallowen2025_P2")
+                print("[Event 2] Joined Halloween Part 2")
+                task.wait(5)
+            end
+        end)
+    end
+end)
+
+task.spawn(function()
+    while true do
+        task.wait(0.5)
+        
+        if not getgenv().AutoCandyEnabled then
+            task.wait(2)
+            continue
+        end
+        
+        pcall(function()
+            local collectibles = workspace:FindFirstChild("Collectibles")
+            if not collectibles then return end
+            
+            local character = LocalPlayer.Character
+            if not character or not character:FindFirstChild("HumanoidRootPart") then return end
+            
+            local hrp = character.HumanoidRootPart
+            
+            for _, candy in pairs(collectibles:GetChildren()) do
+                if candy.Name == "Candy" and candy:IsA("BasePart") then
+                    hrp.CFrame = candy.CFrame
+                    task.wait(0.1)
+                end
+            end
+        end)
+    end
+end)
+
+if isInLobby then
+    task.spawn(function()
+        task.wait(1)
+        
+        local Purchase, OpenCapsule
+        pcall(function()
+            Purchase = RS:WaitForChild("Events"):WaitForChild("Hallowen2025"):WaitForChild("Purchase")
+            OpenCapsule = RS:WaitForChild("Remotes"):WaitForChild("OpenCapsule")
+        end)
+        
+        if not Purchase or not OpenCapsule then
+            warn("[Event 2] Capsule remotes not found")
+            return
+        end
+    
+    local function clickButton(button)
+        if not button then return false end
+        local events = {"Activated", "MouseButton1Click", "MouseButton1Down", "MouseButton1Up"}
+        for _, ev in ipairs(events) do
+            pcall(function()
+                for _, conn in ipairs(getconnections(button[ev])) do
+                    conn:Fire()
+                end
+            end)
+        end
+        return true
+    end
+    
+    local function clickAllPromptButtons()
+        local success = false
+        pcall(function()
+            local prompt = LocalPlayer.PlayerGui:FindFirstChild("Prompt")
+            if not prompt then return end
+            
+            local frame = prompt:FindFirstChild("Frame")
+            if not frame then return end
+            
+            local textButton = frame:FindFirstChild("TextButton")
+            if textButton then
+                clickButton(textButton)
+                success = true
+            end
+            
+            local folder = frame:FindFirstChild("Folder")
+            if folder then
+                local folderButton = folder:FindFirstChild("TextButton")
+                if folderButton then
+                    clickButton(folderButton)
+                    success = true
+                end
+            end
+        end)
+        return success
+    end
+    
+    while true do
+        task.wait(0.1)
+        
+        if not getgenv().Capsule2Enabled then
+            task.wait(3)
+            continue
+        end
+        
+        pcall(function()
+            local clientData = getClientData()
+            if not clientData then return end
+            
+            local halloweenCookies = clientData.HalloweenCookies or 0
+            
+            if halloweenCookies >= 100000 then
+                Purchase:InvokeServer(1, 100, "Hallowen2025_P2")
+            elseif halloweenCookies >= 10000 then
+                Purchase:InvokeServer(1, 10, "Hallowen2025_P2")
+            elseif halloweenCookies >= 1000 then
+                Purchase:InvokeServer(1, 1, "Hallowen2025_P2")
+            end
+            
+            if halloweenCookies < 1000 then
+                clientData = getClientData()
+                local capsuleAmount = 0
+                if clientData and clientData.ItemData and clientData.ItemData.HalloweenCapsule2025_P2 then
+                    capsuleAmount = clientData.ItemData.HalloweenCapsule2025_P2.Amount or 0
+                end
+                
+                if capsuleAmount > 0 then
+                    OpenCapsule:FireServer("HalloweenCapsule2025_P2", capsuleAmount)
+                    task.wait(0.5)
+                    clickAllPromptButtons()
+                end
+            end
+        end)
+    end
+    end)
+end
 
 
 do
@@ -11901,18 +12756,32 @@ do
         local bestIndex, bestPriority = nil, math.huge
         
         local blacklistedCards = {
-            ["Devil's Sacrifice"] = true, 
+            ["Devil's Sacrifice"] = true,
+            ["Sacrifice"] = true,
         }
         
         local isBossRush = false
+        local isSlimeRush = false
+        
         pcall(function()
             local gamemode = RS:FindFirstChild("Gamemode")
-            if gamemode and gamemode.Value == "BossRush" then
-                isBossRush = true
+            if gamemode then
+                if gamemode.Value == "BossRush" then
+                    isBossRush = true
+                elseif gamemode.Value == "SlimeRush" then
+                    isSlimeRush = true
+                end
             end
         end)
         
-        local priorityTable = isBossRush and getgenv().BossRushCardPriority or getgenv().CardPriority
+        local priorityTable
+        if isBossRush then
+            priorityTable = getgenv().BossRushCardPriority
+        elseif isSlimeRush then
+            priorityTable = getgenv().SlimeRushCardPriority
+        else
+            priorityTable = getgenv().CardPriority
+        end
         
         for i=1,#list do
             local nm = list[i].name
@@ -12034,15 +12903,23 @@ do
     
     local function selectCard()
         local isBossRush = false
+        local isSlimeRush = false
+        
         pcall(function()
             local gamemode = RS:FindFirstChild("Gamemode")
-            if gamemode and gamemode.Value == "BossRush" then
-                isBossRush = true
+            if gamemode then
+                if gamemode.Value == "BossRush" then
+                    isBossRush = true
+                elseif gamemode.Value == "SlimeRush" then
+                    isSlimeRush = true
+                end
             end
         end)
         
         if isBossRush then
             if not getgenv().BossRushEnabled then return false end
+        elseif isSlimeRush then
+            if not getgenv().SlimeRushCardSelectionEnabled then return false end
         else
             if not getgenv().CardSelectionEnabled then return false end
         end
@@ -12082,7 +12959,20 @@ do
     end
     
     local function selectCardSlower()
-        if not getgenv().SlowerCardSelectionEnabled then return false end
+        local isSlimeRush = false
+        pcall(function()
+            local gamemode = RS:FindFirstChild("Gamemode")
+            if gamemode and gamemode.Value == "SlimeRush" then
+                isSlimeRush = true
+            end
+        end)
+        
+        if isSlimeRush then
+            if not getgenv().SlimeRushSlowerCardSelectionEnabled then return false end
+        else
+            if not getgenv().SlowerCardSelectionEnabled then return false end
+        end
+        
         local ok, result = pcall(function()
             local currentSignature = getPromptSignature()
             if not currentSignature then
@@ -12118,7 +13008,12 @@ do
                 local nm = list[i].name
                 
                 if not alreadyPicked[nm] then
-                    local value = calculateCardValue(nm, currentWave)
+                    local value
+                    if isSlimeRush then
+                        value = calculateSlimeRushCardValue(nm, currentWave)
+                    else
+                        value = calculateCardValue(nm, currentWave)
+                    end
                     
                     if value > bestValue then
                         bestValue = value
@@ -12293,6 +13188,88 @@ do
         return ok and signature or nil
     end
     
+    local function calculateSlimeRushCardValue(cardName, currentWave)
+        local blacklistedCards = {
+            ["Sacrifice"] = true,
+        }
+        
+        if blacklistedCards[cardName] then
+            return -999999999
+        end
+        
+        local cardDefinitions = {
+            ["Blinded I"] = {type = "wave", coinsPerWave = 2},
+            ["Blinded II"] = {type = "wave", coinsPerWave = 5},
+            
+            ["Intimidation I"] = {type = "kill", coinsPerKill = 2},
+            ["Intimidation II"] = {type = "kill", coinsPerKill = 3},
+            ["Obstruction I"] = {type = "kill", coinsPerKill = 2},
+            ["Obstruction II"] = {type = "kill", coinsPerKill = 3},
+            
+            ["Restriction I"] = {type = "boss", coinsPerBoss = 50},
+            ["Restriction II"] = {type = "boss", coinsPerBoss = 100},
+            
+            ["Prevention I"] = {type = "finalboss", coinsOnFinal = 250},
+            ["Prevention II"] = {type = "finalboss", coinsOnFinal = 500},
+            
+            ["Hasty I"] = {type = "buff", value = 100},
+            ["Hasty II"] = {type = "buff", value = 150},
+            ["Precision I"] = {type = "buff", value = 80},
+            ["Precision II"] = {type = "buff", value = 120},
+            ["True Sight I"] = {type = "buff", value = 90},
+            ["True Sight II"] = {type = "buff", value = 130},
+            ["Momentum"] = {type = "buff", value = 110},
+            ["Fiery Surge I"] = {type = "buff", value = 85},
+            ["Fiery Surge II"] = {type = "buff", value = 125},
+            ["Hellish Warp I"] = {type = "buff", value = 95},
+            ["Hellish Warp II"] = {type = "buff", value = 140},
+            ["Entrepreneur"] = {type = "buff", value = 200},
+        }
+        
+        local cardData = cardDefinitions[cardName]
+        if not cardData then
+            return -999999
+        end
+        
+        local userPriority = (getgenv().SlimeRushCardPriority and getgenv().SlimeRushCardPriority[cardName]) or 1
+        if userPriority >= 999 then
+            return -999999
+        end
+        
+        local TOTAL_WAVES = 50
+        local TOTAL_ENEMIES = 899
+        local TOTAL_BOSSES = 4
+        
+        local wavesRemaining = math.max(1, TOTAL_WAVES - currentWave + 1)
+        
+        local currentKills = 0
+        pcall(function()
+            currentKills = game:GetService("Players").LocalPlayer.leaderstats.Kills.Value
+        end)
+        
+        local enemiesRemaining = math.max(1, TOTAL_ENEMIES - currentKills)
+        local bossesRemaining = math.max(0, TOTAL_BOSSES - math.floor(currentWave / 12))
+        
+        local totalCoinValue = 0
+        
+        if cardData.type == "wave" then
+            totalCoinValue = cardData.coinsPerWave * wavesRemaining
+        elseif cardData.type == "kill" then
+            totalCoinValue = cardData.coinsPerKill * enemiesRemaining
+        elseif cardData.type == "boss" then
+            totalCoinValue = cardData.coinsPerBoss * bossesRemaining
+        elseif cardData.type == "finalboss" then
+            totalCoinValue = currentWave < 50 and cardData.coinsOnFinal or 0
+        elseif cardData.type == "buff" then
+            return -999999
+        end
+        
+        local priorityMultiplier = 1000 / math.max(1, userPriority)
+        totalCoinValue = totalCoinValue * priorityMultiplier
+        
+        return totalCoinValue
+    end
+    
     local function calculateCardValue(cardName, currentWave)
         local blacklistedCards = {
             ["Devil's Sacrifice"] = true, 
@@ -12375,8 +13352,22 @@ do
     end
     
     local function selectCardSmart()
-        if not getgenv().SmartCardSelectionEnabled then 
-            return false 
+        local isSlimeRush = false
+        pcall(function()
+            local gamemode = RS:FindFirstChild("Gamemode")
+            if gamemode and gamemode.Value == "SlimeRush" then
+                isSlimeRush = true
+            end
+        end)
+        
+        if isSlimeRush then
+            if not getgenv().SlimeRushSmartCardSelectionEnabled then
+                return false
+            end
+        else
+            if not getgenv().SmartCardSelectionEnabled then 
+                return false 
+            end
         end
         
         local ok, result = pcall(function()
@@ -12418,7 +13409,12 @@ do
                 local button = list[i].button
                 
                 if not alreadyPicked[cardName] then
-                    local value = calculateCardValue(cardName, currentWave)
+                    local value
+                    if isSlimeRush then
+                        value = calculateSlimeRushCardValue(cardName, currentWave)
+                    else
+                        value = calculateCardValue(cardName, currentWave)
+                    end
                     
                     if value > -999999 then
                         table.insert(candyCards, {
@@ -12426,7 +13422,8 @@ do
                             button = button,
                             value = value
                         })
-                        print("  ✅ " .. cardName .. " = " .. math.floor(value) .. " candy")
+                        local valueLabel = isSlimeRush and " coins" or " candy"
+                        print("  ✅ " .. cardName .. " = " .. math.floor(value) .. valueLabel)
                     else
                         table.insert(nonCandyCards, cardName)
                         print("  ❌ " .. cardName .. " = SKIPPED")
@@ -12509,16 +13506,48 @@ do
         end
         
         local isBossRush = false
+        local isSlimeRush = false
+        local isMidnightHunt = false
+        
         pcall(function()
             local gamemode = RS:FindFirstChild("Gamemode")
-            if gamemode and gamemode.Value == "BossRush" then
-                isBossRush = true
+            if gamemode then
+                local gamemodeValue = tostring(gamemode.Value)
+                print("[Card Selection] Gamemode detected:", gamemodeValue)
+                
+                if gamemodeValue == "BossRush" then
+                    isBossRush = true
+                elseif gamemodeValue:find("Slime") or gamemodeValue == "SlimeRush" then
+                    isSlimeRush = true
+                    print("[Card Selection] Slime Rush mode detected")
+                elseif gamemodeValue == "MidnightHunt" then
+                    isMidnightHunt = true
+                end
             end
         end)
         
         if isBossRush and getgenv().BossRushEnabled then
             selectCard()
-        elseif not isBossRush then
+        elseif isSlimeRush then
+            print("[Card Selection] Slime Rush detected, checking toggles...")
+            print("[Card Selection] SlimeRushEnabled:", getgenv().SlimeRushEnabled)
+            print("[Card Selection] Fast:", getgenv().SlimeRushCardSelectionEnabled)
+            print("[Card Selection] Slower:", getgenv().SlimeRushSlowerCardSelectionEnabled)
+            print("[Card Selection] Smart:", getgenv().SlimeRushSmartCardSelectionEnabled)
+            
+            if getgenv().SlimeRushEnabled then
+                if getgenv().SlimeRushCardSelectionEnabled then
+                    print("[Card Selection] Using Fast Mode")
+                    selectCard()
+                elseif getgenv().SlimeRushSlowerCardSelectionEnabled then
+                    print("[Card Selection] Using Slower Mode")
+                    selectCardSlower()
+                elseif getgenv().SlimeRushSmartCardSelectionEnabled then
+                    print("[Card Selection] Using Smart Mode")
+                    selectCardSmart()
+                end
+            end
+        elseif isMidnightHunt then
             if getgenv().CardSelectionEnabled then
                 selectCard()
             elseif getgenv().SlowerCardSelectionEnabled then
@@ -12536,6 +13565,7 @@ end
 if not isInLobby then
     task.spawn(function()
         local endgameCount = 0
+        getgenv()._SeamlessEndgameCount = endgameCount 
         local maxRoundsReached = false
         local hasRun = false
         local lastEndgameTime = 0
@@ -12661,6 +13691,7 @@ if not isInLobby then
                     hasRun = true
                     lastEndgameTime = currentTime
                     endgameCount = endgameCount + 1
+                    getgenv()._SeamlessEndgameCount = endgameCount 
                     local maxRounds = getgenv().SeamlessRounds or 4
                     print("[Seamless Fix] 🏁 Endgame detected. Current seamless rounds: " .. endgameCount .. "/" .. maxRounds)
                     
@@ -12691,6 +13722,7 @@ if not isInLobby then
                                     restartEvent:FireServer()
                                     task.wait(3)
                                     endgameCount = 0
+                                    getgenv()._SeamlessEndgameCount = 0
                                     maxRoundsReached = false
                                     hasRun = false
                                     enableSeamlessIfNeeded()
@@ -12722,6 +13754,7 @@ if not isInLobby then
         trackConnection(LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
             if child.Name == "TeleportUI" and maxRoundsReached then
                 endgameCount = 0
+                getgenv()._SeamlessEndgameCount = 0
                 maxRoundsReached = false
                 task.wait(2)
                 enableSeamlessIfNeeded()
@@ -13079,7 +14112,6 @@ if not isInLobby then
             task.wait(30) 
             pcall(function()
                 collectgarbage("collect")
-                print("[Memory] Garbage collection performed")
             end)
         end
     end)
@@ -13439,7 +14471,7 @@ if not isInLobby then
             while true do
                 task.wait(3)  
                 
-                if not getgenv().AutoPlayConfig.autoPlace then
+                if not getgenv().AutoPlayConfig.autoPlace and not getgenv().AutoPlayConfig.autoPlaceAtPosition then
                     task.wait(1)
                     continue
                 end
@@ -13521,7 +14553,7 @@ if not isInLobby then
                     continue 
                 end
                 
-                if getgenv().AutoPlayConfig.placeBeforeUpgrade and getgenv().AutoPlayConfig.autoPlace then
+                if getgenv().AutoPlayConfig.placeBeforeUpgrade and (getgenv().AutoPlayConfig.autoPlace or getgenv().AutoPlayConfig.autoPlaceAtPosition) then
                     local allUnitsPlaced = true
                     local sortedSlots = {"Slot1", "Slot2", "Slot3", "Slot4", "Slot5", "Slot6"}
                     
