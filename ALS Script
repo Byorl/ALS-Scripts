@@ -2677,6 +2677,31 @@ local function executeAction(action, retryCount)
     end
     
     local remote = getgenv().MacroRemoteCache[action.RemoteName:lower()]
+    
+    if not remote and action.ActionType == "Place" then
+        for name, rem in pairs(getgenv().MacroRemoteCache) do
+            if name:find("place") or name:find("tower") then
+                remote = rem
+                print("[Macro] Using fallback remote for Place: " .. name)
+                break
+            end
+        end
+    end
+    
+    if not remote and action.ActionType == "Upgrade" then
+        remote = getgenv().MacroRemoteCache["upgrade"]
+        if remote then
+            print("[Macro] Using fallback remote for Upgrade: upgrade")
+        end
+    end
+    
+    if not remote and action.ActionType == "Sell" then
+        remote = getgenv().MacroRemoteCache["sell"]
+        if remote then
+            print("[Macro] Using fallback remote for Sell: sell")
+        end
+    end
+    
     if not remote then 
         return false, "Remote not found: " .. action.RemoteName
     end
@@ -2776,18 +2801,28 @@ local function executeAction(action, retryCount)
         local tower = selectedTower.tower
         local oldLevel = selectedTower.level
         
-        if remote:IsA("RemoteFunction") then
-            remote:InvokeServer(tower)
-        else
-            remote:FireServer(tower)
+        print("[Macro] Upgrading " .. action.TowerName .. " from level " .. oldLevel .. " (method: " .. selectionMethod .. ")")
+        
+        local callSuccess = pcall(function()
+            if remote:IsA("RemoteFunction") then
+                remote:InvokeServer(tower)
+            else
+                remote:FireServer(tower)
+            end
+        end)
+        
+        if not callSuccess then
+            return false, "Failed to call upgrade remote"
         end
         
         task.wait(0.5)
         
         local newLevel = tower:FindFirstChild("Upgrade") and tower.Upgrade.Value or oldLevel
         if newLevel > oldLevel then
+            print("[Macro] ✅ Upgrade successful (" .. oldLevel .. " → " .. newLevel .. ")")
             return true, "Upgraded to level " .. newLevel
         else
+            print("[Macro] ❌ Upgrade failed (level unchanged: " .. oldLevel .. ")")
             if retryCount < 1 then
                 task.wait(0.3)
                 return executeAction(action, retryCount + 1)
@@ -2892,7 +2927,11 @@ local function executeAction(action, retryCount)
             else
                 return false, "Invalid position data"
             end
+        else
+            return false, "Missing position data for placement"
         end
+        
+        print("[Macro] Placing " .. (action.TowerName or "?") .. " at position")
         
         local towerCountBefore = 0
         for _, t in pairs(workspace.Towers:GetChildren()) do
@@ -2902,10 +2941,16 @@ local function executeAction(action, retryCount)
             end
         end
         
-        if remote:IsA("RemoteFunction") then
-            remote:InvokeServer(unpack(args))
-        else
-            remote:FireServer(unpack(args))
+        local callSuccess = pcall(function()
+            if remote:IsA("RemoteFunction") then
+                remote:InvokeServer(unpack(args))
+            else
+                remote:FireServer(unpack(args))
+            end
+        end)
+        
+        if not callSuccess then
+            return false, "Failed to call placement remote"
         end
         
         task.wait(0.5)
@@ -2919,8 +2964,10 @@ local function executeAction(action, retryCount)
         end
         
         if towerCountAfter > towerCountBefore then
+            print("[Macro] ✅ Placement successful (" .. towerCountBefore .. " → " .. towerCountAfter .. " towers)")
             return true, "Placed"
         else
+            print("[Macro] ❌ Placement failed (tower count unchanged: " .. towerCountBefore .. ")")
             if retryCount < 1 then
                 task.wait(0.3)
                 return executeAction(action, retryCount + 1)
