@@ -5178,6 +5178,7 @@ local function playMacroV2()
         
         local lastCashCheck = 0
         local lastGameStartedState = true
+        local lastWave = 0
         
         while getgenv().MacroPlayEnabled and step <= #macroData do
             if getgenv().IsKilled and getgenv().IsKilled() then
@@ -5192,8 +5193,40 @@ local function playMacroV2()
                 end
             end)
             
+            local currentWave = 0
+            pcall(function()
+                local wave = RS:FindFirstChild("Wave")
+                if wave and wave.Value then
+                    currentWave = wave.Value
+                end
+            end)
+            
+            if lastWave > 0 and currentWave == 0 and getgenv().SeamlessFixEnabled then
+                getgenv().MacroStatusText = "Seamless Restart - Wave Reset"
+                getgenv().MacroWaitingText = "Waiting for new round..."
+                getgenv().UpdateMacroStatus()
+                print("[Macro] 🔄 Seamless restart detected (Wave reset to 0), resetting to step 1")
+                
+                while currentWave == 0 and getgenv().MacroPlayEnabled do
+                    task.wait(0.3)
+                    pcall(function()
+                        local wave = RS:FindFirstChild("Wave")
+                        if wave and wave.Value then
+                            currentWave = wave.Value
+                        end
+                    end)
+                end
+                
+                if not getgenv().MacroPlayEnabled then break end
+                
+                step = 1
+                lastWave = currentWave
+                task.wait(2)
+                continue
+            end
+            
             if lastGameStartedState and not gameStarted and getgenv().SeamlessFixEnabled then
-                getgenv().MacroStatusText = "Seamless Restart - Resetting Macro"
+                getgenv().MacroStatusText = "Seamless Restart - GameStarted"
                 getgenv().MacroWaitingText = "Waiting for new round..."
                 getgenv().UpdateMacroStatus()
                 print("[Macro] 🔄 Seamless restart detected (GameStarted = false), resetting to step 1")
@@ -5213,9 +5246,11 @@ local function playMacroV2()
                 step = 1
                 task.wait(2)
                 lastGameStartedState = gameStarted
+                lastWave = currentWave
                 continue
             end
             lastGameStartedState = gameStarted
+            lastWave = currentWave
             
             if getgenv().MacroGameState.gameEnded or getgenv().MacroGameState.hasEndGameUI then
                 getgenv().MacroStatusText = "Game Ended"
@@ -5355,12 +5390,14 @@ local function playMacroV2()
         
         if step > #macroData then
             getgenv().MacroStatusText = "Macro Complete"
-            getgenv().MacroWaitingText = "Waiting for game end..."
+            getgenv().MacroWaitingText = "Waiting for seamless restart..."
             getgenv().MacroCurrentStep = #macroData
             getgenv().MacroTotalSteps = #macroData
             getgenv().MacroActionText = "Complete"
             getgenv().MacroUnitText = ""
             getgenv().UpdateMacroStatus()
+            
+            print("[Macro] ✅ Macro completed all steps, waiting for seamless restart")
             
             getgenv().MacroPlaybackActive = false
             return
@@ -5422,14 +5459,40 @@ task.spawn(function()
         
         if getgenv().MacroPlayEnabled and not getgenv().MacroPlaybackActive then
             local now = tick()
-            if now - lastRestartAttempt > 3 then
-                debugPrint("[Macro] Restarting playback...")
-                getgenv().MacroGameState.gameEnded = false
-                getgenv().MacroGameState.hasEndGameUI = false
-                getgenv().MacroGameState.lastGameEndedState = false
+            if now - lastRestartAttempt > 2 then
+                local shouldRestart = false
+                local restartReason = ""
                 
-                lastRestartAttempt = now
-                playMacroV2()
+                local currentWave = 0
+                pcall(function()
+                    local wave = RS:FindFirstChild("Wave")
+                    if wave and wave.Value then
+                        currentWave = wave.Value
+                    end
+                end)
+                
+                local gameStarted = false
+                pcall(function()
+                    local gs = RS:FindFirstChild("GameStarted")
+                    if gs and gs.Value ~= nil then
+                        gameStarted = gs.Value
+                    end
+                end)
+                
+                if currentWave > 0 and gameStarted then
+                    shouldRestart = true
+                    restartReason = string.format("Game active (Wave %d)", currentWave)
+                end
+                
+                if shouldRestart then
+                    print("[Macro] 🔄 Auto-restarting: " .. restartReason)
+                    getgenv().MacroGameState.gameEnded = false
+                    getgenv().MacroGameState.hasEndGameUI = false
+                    getgenv().MacroGameState.lastGameEndedState = false
+                    
+                    lastRestartAttempt = now
+                    playMacroV2()
+                end
             end
         end
     end
