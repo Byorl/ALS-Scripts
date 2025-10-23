@@ -2821,7 +2821,9 @@ local function cleanupBeforeTeleport()
         getgenv().MacroTowerInfoCache = nil
         getgenv().MacroRemoteCache = nil
         getgenv().MacroCashHistory = nil
-        getgenv().MacroDataV2 = nil
+        if not getgenv().MacroRecordingV2 then
+            getgenv().MacroDataV2 = nil
+        end
         towerTracker = {
             placeCounts = {},
             upgradeLevels = {},
@@ -5079,15 +5081,15 @@ local function playMacroV2()
         
         local step = 1
         
-        local elapsedTime = 0
+        local gameStarted = false
         pcall(function()
-            local elapsed = RS:FindFirstChild("ElapsedTime")
-            if elapsed and elapsed.Value then
-                elapsedTime = elapsed.Value
+            local gs = RS:FindFirstChild("GameStarted")
+            if gs and gs.Value ~= nil then
+                gameStarted = gs.Value
             end
         end)
         
-        if not getgenv().MacroGameState.hasStartButton and getgenv().MacroGameState.currentWave > 0 and elapsedTime > 5 then
+        if not getgenv().MacroGameState.hasStartButton and getgenv().MacroGameState.currentWave > 0 and gameStarted then
             step = detectMacroProgress(macroData)
             
             if step == -1 then
@@ -5102,38 +5104,39 @@ local function playMacroV2()
             
         end
         
-        local gameStarted = false
-        local waitStartTime = tick()
-        
-        print("[Macro] Waiting for game to start...")
-        
-        while getgenv().MacroPlayEnabled do
-            local gs = false
-            pcall(function()
-                local gameStartedValue = RS:FindFirstChild("GameStarted")
-                if gameStartedValue and gameStartedValue.Value ~= nil then
-                    gs = gameStartedValue.Value
+        if not gameStarted then
+            local waitStartTime = tick()
+            
+            print("[Macro] Waiting for game to start (GameStarted = false)...")
+            
+            while getgenv().MacroPlayEnabled do
+                local gs = false
+                pcall(function()
+                    local gameStartedValue = RS:FindFirstChild("GameStarted")
+                    if gameStartedValue and gameStartedValue.Value ~= nil then
+                        gs = gameStartedValue.Value
+                    end
+                end)
+                
+                if gs then
+                    gameStarted = true
+                    print("[Macro] ✅ Game started (GameStarted = true), beginning macro playback")
+                    break
                 end
-            end)
-            
-            if gs then
-                gameStarted = true
-                print("[Macro] ✅ Game started, beginning macro playback")
-                break
+                
+                getgenv().MacroStatusText = "Waiting for Start"
+                getgenv().MacroWaitingText = "GameStarted = false..."
+                getgenv().UpdateMacroStatus()
+                
+                local elapsed = tick() - waitStartTime
+                if elapsed > 300 then
+                    warn("[Macro] Timeout waiting for game start (5 min)")
+                    getgenv().MacroPlaybackActive = false
+                    return
+                end
+                
+                task.wait(0.3)
             end
-            
-            getgenv().MacroStatusText = "Waiting for Start"
-            getgenv().MacroWaitingText = "Game not started..."
-            getgenv().UpdateMacroStatus()
-            
-            local elapsed = tick() - waitStartTime
-            if elapsed > 300 then
-                warn("[Macro] Timeout waiting for game start (5 min)")
-                getgenv().MacroPlaybackActive = false
-                return
-            end
-            
-            task.wait(0.3)
         end
         
         if not getgenv().MacroPlayEnabled then
@@ -5178,7 +5181,6 @@ local function playMacroV2()
         
         local lastCashCheck = 0
         local lastGameStartedState = true
-        local lastWave = 0
         
         while getgenv().MacroPlayEnabled and step <= #macroData do
             if getgenv().IsKilled and getgenv().IsKilled() then
@@ -5193,40 +5195,8 @@ local function playMacroV2()
                 end
             end)
             
-            local currentWave = 0
-            pcall(function()
-                local wave = RS:FindFirstChild("Wave")
-                if wave and wave.Value then
-                    currentWave = wave.Value
-                end
-            end)
-            
-            if lastWave > 0 and currentWave == 0 and getgenv().SeamlessFixEnabled then
-                getgenv().MacroStatusText = "Seamless Restart - Wave Reset"
-                getgenv().MacroWaitingText = "Waiting for new round..."
-                getgenv().UpdateMacroStatus()
-                print("[Macro] 🔄 Seamless restart detected (Wave reset to 0), resetting to step 1")
-                
-                while currentWave == 0 and getgenv().MacroPlayEnabled do
-                    task.wait(0.3)
-                    pcall(function()
-                        local wave = RS:FindFirstChild("Wave")
-                        if wave and wave.Value then
-                            currentWave = wave.Value
-                        end
-                    end)
-                end
-                
-                if not getgenv().MacroPlayEnabled then break end
-                
-                step = 1
-                lastWave = currentWave
-                task.wait(2)
-                continue
-            end
-            
             if lastGameStartedState and not gameStarted and getgenv().SeamlessFixEnabled then
-                getgenv().MacroStatusText = "Seamless Restart - GameStarted"
+                getgenv().MacroStatusText = "Seamless Restart - Resetting Macro"
                 getgenv().MacroWaitingText = "Waiting for new round..."
                 getgenv().UpdateMacroStatus()
                 print("[Macro] 🔄 Seamless restart detected (GameStarted = false), resetting to step 1")
@@ -5244,13 +5214,12 @@ local function playMacroV2()
                 if not getgenv().MacroPlayEnabled then break end
                 
                 step = 1
+                getgenv().MacroCurrentStep = 0
                 task.wait(2)
                 lastGameStartedState = gameStarted
-                lastWave = currentWave
                 continue
             end
             lastGameStartedState = gameStarted
-            lastWave = currentWave
             
             if getgenv().MacroGameState.gameEnded or getgenv().MacroGameState.hasEndGameUI then
                 getgenv().MacroStatusText = "Game Ended"
@@ -9220,6 +9189,16 @@ getgenv().MacroRecordToggle = createToggleNoSave(
             if #getgenv().MacroDataV2 > 0 and getgenv().CurrentMacro then
                 local success = saveMacro(getgenv().CurrentMacro, getgenv().MacroDataV2)
                 if success then
+                    loadMacros()
+                    local macroNames = getMacroNames()
+                    if macroDropdown then
+                        pcall(function()
+                            macroDropdown:ClearOptions()
+                            macroDropdown:InsertOptions(macroNames)
+                            macroDropdown:UpdateSelection(getgenv().CurrentMacro)
+                        end)
+                    end
+                    
                     Window:Notify({
                         Title = "Macro Recording",
                         Description = "Saved " .. #getgenv().MacroDataV2 .. " steps to " .. getgenv().CurrentMacro,
