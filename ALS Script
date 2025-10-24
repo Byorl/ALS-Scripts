@@ -1,5 +1,44 @@
 repeat task.wait() until game:IsLoaded()
 
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+repeat task.wait() until LocalPlayer
+
+local characterWaitTime = 0
+local maxCharacterWait = 30
+
+while not LocalPlayer.Character and characterWaitTime < maxCharacterWait do
+    task.wait(0.5)
+    characterWaitTime = characterWaitTime + 0.5
+    
+    local loadingUI = LocalPlayer.PlayerGui:FindFirstChild("LoadingUI") or 
+                      LocalPlayer.PlayerGui:FindFirstChild("TeleportUI")
+    
+    if loadingUI and loadingUI.Enabled then
+        characterWaitTime = 0 
+    end
+end
+
+if not LocalPlayer.Character and characterWaitTime >= maxCharacterWait then
+    warn("[ALS] Character not loaded after " .. maxCharacterWait .. "s, attempting recovery...")
+    
+    local TeleportService = game:GetService("TeleportService")
+    local success = pcall(function()
+        TeleportService:Teleport(12886143095, LocalPlayer)
+    end)
+    
+    if success then
+        task.wait(10) 
+    end
+    
+    if not LocalPlayer.Character then
+        warn("[ALS] Failed to load character, script may not work properly")
+    end
+end
+
+task.wait(1)
+
 getgenv().DebugMode = getgenv().DebugMode or false
 
 local function debugPrint(...)
@@ -9,6 +48,1681 @@ local function debugPrint(...)
 end
 
 getgenv().DebugPrint = debugPrint
+
+
+local ErrorHandler = {
+    logLevel = "INFO",
+    suppressPatterns = {
+        "HttpService", 
+        "MarketplaceService",
+        "TeleportService"
+    }
+}
+
+function ErrorHandler:log(level, message, data)
+    if level == "DEBUG" and self.logLevel ~= "DEBUG" then
+        return
+    end
+    
+    for _, pattern in ipairs(self.suppressPatterns) do
+        if message and message:find(pattern) then
+            return
+        end
+    end
+    
+    local prefix = string.format("[%s]", level)
+    local output = prefix .. " " .. tostring(message)
+    
+    if data then
+        output = output .. " | Data: " .. tostring(data)
+    end
+    
+    if level == "ERROR" then
+        warn(output)
+    else
+        print(output)
+    end
+end
+
+function ErrorHandler:wrap(func, context)
+    return function(...)
+        local success, result = pcall(func, ...)
+        if not success then
+            self:log("ERROR", string.format("%s failed: %s", context or "Operation", tostring(result)))
+            return nil, result
+        end
+        return result
+    end
+end
+
+function ErrorHandler:wrapAsync(func, context)
+    local success, result = pcall(func)
+    if not success then
+        self:log("ERROR", string.format("%s failed: %s", context or "Operation", tostring(result)))
+        return false, result
+    end
+    return true, result
+end
+
+function ErrorHandler:notify(window, title, message, isCritical)
+    if window and window.Notify then
+        pcall(function()
+            window:Notify({
+                Title = title or "Error",
+                Description = message or "An error occurred",
+                Lifetime = isCritical and 10 or 5,
+                Style = "Cancel"
+            })
+        end)
+    end
+    
+    if isCritical then
+        pcall(function()
+            game:GetService("StarterGui"):SetCore("SendNotification", {
+                Title = title or "Critical Error",
+                Text = message or "A critical error occurred",
+                Duration = 10
+            })
+        end)
+    end
+end
+
+function ErrorHandler:notifyCritical(window, title, message)
+    self:notify(window, title, message, true)
+    self:log("ERROR", "CRITICAL: " .. (title or "Error") .. " - " .. (message or "Unknown"))
+end
+
+local PlatformDetector = {
+    executor = "Unknown",
+    isMobile = false,
+    capabilities = {
+        hasFileSystem = false,
+        hasHTTP = false,
+        hasVirtualInput = false,
+        hasClipboard = false,
+        hasConnectionIntrospection = false
+    },
+    detected = false
+}
+
+function PlatformDetector:detect()
+    if self.detected then
+        return self
+    end
+    
+    ErrorHandler:wrapAsync(function()
+        if identifyexecutor then
+            self.executor = identifyexecutor() or "Unknown"
+        elseif KRNL_LOADED then
+            self.executor = "KRNL"
+        elseif syn then
+            self.executor = "Synapse X"
+        elseif SENTINEL_V2 then
+            self.executor = "Sentinel"
+        elseif getexecutorname then
+            self.executor = getexecutorname() or "Unknown"
+        end
+    end, "Executor detection")
+    
+    ErrorHandler:wrapAsync(function()
+        local UserInputService = game:GetService("UserInputService")
+        self.isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+    end, "Mobile detection")
+    
+    ErrorHandler:wrapAsync(function()
+        if isfolder and makefolder and isfile and readfile and writefile then
+            self.capabilities.hasFileSystem = true
+        end
+    end, "File system capability check")
+    
+    ErrorHandler:wrapAsync(function()
+        if game.HttpGet then
+            self.capabilities.hasHTTP = true
+        end
+    end, "HTTP capability check")
+    
+    ErrorHandler:wrapAsync(function()
+        local VirtualInputManager = game:GetService("VirtualInputManager")
+        if VirtualInputManager then
+            self.capabilities.hasVirtualInput = true
+        end
+    end, "VirtualInput capability check")
+    
+    ErrorHandler:wrapAsync(function()
+        if setclipboard then
+            self.capabilities.hasClipboard = true
+        end
+    end, "Clipboard capability check")
+    
+    ErrorHandler:wrapAsync(function()
+        if getconnections then
+            self.capabilities.hasConnectionIntrospection = true
+        end
+    end, "Connection introspection capability check")
+    
+    self.detected = true
+    
+    ErrorHandler:log("INFO", string.format("Platform detected: %s | Mobile: %s", 
+        self.executor, 
+        tostring(self.isMobile)))
+    ErrorHandler:log("DEBUG", "Capabilities: " .. game:GetService("HttpService"):JSONEncode(self.capabilities))
+    
+    return self
+end
+
+function PlatformDetector:hasCapability(feature)
+    if not self.detected then
+        self:detect()
+    end
+    return self.capabilities[feature] == true
+end
+
+function PlatformDetector:getExecutor()
+    if not self.detected then
+        self:detect()
+    end
+    return self.executor
+end
+
+function PlatformDetector:isMobilePlatform()
+    if not self.detected then
+        self:detect()
+    end
+    return self.isMobile
+end
+
+function PlatformDetector:getCapabilityReport()
+    if not self.detected then
+        self:detect()
+    end
+    
+    local report = "\n=== Platform Capabilities ===\n"
+    report = report .. string.format("Executor: %s\n", self.executor)
+    report = report .. string.format("Mobile: %s\n", tostring(self.isMobile))
+    report = report .. "\nCapabilities:\n"
+    
+    for capability, available in pairs(self.capabilities) do
+        local status = available and "✓" or "✗"
+        report = report .. string.format("  %s %s\n", status, capability)
+    end
+    
+    report = report .. "============================\n"
+    return report
+end
+
+PlatformDetector:detect()
+
+local MobileOptimizer = {
+    isMobile = false,
+    pollingInterval = 0.5, 
+    maxConcurrentOperations = 10,
+    activeOperations = 0,
+    initialized = false
+}
+
+function MobileOptimizer:init()
+    if self.initialized then
+        return self
+    end
+    
+    self.isMobile = PlatformDetector:isMobilePlatform()
+    
+    if self.isMobile then
+        self.pollingInterval = 1.0 
+        
+        self.maxConcurrentOperations = 3
+    else
+        self.pollingInterval = 0.5
+        self.maxConcurrentOperations = 10
+    end
+    
+    self.initialized = true
+    return self
+end
+
+function MobileOptimizer:getPollingInterval(baseInterval)
+    if not self.initialized then
+        self:init()
+    end
+    
+    if self.isMobile then
+        return baseInterval * 2 
+    end
+    
+    return baseInterval
+end
+
+function MobileOptimizer:canStartOperation()
+    if not self.initialized then
+        self:init()
+    end
+    
+    return self.activeOperations < self.maxConcurrentOperations
+end
+
+function MobileOptimizer:startOperation()
+    if not self.initialized then
+        self:init()
+    end
+    
+    if self.activeOperations >= self.maxConcurrentOperations then
+        ErrorHandler:log("WARN", string.format("Max concurrent operations reached (%d/%d)", 
+            self.activeOperations, self.maxConcurrentOperations))
+        return false
+    end
+    
+    self.activeOperations = self.activeOperations + 1
+    ErrorHandler:log("DEBUG", string.format("Operation started (%d/%d active)", 
+        self.activeOperations, self.maxConcurrentOperations))
+    return true
+end
+
+function MobileOptimizer:endOperation()
+    if not self.initialized then
+        self:init()
+    end
+    
+    if self.activeOperations > 0 then
+        self.activeOperations = self.activeOperations - 1
+        ErrorHandler:log("DEBUG", string.format("Operation ended (%d/%d active)", 
+            self.activeOperations, self.maxConcurrentOperations))
+    end
+end
+
+function MobileOptimizer:wrapOperation(func)
+    if not self.initialized then
+        self:init()
+    end
+    
+    return function(...)
+        while not self:canStartOperation() do
+            task.wait(0.1)
+        end
+        
+        self:startOperation()
+        
+        local success, result = pcall(func, ...)
+        
+        self:endOperation()
+        
+        if not success then
+            ErrorHandler:log("ERROR", "Operation failed: " .. tostring(result))
+            return nil
+        end
+        
+        return result
+    end
+end
+
+function MobileOptimizer:getStats()
+    if not self.initialized then
+        self:init()
+    end
+    
+    return {
+        isMobile = self.isMobile,
+        pollingInterval = self.pollingInterval,
+        maxConcurrentOperations = self.maxConcurrentOperations,
+        activeOperations = self.activeOperations
+    }
+end
+
+MobileOptimizer:init()
+
+local GameStateDetector = {
+    isInLobby = nil,
+    isInGame = false,
+    gameStarted = false,
+    detected = false,
+    initializationTimeout = 3, 
+    retryAttempts = 3,
+    retryDelay = 0.5,
+    pendingInitializations = {},
+    gameStateChangeCallbacks = {}
+}
+
+function GameStateDetector:detect()
+    if self.detected then
+        return self
+    end
+    
+    local detectionStartTime = tick()
+    
+    ErrorHandler:wrapAsync(function()
+        local workspace = game:GetService("Workspace")
+        local MarketplaceService = game:GetService("MarketplaceService")
+        
+        local hasLobbyFolder = workspace:FindFirstChild("Lobby") ~= nil
+        
+        local placeName = ""
+        pcall(function()
+            placeName = MarketplaceService:GetProductInfo(game.PlaceId).Name or ""
+        end)
+        local placeNameHasLobby = placeName:lower():find("lobby") ~= nil
+        
+        local hasMap = workspace:FindFirstChild("Map") ~= nil
+        local hasTowers = workspace:FindFirstChild("Towers") ~= nil
+        local hasEnemies = workspace:FindFirstChild("Enemies") ~= nil
+        
+        if hasLobbyFolder or placeNameHasLobby then
+            self.isInLobby = true
+            self.isInGame = false
+        elseif hasMap or hasTowers or hasEnemies then
+            self.isInLobby = false
+            self.isInGame = true
+        else
+            self.isInLobby = true
+            self.isInGame = false
+        end
+        
+        ErrorHandler:log("INFO", string.format("Game state detected: %s (took %.2fs)", 
+            self.isInLobby and "Lobby" or "In-Game",
+            tick() - detectionStartTime))
+        
+        if hasMap or hasTowers or hasEnemies then
+            ErrorHandler:log("DEBUG", string.format("Game indicators: Map=%s, Towers=%s, Enemies=%s", 
+                tostring(hasMap), tostring(hasTowers), tostring(hasEnemies)))
+        end
+    end, "Game state detection")
+    
+    self.detected = true
+    return self
+end
+
+function GameStateDetector:isLobby()
+    if not self.detected then
+        self:detect()
+    end
+    return self.isInLobby == true
+end
+
+function GameStateDetector:isGame()
+    if not self.detected then
+        self:detect()
+    end
+    return self.isInGame == true
+end
+
+function GameStateDetector:waitForGameStart(timeout)
+    timeout = timeout or self.initializationTimeout
+    local startTime = tick()
+    
+    ErrorHandler:log("INFO", "Waiting for game to start...")
+    
+    while (tick() - startTime) < timeout do
+        local success, hasStarted = pcall(function()
+            local workspace = game:GetService("Workspace")
+            local RS = game:GetService("ReplicatedStorage")
+            
+            local hasTowers = workspace:FindFirstChild("Towers") ~= nil
+            local hasMap = workspace:FindFirstChild("Map") ~= nil
+            local hasGamemode = RS:FindFirstChild("Gamemode") ~= nil
+            
+            return hasTowers or hasMap or hasGamemode
+        end)
+        
+        if success and hasStarted then
+            self.gameStarted = true
+            self.isInGame = true
+            self.isInLobby = false
+            ErrorHandler:log("INFO", string.format("Game started (detected in %.2fs)", tick() - startTime))
+            
+            self:triggerGameStateCallbacks("gameStarted")
+            
+            return true
+        end
+        
+        task.wait(0.1)
+    end
+    
+    ErrorHandler:log("WARN", string.format("Game start detection timed out after %.1fs", timeout))
+    return false
+end
+
+function GameStateDetector:registerInitialization(name, initFunc, options)
+    options = options or {}
+    
+    local initialization = {
+        name = name,
+        func = initFunc,
+        requiresGame = options.requiresGame or false,
+        retryOnFailure = options.retryOnFailure ~= false, 
+        timeout = options.timeout or self.initializationTimeout,
+        initialized = false,
+        attempts = 0
+    }
+    
+    table.insert(self.pendingInitializations, initialization)
+    
+    ErrorHandler:log("DEBUG", string.format("Registered initialization: %s (requiresGame: %s)", 
+        name, tostring(initialization.requiresGame)))
+    
+    return initialization
+end
+
+function GameStateDetector:initializeWithRetry(initialization)
+    if initialization.initialized then
+        return true
+    end
+    
+    local maxAttempts = initialization.retryOnFailure and self.retryAttempts or 1
+    
+    for attempt = 1, maxAttempts do
+        initialization.attempts = attempt
+        
+        if attempt > 1 then
+            ErrorHandler:log("INFO", string.format("Retrying initialization: %s (attempt %d/%d)", 
+                initialization.name, attempt, maxAttempts))
+            task.wait(self.retryDelay)
+        end
+        
+        local startTime = tick()
+        local success, result = ErrorHandler:wrapAsync(function()
+            return initialization.func()
+        end, string.format("Initialize %s", initialization.name))
+        
+        local duration = tick() - startTime
+        
+        if success then
+            initialization.initialized = true
+            ErrorHandler:log("INFO", string.format("✓ Initialized: %s (%.2fs, attempt %d)", 
+                initialization.name, duration, attempt))
+            return true
+        else
+            ErrorHandler:log("WARN", string.format("✗ Failed to initialize: %s (%.2fs, attempt %d): %s", 
+                initialization.name, duration, attempt, tostring(result)))
+            
+            if duration >= initialization.timeout then
+                ErrorHandler:log("ERROR", string.format("Initialization timeout: %s", initialization.name))
+                break
+            end
+        end
+    end
+    
+    ErrorHandler:log("ERROR", string.format("Failed to initialize after %d attempts: %s", 
+        maxAttempts, initialization.name))
+    
+    return false
+end
+
+function GameStateDetector:runPendingInitializations()
+    if #self.pendingInitializations == 0 then
+        return
+    end
+    
+    ErrorHandler:log("INFO", string.format("Running %d pending initializations...", #self.pendingInitializations))
+    
+    local immediateInits = {}
+    local delayedInits = {}
+    
+    for _, init in ipairs(self.pendingInitializations) do
+        if init.requiresGame then
+            table.insert(delayedInits, init)
+        else
+            table.insert(immediateInits, init)
+        end
+    end
+    
+    for _, init in ipairs(immediateInits) do
+        self:initializeWithRetry(init)
+    end
+    
+    if #delayedInits > 0 then
+        if self:isLobby() then
+            ErrorHandler:log("INFO", string.format("Delaying %d game-dependent initializations until game starts", 
+                #delayedInits))
+            
+            task.spawn(function()
+                if self:waitForGameStart() then
+                    ErrorHandler:log("INFO", "Running delayed initializations...")
+                    for _, init in ipairs(delayedInits) do
+                        self:initializeWithRetry(init)
+                    end
+                else
+                    ErrorHandler:log("WARN", "Game did not start in time, running delayed initializations anyway")
+                    for _, init in ipairs(delayedInits) do
+                        self:initializeWithRetry(init)
+                    end
+                end
+            end)
+        else
+            for _, init in ipairs(delayedInits) do
+                self:initializeWithRetry(init)
+            end
+        end
+    end
+end
+
+function GameStateDetector:registerGameStateCallback(event, callback)
+    if not self.gameStateChangeCallbacks[event] then
+        self.gameStateChangeCallbacks[event] = {}
+    end
+    
+    table.insert(self.gameStateChangeCallbacks[event], callback)
+    
+    ErrorHandler:log("DEBUG", string.format("Registered callback for event: %s", event))
+end
+
+function GameStateDetector:triggerGameStateCallbacks(event)
+    if not self.gameStateChangeCallbacks[event] then
+        return
+    end
+    
+    ErrorHandler:log("DEBUG", string.format("Triggering %d callbacks for event: %s", 
+        #self.gameStateChangeCallbacks[event], event))
+    
+    for _, callback in ipairs(self.gameStateChangeCallbacks[event]) do
+        pcall(callback)
+    end
+end
+
+function GameStateDetector:getReport()
+    local report = "\n=== Game State Report ===\n"
+    report = report .. string.format("State: %s\n", self.isInLobby and "Lobby" or (self.isInGame and "In-Game" or "Unknown"))
+    report = report .. string.format("Game Started: %s\n", tostring(self.gameStarted))
+    report = report .. string.format("Detected: %s\n", tostring(self.detected))
+    
+    report = report .. "\n=== Pending Initializations ===\n"
+    report = report .. string.format("Total: %d\n", #self.pendingInitializations)
+    
+    local initialized = 0
+    local failed = 0
+    for _, init in ipairs(self.pendingInitializations) do
+        if init.initialized then
+            initialized = initialized + 1
+        elseif init.attempts > 0 then
+            failed = failed + 1
+        end
+    end
+    
+    report = report .. string.format("Initialized: %d\n", initialized)
+    report = report .. string.format("Failed: %d\n", failed)
+    report = report .. string.format("Pending: %d\n", #self.pendingInitializations - initialized - failed)
+    
+    report = report .. "========================\n"
+    return report
+end
+
+GameStateDetector:detect()
+
+local ConnectionManager = {
+    connections = {},     
+    groups = {},        
+    towerConnections = {}, 
+    nextId = 1,        
+    cleanupInterval = 10, 
+    stats = {
+        totalTracked = 0,
+        totalCleaned = 0,
+        lastCleanup = tick()
+    }
+}
+
+function ConnectionManager:track(connection, options)
+    if not connection then
+        ErrorHandler:log("WARN", "Attempted to track nil connection")
+        return nil
+    end
+    
+    options = options or {}
+    local id = self.nextId
+    self.nextId = self.nextId + 1
+    
+    local entry = {
+        id = id,
+        connection = connection,
+        group = options.group,
+        tower = options.tower,
+        createdAt = tick(),
+        context = options.context or "Unknown"
+    }
+    
+    self.connections[id] = entry
+    self.stats.totalTracked = self.stats.totalTracked + 1
+    
+    if options.group then
+        if not self.groups[options.group] then
+            self.groups[options.group] = {}
+        end
+        table.insert(self.groups[options.group], id)
+    end
+    
+    if options.tower then
+        if not self.towerConnections[options.tower] then
+            self.towerConnections[options.tower] = {}
+        end
+        table.insert(self.towerConnections[options.tower], id)
+    end
+    
+    ErrorHandler:log("DEBUG", string.format("Tracked connection #%d: %s", id, entry.context))
+    
+    return connection
+end
+
+function ConnectionManager:trackTower(tower, connection, context)
+    if not tower or not connection then
+        ErrorHandler:log("WARN", "Invalid tower or connection in trackTower")
+        return nil
+    end
+    
+    return self:track(connection, {
+        tower = tower,
+        context = context or ("Tower: " .. tostring(tower.Name))
+    })
+end
+
+function ConnectionManager:trackGroup(groupName, connection, context)
+    if not groupName or not connection then
+        ErrorHandler:log("WARN", "Invalid group or connection in trackGroup")
+        return nil
+    end
+    
+    return self:track(connection, {
+        group = groupName,
+        context = context or ("Group: " .. groupName)
+    })
+end
+
+function ConnectionManager:disconnectGroup(groupName)
+    if not self.groups[groupName] then
+        ErrorHandler:log("DEBUG", "Group not found: " .. tostring(groupName))
+        return 0
+    end
+    
+    local disconnected = 0
+    for _, id in ipairs(self.groups[groupName]) do
+        if self.connections[id] then
+            pcall(function()
+                if self.connections[id].connection then
+                    self.connections[id].connection:Disconnect()
+                end
+            end)
+            self.connections[id] = nil
+            disconnected = disconnected + 1
+        end
+    end
+    
+    self.groups[groupName] = nil
+    ErrorHandler:log("INFO", string.format("Disconnected group '%s': %d connections", groupName, disconnected))
+    
+    return disconnected
+end
+
+function ConnectionManager:disconnectTower(tower)
+    if not tower or not self.towerConnections[tower] then
+        return 0
+    end
+    
+    local disconnected = 0
+    for _, id in ipairs(self.towerConnections[tower]) do
+        if self.connections[id] then
+            pcall(function()
+                if self.connections[id].connection then
+                    self.connections[id].connection:Disconnect()
+                end
+            end)
+            self.connections[id] = nil
+            disconnected = disconnected + 1
+        end
+    end
+    
+    self.towerConnections[tower] = nil
+    ErrorHandler:log("DEBUG", string.format("Disconnected tower connections: %d", disconnected))
+    
+    return disconnected
+end
+
+function ConnectionManager:cleanup()
+    local cleaned = 0
+    local now = tick()
+    
+    for id, entry in pairs(self.connections) do
+        local shouldRemove = false
+        
+        pcall(function()
+            if entry.connection and entry.connection.Connected == false then
+                shouldRemove = true
+            end
+        end)
+        
+        if entry.tower then
+            pcall(function()
+                if not entry.tower or not entry.tower.Parent then
+                    shouldRemove = true
+                end
+            end)
+        end
+        
+        if shouldRemove then
+            pcall(function()
+                if entry.connection then
+                    entry.connection:Disconnect()
+                end
+            end)
+            self.connections[id] = nil
+            cleaned = cleaned + 1
+        end
+    end
+    
+    for tower, ids in pairs(self.towerConnections) do
+        local validIds = {}
+        for _, id in ipairs(ids) do
+            if self.connections[id] then
+                table.insert(validIds, id)
+            end
+        end
+        
+        if #validIds == 0 then
+            self.towerConnections[tower] = nil
+        else
+            self.towerConnections[tower] = validIds
+        end
+    end
+    
+    for groupName, ids in pairs(self.groups) do
+        local validIds = {}
+        for _, id in ipairs(ids) do
+            if self.connections[id] then
+                table.insert(validIds, id)
+            end
+        end
+        
+        if #validIds == 0 then
+            self.groups[groupName] = nil
+        else
+            self.groups[groupName] = validIds
+        end
+    end
+    
+    self.stats.totalCleaned = self.stats.totalCleaned + cleaned
+    self.stats.lastCleanup = now
+    
+    if cleaned > 0 then
+        ErrorHandler:log("DEBUG", string.format("Cleaned up %d dead connections", cleaned))
+    end
+    
+    return cleaned
+end
+
+function ConnectionManager:getStats()
+    local activeConnections = 0
+    for _ in pairs(self.connections) do
+        activeConnections = activeConnections + 1
+    end
+    
+    local activeTowers = 0
+    for _ in pairs(self.towerConnections) do
+        activeTowers = activeTowers + 1
+    end
+    
+    local activeGroups = 0
+    for _ in pairs(self.groups) do
+        activeGroups = activeGroups + 1
+    end
+    
+    return {
+        active = activeConnections,
+        towers = activeTowers,
+        groups = activeGroups,
+        totalTracked = self.stats.totalTracked,
+        totalCleaned = self.stats.totalCleaned,
+        lastCleanup = self.stats.lastCleanup
+    }
+end
+
+function ConnectionManager:disconnectAll()
+    local disconnected = 0
+    
+    for id, entry in pairs(self.connections) do
+        pcall(function()
+            if entry.connection then
+                entry.connection:Disconnect()
+            end
+        end)
+        disconnected = disconnected + 1
+    end
+    
+    self.connections = {}
+    self.groups = {}
+    self.towerConnections = {}
+    
+    ErrorHandler:log("INFO", string.format("Disconnected all connections: %d total", disconnected))
+    
+    return disconnected
+end
+
+function ConnectionManager:startAutoCleanup()
+    task.spawn(function()
+        while true do
+            task.wait(self.cleanupInterval)
+            pcall(function()
+                self:cleanup()
+            end)
+        end
+    end)
+end
+
+local MemoryManager = {
+    baseline = 0,
+    baselineSet = false,
+    lastCleanup = tick(),
+    cleanupInterval = 10, 
+    limits = {
+        cashHistory = 5,
+        macroData = 500,
+        macroActions = 200,
+        webhookHashes = 3,
+        smartCardPicked = 3,
+        slowerCardPicked = 3
+    },
+    stats = {
+        totalCleanups = 0,
+        lastCleanupTime = 0,
+        itemsCleaned = 0
+    }
+}
+
+function MemoryManager:getMemoryUsageMB()
+    local stats = game:GetService("Stats")
+    local memoryMB = 0
+    pcall(function()
+        memoryMB = stats:GetTotalMemoryUsageMb()
+    end)
+    if memoryMB == 0 then
+        pcall(function()
+            memoryMB = stats.MemoryUsageMb
+        end)
+    end
+    return memoryMB
+end
+
+function MemoryManager:setBaseline()
+    if self.baselineSet then
+        return self.baseline
+    end
+    
+    pcall(function() collectgarbage("collect") end)
+    task.wait(0.1)
+    
+    self.baseline = self:getMemoryUsageMB()
+    self.baselineSet = true
+    
+    ErrorHandler:log("INFO", string.format("Memory baseline set: %.1f MB", self.baseline))
+    
+    return self.baseline
+end
+
+function MemoryManager:enforceLimit(dataStructure, limit, keepRecent)
+    if not dataStructure or type(dataStructure) ~= "table" then
+        return 0
+    end
+    
+    local currentSize = #dataStructure
+    if currentSize <= limit then
+        return 0
+    end
+    
+    local itemsToRemove = currentSize - limit
+    
+    if keepRecent then
+        local temp = {}
+        local startIdx = math.max(1, currentSize - limit + 1)
+        for i = startIdx, currentSize do
+            table.insert(temp, dataStructure[i])
+        end
+        
+        for i = currentSize, 1, -1 do
+            dataStructure[i] = nil
+        end
+        for i, item in ipairs(temp) do
+            dataStructure[i] = item
+        end
+    else
+        for i = 1, itemsToRemove do
+            table.remove(dataStructure, 1)
+        end
+    end
+    
+    return itemsToRemove
+end
+
+function MemoryManager:trimMacroCashHistory()
+    if not getgenv().MacroCashHistory or type(getgenv().MacroCashHistory) ~= "table" then
+        return 0
+    end
+    
+    local currentSize = #getgenv().MacroCashHistory
+    if currentSize <= self.limits.cashHistory then
+        return 0
+    end
+    
+    local temp = {}
+    for i = 1, self.limits.cashHistory do
+        temp[i] = getgenv().MacroCashHistory[i]
+    end
+    getgenv().MacroCashHistory = temp
+    
+    local removed = currentSize - self.limits.cashHistory
+    ErrorHandler:log("DEBUG", string.format("Trimmed MacroCashHistory: %d -> %d entries", currentSize, self.limits.cashHistory))
+    
+    return removed
+end
+
+function MemoryManager:trimMacroDataV2()
+    if not getgenv().MacroDataV2 or type(getgenv().MacroDataV2) ~= "table" then
+        return 0
+    end
+    
+    if getgenv().MacroRecordingV2 then
+        return 0
+    end
+    
+    local currentSize = #getgenv().MacroDataV2
+    if currentSize <= self.limits.macroData then
+        return 0
+    end
+    
+    local temp = {}
+    local startIdx = math.max(1, currentSize - (self.limits.macroData / 2))
+    for i = startIdx, currentSize do
+        table.insert(temp, getgenv().MacroDataV2[i])
+    end
+    getgenv().MacroDataV2 = temp
+    
+    local removed = currentSize - #temp
+    ErrorHandler:log("DEBUG", string.format("Trimmed MacroDataV2: %d -> %d steps", currentSize, #temp))
+    
+    return removed
+end
+
+function MemoryManager:trimMacroActionsV2()
+    if not getgenv().MacroActionsV2 or type(getgenv().MacroActionsV2) ~= "table" then
+        return 0
+    end
+    
+    if getgenv().MacroRecordingV2 then
+        return 0
+    end
+    
+    local currentSize = #getgenv().MacroActionsV2
+    if currentSize <= self.limits.macroActions then
+        return 0
+    end
+    
+    local temp = {}
+    local startIdx = math.max(1, currentSize - (self.limits.macroActions / 2))
+    for i = startIdx, currentSize do
+        table.insert(temp, getgenv().MacroActionsV2[i])
+    end
+    getgenv().MacroActionsV2 = temp
+    
+    local removed = currentSize - #temp
+    ErrorHandler:log("DEBUG", string.format("Trimmed MacroActionsV2: %d -> %d actions", currentSize, #temp))
+    
+    return removed
+end
+
+function MemoryManager:trimWebhookHashList()
+    if not getgenv()._lastWebhookHashList or type(getgenv()._lastWebhookHashList) ~= "table" then
+        return 0
+    end
+    
+    local currentSize = #getgenv()._lastWebhookHashList
+    if currentSize <= self.limits.webhookHashes then
+        return 0
+    end
+    
+    local removed = 0
+    while #getgenv()._lastWebhookHashList > self.limits.webhookHashes do
+        table.remove(getgenv()._lastWebhookHashList, 1)
+        removed = removed + 1
+    end
+    
+    ErrorHandler:log("DEBUG", string.format("Trimmed webhook hash list: %d -> %d entries", currentSize, self.limits.webhookHashes))
+    
+    return removed
+end
+
+function MemoryManager:trimSmartCardPicked()
+    if not getgenv().SmartCardPicked or type(getgenv().SmartCardPicked) ~= "table" then
+        return 0
+    end
+    
+    local currentSize = #getgenv().SmartCardPicked
+    if currentSize <= self.limits.smartCardPicked then
+        return 0
+    end
+    
+    getgenv().SmartCardPicked = {}
+    
+    ErrorHandler:log("DEBUG", string.format("Cleared SmartCardPicked: %d entries", currentSize))
+    
+    return currentSize
+end
+
+function MemoryManager:trimSlowerCardPicked()
+    if not getgenv().SlowerCardPicked or type(getgenv().SlowerCardPicked) ~= "table" then
+        return 0
+    end
+    
+    local currentSize = #getgenv().SlowerCardPicked
+    if currentSize <= self.limits.slowerCardPicked then
+        return 0
+    end
+    
+    getgenv().SlowerCardPicked = {}
+    
+    ErrorHandler:log("DEBUG", string.format("Cleared SlowerCardPicked: %d entries", currentSize))
+    
+    return currentSize
+end
+
+function MemoryManager:cleanWukongTrackedClones()
+    if not getgenv().WukongTrackedClones or type(getgenv().WukongTrackedClones) ~= "table" then
+        return 0
+    end
+    
+    local removed = 0
+    local toRemove = {}
+    
+    for cloneId, _ in pairs(getgenv().WukongTrackedClones) do
+        if type(cloneId) ~= "string" then
+            table.insert(toRemove, cloneId)
+        end
+    end
+    
+    for _, key in ipairs(toRemove) do
+        getgenv().WukongTrackedClones[key] = nil
+        removed = removed + 1
+    end
+    
+    if removed > 0 then
+        ErrorHandler:log("DEBUG", string.format("Cleaned WukongTrackedClones: %d invalid entries", removed))
+    end
+    
+    return removed
+end
+
+function MemoryManager:cleanTowerTrackerPendingActions()
+    if not getgenv()._TowerTrackerPendingActions or type(getgenv()._TowerTrackerPendingActions) ~= "table" then
+        return 0
+    end
+    
+    local removed = 0
+    local now = tick()
+    local staleThreshold = 30 
+    
+    for key, timestamp in pairs(getgenv()._TowerTrackerPendingActions) do
+        if type(timestamp) == "number" and (now - timestamp) > staleThreshold then
+            getgenv()._TowerTrackerPendingActions[key] = nil
+            removed = removed + 1
+        end
+    end
+    
+    if removed > 0 then
+        ErrorHandler:log("DEBUG", string.format("Cleaned TowerTrackerPendingActions: %d stale entries", removed))
+    end
+    
+    return removed
+end
+
+function MemoryManager:cleanMacroPlaybackData()
+    if not getgenv().MacroPlaybackActive and getgenv().MacroPlaybackMacroData then
+        getgenv().MacroPlaybackMacroData = nil
+        ErrorHandler:log("DEBUG", "Cleaned inactive MacroPlaybackMacroData")
+        return 1
+    end
+    
+    return 0
+end
+
+function MemoryManager:cleanup()
+    local startTime = tick()
+    local totalCleaned = 0
+    
+    totalCleaned = totalCleaned + self:trimMacroCashHistory()
+    totalCleaned = totalCleaned + self:trimMacroDataV2()
+    totalCleaned = totalCleaned + self:trimMacroActionsV2()
+    totalCleaned = totalCleaned + self:trimWebhookHashList()
+    totalCleaned = totalCleaned + self:trimSmartCardPicked()
+    totalCleaned = totalCleaned + self:trimSlowerCardPicked()
+    
+    totalCleaned = totalCleaned + self:cleanWukongTrackedClones()
+    totalCleaned = totalCleaned + self:cleanTowerTrackerPendingActions()
+    totalCleaned = totalCleaned + self:cleanMacroPlaybackData()
+    
+    self.stats.totalCleanups = self.stats.totalCleanups + 1
+    self.stats.lastCleanupTime = tick() - startTime
+    self.stats.itemsCleaned = self.stats.itemsCleaned + totalCleaned
+    self.lastCleanup = tick()
+    
+    if totalCleaned > 50 then
+        pcall(function() collectgarbage("collect") end)
+        ErrorHandler:log("DEBUG", string.format("Memory cleanup: %d items removed, GC triggered", totalCleaned))
+    elseif totalCleaned > 0 then
+        ErrorHandler:log("DEBUG", string.format("Memory cleanup: %d items removed", totalCleaned))
+    end
+    
+    return totalCleaned
+end
+
+function MemoryManager:getReport()
+    local report = "\n=== Memory Manager Report ===\n"
+    
+    local currentMem = self:getMemoryUsageMB()
+    report = report .. string.format("Current Memory: %.1f MB\n", currentMem)
+    
+    if self.baselineSet then
+        report = report .. string.format("Baseline Memory: %.1f MB\n", self.baseline)
+        report = report .. string.format("Memory Growth: +%.1f MB\n", currentMem - self.baseline)
+    end
+    
+    report = report .. "\n=== Data Structure Sizes ===\n"
+    report = report .. string.format("MacroCashHistory: %d / %d\n", 
+        getgenv().MacroCashHistory and #getgenv().MacroCashHistory or 0, 
+        self.limits.cashHistory)
+    report = report .. string.format("MacroDataV2: %d / %d\n", 
+        getgenv().MacroDataV2 and #getgenv().MacroDataV2 or 0, 
+        self.limits.macroData)
+    report = report .. string.format("MacroActionsV2: %d / %d\n", 
+        getgenv().MacroActionsV2 and #getgenv().MacroActionsV2 or 0, 
+        self.limits.macroActions)
+    report = report .. string.format("WebhookHashList: %d / %d\n", 
+        getgenv()._lastWebhookHashList and #getgenv()._lastWebhookHashList or 0, 
+        self.limits.webhookHashes)
+    report = report .. string.format("SmartCardPicked: %d / %d\n", 
+        getgenv().SmartCardPicked and #getgenv().SmartCardPicked or 0, 
+        self.limits.smartCardPicked)
+    report = report .. string.format("SlowerCardPicked: %d / %d\n", 
+        getgenv().SlowerCardPicked and #getgenv().SlowerCardPicked or 0, 
+        self.limits.slowerCardPicked)
+    
+    local wukongCount = 0
+    if getgenv().WukongTrackedClones then
+        for _ in pairs(getgenv().WukongTrackedClones) do
+            wukongCount = wukongCount + 1
+        end
+    end
+    report = report .. string.format("WukongTrackedClones: %d\n", wukongCount)
+    
+    local pendingCount = 0
+    if getgenv()._TowerTrackerPendingActions then
+        for _ in pairs(getgenv()._TowerTrackerPendingActions) do
+            pendingCount = pendingCount + 1
+        end
+    end
+    report = report .. string.format("TowerTrackerPendingActions: %d\n", pendingCount)
+    
+    report = report .. "\n=== Cleanup Statistics ===\n"
+    report = report .. string.format("Total Cleanups: %d\n", self.stats.totalCleanups)
+    report = report .. string.format("Items Cleaned: %d\n", self.stats.itemsCleaned)
+    report = report .. string.format("Last Cleanup: %.3fs ago\n", tick() - self.lastCleanup)
+    report = report .. string.format("Last Cleanup Time: %.3fs\n", self.stats.lastCleanupTime)
+    
+    report = report .. "============================\n"
+    
+    return report
+end
+
+function MemoryManager:startAutoCleanup()
+    task.spawn(function()
+        while true do
+            task.wait(self.cleanupInterval)
+            pcall(function()
+                self:cleanup()
+            end)
+        end
+    end)
+end
+
+
+local UIFactory = {
+    config = nil,
+    saveCallback = nil,
+    initialized = false
+}
+
+function UIFactory:init(config, saveCallback)
+    self.config = config
+    self.saveCallback = saveCallback
+    self.initialized = true
+end
+
+function UIFactory:createElement(elementType, section, options)
+    if not self.initialized then
+        ErrorHandler:log("ERROR", "UIFactory not initialized. Call UIFactory:init() first")
+        return nil
+    end
+    
+    if not section then
+        ErrorHandler:log("ERROR", "Section is required for createElement")
+        return nil
+    end
+    
+    options = options or {}
+    local name = tostring(options.name or elementType)
+    local flag = options.flag
+    local callback = options.callback
+    local default = options.default
+    local autoSave = options.autoSave ~= false 
+    
+    if elementType == "Toggle" then
+        return self:_createToggle(section, name, flag, callback, default, autoSave)
+    elseif elementType == "Input" then
+        return self:_createInput(section, name, flag, options, autoSave)
+    elseif elementType == "Dropdown" then
+        return self:_createDropdown(section, name, flag, options, autoSave)
+    elseif elementType == "Slider" then
+        return self:_createSlider(section, name, flag, options, autoSave)
+    elseif elementType == "Button" then
+        return self:_createButton(section, name, flag, callback)
+    elseif elementType == "Keybind" then
+        return self:_createKeybind(section, name, flag, options, autoSave)
+    elseif elementType == "Colorpicker" then
+        return self:_createColorpicker(section, name, flag, options, autoSave)
+    else
+        ErrorHandler:log("ERROR", "Unknown element type: " .. tostring(elementType))
+        return nil
+    end
+end
+
+function UIFactory:_createToggle(section, name, flag, callback, default, autoSave)
+    default = default or false
+    
+    local savedValue = default
+    if autoSave and flag and self.config and self.config.toggles then
+        local saved = self.config.toggles[flag]
+        if saved ~= nil then
+            savedValue = saved
+        end
+    end
+    
+    return ErrorHandler:wrap(function()
+        return section:Toggle({
+            Name = name,
+            Default = savedValue,
+            Callback = function(value)
+                if autoSave and flag and self.config then
+                    self.config.toggles[flag] = value
+                    if self.saveCallback then
+                        self.saveCallback(self.config)
+                    end
+                end
+                
+                if callback then
+                    callback(value)
+                end
+            end,
+        }, flag)
+    end, "Create Toggle: " .. name)()
+end
+
+function UIFactory:_createInput(section, name, flag, options, autoSave)
+    local placeholder = options.placeholder or ""
+    local charType = options.charType or options.acceptedCharacters or "All"
+    local default = options.default or ""
+    local callback = options.callback
+    local onChanged = options.onChanged
+    
+    local savedValue = default
+    if autoSave and flag and self.config and self.config.inputs then
+        local saved = self.config.inputs[flag]
+        if saved ~= nil then
+            savedValue = saved
+        end
+    end
+    
+    local inputElement = ErrorHandler:wrap(function()
+        return section:Input({
+            Name = name,
+            Placeholder = placeholder,
+            AcceptedCharacters = charType,
+            Callback = function(value)
+                if autoSave and flag and self.config then
+                    self.config.inputs[flag] = value
+                    if self.saveCallback then
+                        self.saveCallback(self.config)
+                    end
+                end
+                
+                if callback then
+                    callback(value)
+                end
+            end,
+            onChanged = onChanged
+        }, flag)
+    end, "Create Input: " .. name)()
+    
+    if inputElement and savedValue and savedValue ~= "" then
+        pcall(function()
+            inputElement:UpdateText(tostring(savedValue))
+        end)
+    end
+    
+    return inputElement
+end
+
+function UIFactory:_createDropdown(section, name, flag, options, autoSave)
+    local dropdownOptions = options.options or {}
+    local multi = options.multi or false
+    local required = options.required or false
+    local search = options.search ~= false 
+    local default = options.default or (multi and {} or 1)
+    local callback = options.callback
+    
+    local savedValue = default
+    if autoSave and flag and self.config and self.config.dropdowns then
+        local saved = self.config.dropdowns[flag]
+        if saved ~= nil then
+            savedValue = saved
+        end
+    end
+    
+    local defaultValue = savedValue
+    if multi and type(savedValue) == "table" then
+        local isDictionary = false
+        for k, v in pairs(savedValue) do
+            if type(v) == "boolean" then
+                isDictionary = true
+                break
+            end
+        end
+        
+        if isDictionary then
+            defaultValue = {}
+            for optionName, isSelected in pairs(savedValue) do
+                if isSelected == true then
+                    table.insert(defaultValue, optionName)
+                end
+            end
+        end
+    elseif not multi and type(savedValue) == "string" then
+        defaultValue = 1
+        for i, option in ipairs(dropdownOptions) do
+            if option == savedValue then
+                defaultValue = i
+                break
+            end
+        end
+    elseif not multi and type(savedValue) == "number" then
+        defaultValue = savedValue
+    end
+    
+    return ErrorHandler:wrap(function()
+        return section:Dropdown({
+            Name = name,
+            Search = search,
+            Options = dropdownOptions,
+            Multi = multi,
+            Required = required,
+            Default = defaultValue,
+            Callback = function(value)
+                if autoSave and flag and self.config then
+                    self.config.dropdowns[flag] = value
+                    if self.saveCallback then
+                        self.saveCallback(self.config)
+                    end
+                end
+                
+                if callback then
+                    callback(value)
+                end
+            end,
+        }, flag)
+    end, "Create Dropdown: " .. name)()
+end
+
+function UIFactory:_createSlider(section, name, flag, options, autoSave)
+    local minimum = options.minimum or options.min or 0
+    local maximum = options.maximum or options.max or 100
+    local default = options.default or minimum
+    local displayMethod = options.displayMethod or "Default"
+    local precision = options.precision
+    local callback = options.callback
+    local onInputComplete = options.onInputComplete
+    
+    if autoSave and flag and self.config and self.config.inputs then
+        local saved = self.config.inputs[flag]
+        if saved ~= nil then
+            saved = tonumber(saved)
+            if saved then
+                default = saved
+            end
+        end
+    end
+    
+    local sliderConfig = {
+        Name = name,
+        Minimum = minimum,
+        Maximum = maximum,
+        Default = default,
+        DisplayMethod = displayMethod,
+        Callback = function(value)
+            if autoSave and flag and self.config then
+                self.config.inputs[flag] = value
+                if self.saveCallback then
+                    self.saveCallback(self.config)
+                end
+            end
+            
+            if callback then
+                callback(value)
+            end
+        end,
+    }
+    
+    if precision then
+        sliderConfig.Precision = precision
+    end
+    
+    if onInputComplete then
+        sliderConfig.onInputComplete = onInputComplete
+    end
+    
+    return ErrorHandler:wrap(function()
+        return section:Slider(sliderConfig, flag)
+    end, "Create Slider: " .. name)()
+end
+
+function UIFactory:_createButton(section, name, flag, callback)
+    return ErrorHandler:wrap(function()
+        return section:Button({
+            Name = name,
+            Callback = function()
+                if callback then
+                    callback()
+                end
+            end,
+        }, flag)
+    end, "Create Button: " .. name)()
+end
+
+function UIFactory:_createKeybind(section, name, flag, options, autoSave)
+    local default = options.default
+    local blacklist = options.blacklist or {}
+    local callback = options.callback
+    local onBinded = options.onBinded
+    local onBindHeld = options.onBindHeld
+    
+    if autoSave and flag and self.config and self.config.inputs then
+        local saved = self.config.inputs[flag]
+        if saved ~= nil then
+            default = saved
+        end
+    end
+    
+    return ErrorHandler:wrap(function()
+        return section:Keybind({
+            Name = name,
+            Default = default,
+            Blacklist = blacklist,
+            Callback = function(binded)
+                if autoSave and flag and self.config then
+                    self.config.inputs[flag] = binded
+                    if self.saveCallback then
+                        self.saveCallback(self.config)
+                    end
+                end
+                
+                if callback then
+                    callback(binded)
+                end
+            end,
+            onBinded = onBinded,
+            onBindHeld = onBindHeld
+        }, flag)
+    end, "Create Keybind: " .. name)()
+end
+
+function UIFactory:_createColorpicker(section, name, flag, options, autoSave)
+    local default = options.default or Color3.fromRGB(255, 255, 255)
+    local alpha = options.alpha
+    local callback = options.callback
+    
+    if autoSave and flag and self.config and self.config.inputs then
+        local saved = self.config.inputs[flag]
+        if saved ~= nil and type(saved) == "table" then
+            if saved.color then
+                default = Color3.fromRGB(saved.color.r or 255, saved.color.g or 255, saved.color.b or 255)
+            end
+            if saved.alpha ~= nil then
+                alpha = saved.alpha
+            end
+        end
+    end
+    
+    return ErrorHandler:wrap(function()
+        return section:Colorpicker({
+            Name = name,
+            Default = default,
+            Alpha = alpha,
+            Callback = function(color, alphaValue)
+                if autoSave and flag and self.config then
+                    self.config.inputs[flag] = {
+                        color = {
+                            r = math.round(color.R * 255),
+                            g = math.round(color.G * 255),
+                            b = math.round(color.B * 255)
+                        },
+                        alpha = alphaValue
+                    }
+                    if self.saveCallback then
+                        self.saveCallback(self.config)
+                    end
+                end
+                
+                if callback then
+                    callback(color, alphaValue)
+                end
+            end,
+        }, flag)
+    end, "Create Colorpicker: " .. name)()
+end
+
+function UIFactory:createMutuallyExclusive(section, toggleConfigs)
+    if not toggleConfigs or type(toggleConfigs) ~= "table" or #toggleConfigs < 2 then
+        ErrorHandler:log("ERROR", "createMutuallyExclusive requires at least 2 toggle configs")
+        return {}
+    end
+    
+    local toggles = {}
+    local toggleRefs = {}
+    
+    for i, config in ipairs(toggleConfigs) do
+        local toggle = self:createElement("Toggle", section, {
+            name = config.name,
+            flag = config.flag,
+            default = config.default,
+            autoSave = config.autoSave,
+            callback = function(value)
+                if value then
+                    for j, otherToggle in ipairs(toggleRefs) do
+                        if i ~= j and otherToggle then
+                            pcall(function()
+                                otherToggle:UpdateState(false)
+                            end)
+                            if config.flag and self.config and self.config.toggles then
+                                self.config.toggles[toggleConfigs[j].flag] = false
+                            end
+                        end
+                    end
+                    
+                    if self.saveCallback then
+                        self.saveCallback(self.config)
+                    end
+                end
+                
+                if config.callback then
+                    config.callback(value)
+                end
+            end
+        })
+        
+        table.insert(toggles, toggle)
+        table.insert(toggleRefs, toggle)
+    end
+    
+    return toggles
+end
+
+
+getgenv().ErrorHandler = ErrorHandler
+getgenv().PlatformDetector = PlatformDetector
+getgenv().ConnectionManager = ConnectionManager
+getgenv().MemoryManager = MemoryManager
+getgenv().UIFactory = UIFactory
+
+getgenv().GetMemoryReport = function()
+    return getMemoryReport()
+end
+
+getgenv().ForceMemoryCleanup = function()
+    local cleaned = MemoryManager:cleanup()
+    print(string.format("[MemoryManager] Manual cleanup: %d items removed", cleaned))
+    return cleaned
+end
+
+getgenv().GetGameState = function()
+    print(GameStateDetector:getReport())
+    return {
+        isInLobby = GameStateDetector:isLobby(),
+        isInGame = GameStateDetector:isGame(),
+        gameStarted = GameStateDetector.gameStarted
+    }
+end
+
+getgenv().ForceGameStartDetection = function()
+    print("[GameStateDetector] Forcing game start detection...")
+    local result = GameStateDetector:waitForGameStart(5)
+    print(string.format("[GameStateDetector] Game start detection: %s", result and "Success" or "Failed"))
+    return result
+end
+
+getgenv().RetryFailedInitializations = function()
+    print("[GameStateDetector] Retrying failed initializations...")
+    local retried = 0
+    for _, init in ipairs(GameStateDetector.pendingInitializations) do
+        if not init.initialized and init.attempts > 0 then
+            print(string.format("  Retrying: %s", init.name))
+            GameStateDetector:initializeWithRetry(init)
+            retried = retried + 1
+        end
+    end
+    print(string.format("[GameStateDetector] Retried %d initializations", retried))
+    return retried
+end
+
+
+ConnectionManager:startAutoCleanup()
+MemoryManager:startAutoCleanup()
+
+task.delay(2, function()
+    MemoryManager:setBaseline()
+end)
+
+task.spawn(function()
+    GameStateDetector:runPendingInitializations()
+end)
 
 if not getgenv()._GlobalConnections then
     getgenv()._GlobalConnections = {}
@@ -24,24 +1738,13 @@ if not getgenv()._MemoryProfiler then
 end
 
 local function getMemoryUsageMB()
-    local stats = game:GetService("Stats")
-    local memoryMB = 0
-    pcall(function()
-        memoryMB = stats:GetTotalMemoryUsageMb()
-    end)
-    if memoryMB == 0 then
-        pcall(function()
-            memoryMB = stats.MemoryUsageMb
-        end)
-    end
-    return memoryMB
+    return MemoryManager:getMemoryUsageMB()
 end
 
 local function startMemoryTracking(featureName)
     if not getgenv()._MemoryProfiler.baselineSet then
-        pcall(function() collectgarbage("collect") end)
-        task.wait(0.1)
-        getgenv()._MemoryProfiler.baseline = getMemoryUsageMB()
+        MemoryManager:setBaseline()
+        getgenv()._MemoryProfiler.baseline = MemoryManager.baseline
         getgenv()._MemoryProfiler.baselineSet = true
     end
     
@@ -80,18 +1783,20 @@ local function stopMemoryTracking(featureName)
 end
 
 local function getMemoryReport()
-    local report = "\n=== Memory Usage Report ===\n"
+    local report = ""
     
-    local currentMem = getMemoryUsageMB()
-    local baseline = getgenv()._MemoryProfiler.baseline or 0
+    report = report .. MemoryManager:getReport()
     
-    report = report .. string.format("Current Memory: %.1f MB\n", currentMem)
-    if baseline > 0 then
-        report = report .. string.format("Baseline Memory: %.1f MB\n", baseline)
-        report = report .. string.format("Memory Growth: +%.1f MB\n", currentMem - baseline)
-    end
+    local cmStats = ConnectionManager:getStats()
+    report = report .. "\n=== Connection Manager ===\n"
+    report = report .. string.format("Active Connections: %d\n", cmStats.active)
+    report = report .. string.format("Tower Connections: %d\n", cmStats.towers)
+    report = report .. string.format("Named Groups: %d\n", cmStats.groups)
+    report = report .. string.format("Total Tracked: %d\n", cmStats.totalTracked)
+    report = report .. string.format("Total Cleaned: %d\n", cmStats.totalCleaned)
     
-    report = report .. string.format("\nGlobal Connections: %d\n", #(getgenv()._GlobalConnections or {}))
+    report = report .. "\n=== Legacy Tracking ===\n"
+    report = report .. string.format("Global Connections: %d\n", #(getgenv()._GlobalConnections or {}))
     
     local towerConns = 0
     if getgenv()._TowerUpgradeConnections then
@@ -99,22 +1804,17 @@ local function getMemoryReport()
             towerConns = towerConns + 1
         end
     end
-    report = report .. string.format("Tower Connections: %d\n", towerConns)
+    report = report .. string.format("Tower Upgrade Conns: %d\n", towerConns)
     
-    local macroDataSize = getgenv().MacroDataV2 and #getgenv().MacroDataV2 or 0
-    report = report .. string.format("Macro Data Size: %d steps\n", macroDataSize)
-    
-    local cashHistorySize = getgenv().MacroCashHistory and #getgenv().MacroCashHistory or 0
-    report = report .. string.format("Cash History Size: %d entries\n", cashHistorySize)
-    
-    report = report .. "========================\n"
+    report = report .. "============================\n"
     
     return report
 end
 
-local function trackConnection(connection)
+local function trackConnection(connection, context)
     if connection then
         table.insert(getgenv()._GlobalConnections, connection)
+        ConnectionManager:track(connection, { context = context or "Legacy" })
     end
     return connection
 end
@@ -123,76 +1823,13 @@ task.spawn(function()
     while true do
         task.wait(10)
         pcall(function()
+            
             local cleaned = 0
             for i = #getgenv()._GlobalConnections, 1, -1 do
                 local conn = getgenv()._GlobalConnections[i]
                 if conn and conn.Connected == false then
                     table.remove(getgenv()._GlobalConnections, i)
                     cleaned = cleaned + 1
-                end
-            end
-            
-            if getgenv().MacroCashHistory and #getgenv().MacroCashHistory > 5 then
-                local temp = {}
-                for i = 1, 5 do
-                    temp[i] = getgenv().MacroCashHistory[i]
-                end
-                getgenv().MacroCashHistory = temp
-            end
-            
-            if getgenv().SmartCardPicked and #getgenv().SmartCardPicked > 3 then
-                getgenv().SmartCardPicked = {}
-            end
-            
-            if getgenv().SlowerCardPicked and #getgenv().SlowerCardPicked > 3 then
-                getgenv().SlowerCardPicked = {}
-            end
-            
-            if getgenv().MacroDataV2 and #getgenv().MacroDataV2 > 500 and not getgenv().MacroRecordingV2 then
-                local temp = {}
-                for i = math.max(1, #getgenv().MacroDataV2 - 250), #getgenv().MacroDataV2 do
-                    table.insert(temp, getgenv().MacroDataV2[i])
-                end
-                getgenv().MacroDataV2 = temp
-            end
-            
-            if getgenv().MacroActionsV2 and #getgenv().MacroActionsV2 > 200 and not getgenv().MacroRecordingV2 then
-                local temp = {}
-                for i = math.max(1, #getgenv().MacroActionsV2 - 100), #getgenv().MacroActionsV2 do
-                    table.insert(temp, getgenv().MacroActionsV2[i])
-                end
-                getgenv().MacroActionsV2 = temp
-            end
-            
-            if not getgenv().MacroPlaybackActive and getgenv().MacroPlaybackMacroData then
-                getgenv().MacroPlaybackMacroData = nil
-            end
-            
-            if getgenv()._lastWebhookHashList and #getgenv()._lastWebhookHashList > 5 then
-                while #getgenv()._lastWebhookHashList > 3 do
-                    table.remove(getgenv()._lastWebhookHashList, 1)
-                end
-            end
-            
-            if getgenv().WukongTrackedClones then
-                local toRemove = {}
-                for cloneId, _ in pairs(getgenv().WukongTrackedClones) do
-                    if type(cloneId) == "string" then
-                    else
-                        table.insert(toRemove, cloneId)
-                    end
-                end
-                for _, key in ipairs(toRemove) do
-                    getgenv().WukongTrackedClones[key] = nil
-                end
-            end
-            
-            if getgenv()._TowerTrackerPendingActions then
-                local now = tick()
-                for key, timestamp in pairs(getgenv()._TowerTrackerPendingActions) do
-                    if type(timestamp) == "number" and (now - timestamp) > 30 then
-                        getgenv()._TowerTrackerPendingActions[key] = nil
-                    end
                 end
             end
             
@@ -403,7 +2040,7 @@ local loadSuccess, loadError = pcall(function()
     local url = "https://github.com/biggaboy212/Maclib/releases/latest/download/maclib.txt"
     
     local response
-    local httpSuccess = pcall(function()
+    local httpSuccess, httpResult = ErrorHandler:wrapAsync(function()
         if game.HttpGet then
             response = game:HttpGet(url)
         elseif httpGet then
@@ -413,9 +2050,11 @@ local loadSuccess, loadError = pcall(function()
             })
             response = result.Body or result
         end
-    end)
+        return response
+    end, "Download MacLib")
     
     if not httpSuccess or not response or response == "" then
+        ErrorHandler:log("ERROR", "Failed to download MacLib - HTTP request failed")
         error("Failed to download MacLib. Your executor may not support HttpGet or GitHub is blocked.")
     end
     
@@ -428,8 +2067,17 @@ local loadSuccess, loadError = pcall(function()
 end)
 
 if not loadSuccess or not MacLib then
+    ErrorHandler:log("ERROR", "CRITICAL: Failed to load MacLib: " .. tostring(loadError))
     warn("[ALS] Failed to load MacLib: " .. tostring(loadError))
     warn("[ALS] Please try rejoining the game or use a different executor.")
+    
+    pcall(function()
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = "ALS Script - Critical Error",
+            Text = "Failed to load MacLib. Please rejoin or use a different executor.",
+            Duration = 10
+        })
+    end)
     return
 end
 
@@ -445,62 +2093,328 @@ local VIM = game:GetService("VirtualInputManager")
 local isMobile = UserInputService.TouchEnabled
 local MOBILE_DELAY_MULTIPLIER = isMobile and 1.5 or 1.0
 
-local CONFIG_FOLDER = "ALSHalloweenEvent"
-local CONFIG_FILE = "config.json"
-local USER_ID = tostring(LocalPlayer.UserId)
+local isMac = false
+pcall(function()
+    local platform = game:GetService("UserInputService"):GetPlatform()
+    isMac = tostring(platform):find("OSX") or tostring(platform):find("Mac")
+end)
 
-local function getConfigPath()
-    return CONFIG_FOLDER .. "/" .. USER_ID .. "/" .. CONFIG_FILE
+local function checkIfInLobby()
+    local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+    if not playerGui then return false end
+    
+    local lobbyUI = playerGui:FindFirstChild("LobbyUI")
+    return lobbyUI ~= nil
 end
 
-local function getUserFolder()
-    return CONFIG_FOLDER .. "/" .. USER_ID
+if not isMac then
+    pcall(function()
+        local httpService = game:GetService("HttpService")
+        local userAgent = httpService:GetUserAgent()
+        isMac = userAgent:find("Mac") or userAgent:find("Darwin")
+    end)
 end
 
-local function loadConfig()
-    if not isfolder(CONFIG_FOLDER) then makefolder(CONFIG_FOLDER) end
-    local userFolder = getUserFolder()
-    if not isfolder(userFolder) then makefolder(userFolder) end
-    local configPath = getConfigPath()
-    if isfile(configPath) then
-        local ok, data = pcall(function()
-            return HttpService:JSONDecode(readfile(configPath))
-        end)
-        if ok and type(data) == "table" then
-            data.toggles = data.toggles or {}
-            data.inputs = data.inputs or {}
-            data.dropdowns = data.dropdowns or {}
-            data.abilities = data.abilities or {}
-            data.autoJoin = data.autoJoin or {}
-            return data
+getgenv().IsMacPlatform = isMac
+
+if isMac then
+    print("[ALS] 🍎 Mac platform detected - Enabling performance optimizations")
+    print("[ALS] 🍎 Reduced update frequencies:")
+    print("[ALS] 🍎 - Game state: 2s (was 1s)")
+    print("[ALS] 🍎 - Tower tracking: 1s (was 0.5s)")
+    print("[ALS] 🍎 - Enemy removal: 1s (was 0.5s)")
+    print("[ALS] 🍎 - Particle cleanup: 4s (was 2s)")
+    
+    task.spawn(function()
+        task.wait(3)
+        if getgenv().RemoveEnemiesEnabled then
+            print("[ALS] ⚠️ Mac Warning: Enemy removal is enabled. This may cause lag/crashes.")
+            print("[ALS] 💡 Tip: Disable 'Remove Enemies' if experiencing issues")
+        end
+    end)
+end
+
+local ConfigManager = {
+    userId = tostring(LocalPlayer.UserId),
+    configFolder = "ALSHalloweenEvent",
+    configFile = "config.json",
+    config = nil,
+    saveDebounceTime = 0.5,
+    lastSaveTime = 0,
+    pendingSave = false,
+    saveScheduled = false,
+    configVersion = 2, 
+    
+    defaultConfig = {
+        version = 2,
+        toggles = {},
+        inputs = {},
+        dropdowns = {},
+        abilities = {},
+        autoJoin = {},
+        portals = {
+            priorities = {
+                ["Tower Limit"] = 1,
+                ["Immunity"] = 2,
+                ["Speedy"] = 3,
+                ["No Hit"] = 4,
+                ["Flight"] = 5,
+                ["Short Range"] = 6
+            }
+        }
+    }
+}
+
+function ConfigManager:getConfigPath()
+    return self.configFolder .. "/" .. self.userId .. "/" .. self.configFile
+end
+
+function ConfigManager:getUserFolder()
+    return self.configFolder .. "/" .. self.userId
+end
+
+function ConfigManager:ensureFolders()
+    if not PlatformDetector:hasCapability("hasFileSystem") then
+        ErrorHandler:log("WARN", "File system not available, config will not persist")
+        return false
+    end
+    
+    local success, err = ErrorHandler:wrapAsync(function()
+        if not isfolder(self.configFolder) then 
+            makefolder(self.configFolder) 
+        end
+        
+        local userFolder = self:getUserFolder()
+        if not isfolder(userFolder) then 
+            makefolder(userFolder) 
+        end
+    end, "Config folder creation")
+    
+    return success
+end
+
+function ConfigManager:migrateConfig(data)
+    local version = data.version or 1
+    
+    if version < 2 then
+        data.portals = data.portals or {}
+        data.portals.priorities = data.portals.priorities or {
+            ["Tower Limit"] = 1,
+            ["Immunity"] = 2,
+            ["Speedy"] = 3,
+            ["No Hit"] = 4,
+            ["Flight"] = 5,
+            ["Short Range"] = 6
+        }
+        ErrorHandler:log("INFO", "Migrated config from version 1 to 2")
+    end
+    
+    data.version = self.configVersion
+    
+    return data
+end
+
+function ConfigManager:validateConfig(data)
+    if type(data) ~= "table" then
+        return false, "Config is not a table"
+    end
+    
+    local requiredFields = {"toggles", "inputs", "dropdowns", "abilities", "autoJoin"}
+    for _, field in ipairs(requiredFields) do
+        if type(data[field]) ~= "table" then
+            data[field] = {}
         end
     end
-    return { toggles = {}, inputs = {}, dropdowns = {}, abilities = {}, autoJoin = {} }
+    
+    return true, data
 end
 
-local function saveConfig(config)
-    local userFolder = getUserFolder()
-    if not isfolder(CONFIG_FOLDER) then makefolder(CONFIG_FOLDER) end
-    if not isfolder(userFolder) then makefolder(userFolder) end
-    local ok, err = pcall(function()
-        local json = HttpService:JSONEncode(config)
-        writefile(getConfigPath(), json)
+function ConfigManager:load()
+    if self.config then
+        return self.config
+    end
+    
+    if not self:ensureFolders() then
+        self.config = self:deepCopy(self.defaultConfig)
+        ErrorHandler:log("INFO", "Using default config (file system unavailable)")
+        return self.config
+    end
+    
+    local configPath = self:getConfigPath()
+    
+    if isfile(configPath) then
+        local success, result = ErrorHandler:wrapAsync(function()
+            local fileContent = readfile(configPath)
+            
+            local data = HttpService:JSONDecode(fileContent)
+            
+            local valid, validatedData = self:validateConfig(data)
+            if not valid then
+                error("Invalid config structure: " .. tostring(validatedData))
+            end
+            
+            validatedData = self:migrateConfig(validatedData)
+            
+            return validatedData
+        end, "Config loading")
+        
+        if success and result then
+            self.config = result
+            ErrorHandler:log("INFO", "Config loaded successfully")
+            return self.config
+        else
+            ErrorHandler:log("ERROR", "Config corrupted, creating backup and using defaults")
+            
+            pcall(function()
+                local backupPath = configPath .. ".backup." .. tostring(os.time())
+                if isfile(configPath) then
+                    local content = readfile(configPath)
+                    writefile(backupPath, content)
+                    ErrorHandler:log("INFO", "Corrupted config backed up to: " .. backupPath)
+                end
+            end)
+        end
+    end
+    
+    self.config = self:deepCopy(self.defaultConfig)
+    ErrorHandler:log("INFO", "Using default config")
+    
+    self:saveImmediate()
+    
+    return self.config
+end
+
+function ConfigManager:deepCopy(original)
+    local copy
+    if type(original) == 'table' then
+        copy = {}
+        for key, value in next, original, nil do
+            copy[self:deepCopy(key)] = self:deepCopy(value)
+        end
+    else
+        copy = original
+    end
+    return copy
+end
+
+function ConfigManager:saveImmediate()
+    if not PlatformDetector:hasCapability("hasFileSystem") then
+        return false
+    end
+    
+    if not self.config then
+        ErrorHandler:log("WARN", "No config to save")
+        return false
+    end
+    
+    self:ensureFolders()
+    
+    local success, err = ErrorHandler:wrapAsync(function()
+        local json = HttpService:JSONEncode(self.config)
+        writefile(self:getConfigPath(), json)
+    end, "Config save")
+    
+    if success then
+        self.lastSaveTime = tick()
+        self.pendingSave = false
+        ErrorHandler:log("DEBUG", "Config saved successfully")
+        return true
+    else
+        ErrorHandler:log("ERROR", "Config save failed: " .. tostring(err))
+        return false
+    end
+end
+
+function ConfigManager:save()
+    self.pendingSave = true
+    
+    if self.saveScheduled then
+        return
+    end
+    
+    self.saveScheduled = true
+    
+    task.spawn(function()
+        local timeSinceLastSave = tick() - self.lastSaveTime
+        if timeSinceLastSave < self.saveDebounceTime then
+            task.wait(self.saveDebounceTime - timeSinceLastSave)
+        end
+        
+        if self.pendingSave then
+            self:saveImmediate()
+        end
+        
+        self.saveScheduled = false
     end)
-    if not ok then warn("[Config] Save failed: " .. tostring(err)) end
-    return ok
 end
 
-getgenv().Config = loadConfig()
-getgenv().Config.toggles = getgenv().Config.toggles or {}
-getgenv().Config.inputs = getgenv().Config.inputs or {}
-getgenv().Config.dropdowns = getgenv().Config.dropdowns or {}
-getgenv().Config.abilities = getgenv().Config.abilities or {}
-getgenv().Config.autoJoin = getgenv().Config.autoJoin or {}
+function ConfigManager:get(category, key, default)
+    if not self.config then
+        self:load()
+    end
+    
+    if not self.config[category] then
+        return default
+    end
+    
+    local value = self.config[category][key]
+    if value == nil then
+        return default
+    end
+    
+    return value
+end
 
-getgenv().SaveConfig = saveConfig
-getgenv().LoadConfig = loadConfig
+function ConfigManager:set(category, key, value)
+    if not self.config then
+        self:load()
+    end
+    
+    if not self.config[category] then
+        self.config[category] = {}
+    end
+    
+    self.config[category][key] = value
+    
+    self:save()
+end
 
-getgenv().DebugMode = getgenv().Config.toggles.DebugMode or false
+function ConfigManager:getConfig()
+    if not self.config then
+        self:load()
+    end
+    return self.config
+end
+
+function ConfigManager:reload()
+    self.config = nil
+    return self:load()
+end
+
+local loadedConfig = ConfigManager:load()
+
+getgenv().Config = loadedConfig
+getgenv().SaveConfig = function(config)
+    ConfigManager.config = config
+    ConfigManager:save()
+end
+getgenv().LoadConfig = function()
+    return ConfigManager:reload()
+end
+
+getgenv().ConfigManager = ConfigManager
+
+local CONFIG_FOLDER = ConfigManager.configFolder
+
+local saveConfig = getgenv().SaveConfig
+
+getgenv().DebugMode = ConfigManager:get("toggles", "DebugMode", false)
+
+UIFactory:init(getgenv().Config, function(config)
+    ConfigManager.config = config
+    ConfigManager:save()
+end)
+
 
 local function safeGarbageCollect()
     pcall(function()
@@ -532,7 +2446,10 @@ if not getgenv()._ConnectionManager then
     }
 end
 
-local ConnectionManager = getgenv()._ConnectionManager
+local ConnectionManager = getgenv().ConnectionManager
+
+
+local platformInfo = PlatformDetector:detect()
 
 local defaultWidth = 720
 local defaultHeight = 480
@@ -542,24 +2459,35 @@ local customHeight = tonumber(getgenv().Config.inputs.UIHeight) or defaultHeight
 if customWidth < 400 or customWidth > 1920 then customWidth = defaultWidth end
 if customHeight < 300 or customHeight > 1080 then customHeight = defaultHeight end
 
-local Window = MacLib:Window({
-    Title = "Byorl Last Stand",
-    Subtitle = "Anime Last Stand Automation",
-    Size = UDim2.fromOffset(customWidth, customHeight),
-    DragStyle = 2,
-    DisabledWindowControls = {},
-    ShowUserInfo = false,
-    Keybind = Enum.KeyCode.LeftControl,
-    AcrylicBlur = false,
-})
+local dragStyle = PlatformDetector:isMobilePlatform() and 2 or 1
+ErrorHandler:log("INFO", string.format("UI DragStyle: %d (Mobile: %s)", dragStyle, tostring(PlatformDetector:isMobilePlatform())))
+
+local enableBlur = not PlatformDetector:isMobilePlatform()
+
+local Window = ErrorHandler:wrap(function()
+    return MacLib:Window({
+        Title = "Byorl Last Stand",
+        Subtitle = "Anime Last Stand Automation",
+        Size = UDim2.fromOffset(customWidth, customHeight),
+        DragStyle = dragStyle,
+        DisabledWindowControls = {},
+        ShowUserInfo = false,
+        Keybind = Enum.KeyCode.LeftControl,
+        AcrylicBlur = enableBlur,
+    })
+end, "Window creation")()
 
 if not Window then
+    ErrorHandler:log("ERROR", "Failed to create Window - MacLib may not be loaded correctly")
     error("[ALS] Failed to create Window")
     return
 end
 
-local globalSettings = {
-    UIBlurToggle = Window:GlobalSetting({
+
+local globalSettings = {}
+
+ErrorHandler:wrap(function()
+    globalSettings.UIBlurToggle = Window:GlobalSetting({
         Name = "UI Blur",
         Default = Window:GetAcrylicBlurState(),
         Callback = function(bool)
@@ -570,8 +2498,11 @@ local globalSettings = {
                 Lifetime = 5
             })
         end,
-    }),
-    NotificationToggler = Window:GlobalSetting({
+    })
+end, "Create UI Blur global setting")()
+
+ErrorHandler:wrap(function()
+    globalSettings.NotificationToggler = Window:GlobalSetting({
         Name = "Notifications",
         Default = Window:GetNotificationsState(),
         Callback = function(bool)
@@ -582,8 +2513,11 @@ local globalSettings = {
                 Lifetime = 5
             })
         end,
-    }),
-    ShowUserInfo = Window:GlobalSetting({
+    })
+end, "Create Notifications global setting")()
+
+ErrorHandler:wrap(function()
+    globalSettings.ShowUserInfo = Window:GlobalSetting({
         Name = "Show User Info",
         Default = Window:GetUserInfoState(),
         Callback = function(bool)
@@ -595,7 +2529,8 @@ local globalSettings = {
             })
         end,
     })
-}
+end, "Create Show User Info global setting")()
+
 
 Window.onUnloaded(function()
     debugPrint("[Cleanup] Unloading script...")
@@ -604,6 +2539,12 @@ Window.onUnloaded(function()
     getgenv().MacroPlayEnabled = false
     getgenv().MacroRecordingV2 = false
     getgenv().AutoAbilitiesEnabled = false
+    
+    pcall(function()
+        local stats = ConnectionManager:getStats()
+        debugPrint(string.format("[Cleanup] Disconnecting %d active connections...", stats.active))
+        ConnectionManager:disconnectAll()
+    end)
     
     pcall(function()
         if cashConnection then cashConnection:Disconnect() end
@@ -911,7 +2852,9 @@ local function cleanupBeforeTeleport()
         getgenv().MacroTowerInfoCache = nil
         getgenv().MacroRemoteCache = nil
         getgenv().MacroCashHistory = nil
-        getgenv().MacroDataV2 = nil
+        if not getgenv().MacroRecordingV2 then
+            getgenv().MacroDataV2 = nil
+        end
         towerTracker = {
             placeCounts = {},
             upgradeLevels = {},
@@ -931,99 +2874,172 @@ getgenv().CleanupBeforeTeleport = cleanupBeforeTeleport
 MacLib:SetFolder(CONFIG_FOLDER)
 
 
+local TabGroup1 = ErrorHandler:wrap(function()
+    return Window:TabGroup()
+end, "Create TabGroup1")()
 
-local TabGroup1 = Window:TabGroup()
+local TabGroup2 = ErrorHandler:wrap(function()
+    return Window:TabGroup()
+end, "Create TabGroup2")()
 
-local TabGroup2 = Window:TabGroup()
+local TabGroup3 = ErrorHandler:wrap(function()
+    return Window:TabGroup()
+end, "Create TabGroup3")()
 
-local TabGroup3 = Window:TabGroup()
+if not TabGroup1 or not TabGroup2 or not TabGroup3 then
+    ErrorHandler:log("ERROR", "Failed to create tab groups")
+    error("[ALS] Failed to create tab groups")
+    return
+end
 
-local Tabs = {
-    Main = TabGroup1:Tab({ 
+
+local Tabs = {}
+
+Tabs.Main = ErrorHandler:wrap(function()
+    return TabGroup1:Tab({ 
         Name = "Main", 
         Image = "rbxassetid://10734950309" 
-    }),
-    AutoPlay = TabGroup1:Tab({ 
+    })
+end, "Create Main tab")()
+
+Tabs.AutoPlay = ErrorHandler:wrap(function()
+    return TabGroup1:Tab({ 
         Name = "Auto Play", 
         Image = "rbxassetid://10723407389" 
-    }),
-    Macro = TabGroup1:Tab({ 
+    })
+end, "Create AutoPlay tab")()
+
+Tabs.Macro = ErrorHandler:wrap(function()
+    return TabGroup1:Tab({ 
         Name = "Macro", 
         Image = "rbxassetid://10734923549" 
-    }),
-    Abilities = TabGroup1:Tab({ 
+    })
+end, "Create Macro tab")()
+
+Tabs.Abilities = ErrorHandler:wrap(function()
+    return TabGroup1:Tab({ 
         Name = "Abilities", 
         Image = "rbxassetid://10747373176" 
-    }),
-    Portals = TabGroup1:Tab({ 
+    })
+end, "Create Abilities tab")()
+
+Tabs.Portals = ErrorHandler:wrap(function()
+    return TabGroup1:Tab({ 
         Name = "Portals", 
         Image = "rbxassetid://10723407389" 
-    }),
-    
-    Event = TabGroup2:Tab({ 
+    })
+end, "Create Portals tab")()
+
+Tabs.Event = ErrorHandler:wrap(function()
+    return TabGroup2:Tab({ 
         Name = "Event", 
         Image = "rbxassetid://10734952273" 
-    }),
-    Event2 = TabGroup2:Tab({ 
+    })
+end, "Create Event tab")()
+
+Tabs.Event2 = ErrorHandler:wrap(function()
+    return TabGroup2:Tab({ 
         Name = "Event 2", 
         Image = "rbxassetid://10734952273" 
-    }),
-    SlimeRush = TabGroup2:Tab({ 
+    })
+end, "Create Event2 tab")()
+
+Tabs.SlimeRush = ErrorHandler:wrap(function()
+    return TabGroup2:Tab({ 
         Name = "Slime Rush", 
         Image = "rbxassetid://10734923549" 
-    }),
-    BossRush = TabGroup2:Tab({ 
+    })
+end, "Create SlimeRush tab")()
+
+Tabs.BossRush = ErrorHandler:wrap(function()
+    return TabGroup2:Tab({ 
         Name = "Boss Rush", 
         Image = "rbxassetid://10734923549" 
-    }),
-    Breach = TabGroup2:Tab({ 
+    })
+end, "Create BossRush tab")()
+
+Tabs.Breach = ErrorHandler:wrap(function()
+    return TabGroup2:Tab({ 
         Name = "Breach", 
         Image = "rbxassetid://10747374131" 
-    }),
-    FinalExpedition = TabGroup2:Tab({ 
+    })
+end, "Create Breach tab")()
+
+Tabs.FinalExpedition = ErrorHandler:wrap(function()
+    return TabGroup2:Tab({ 
         Name = "Final Expedition", 
         Image = "rbxassetid://10723407389" 
-    }),
-    InfinityCastle = TabGroup2:Tab({ 
+    })
+end, "Create FinalExpedition tab")()
+
+Tabs.InfinityCastle = ErrorHandler:wrap(function()
+    return TabGroup2:Tab({ 
         Name = "Infinity Castle", 
         Image = "rbxassetid://10734923549" 
-    }),
-    
-    Webhook = TabGroup3:Tab({ 
+    })
+end, "Create InfinityCastle tab")()
+
+Tabs.Webhook = ErrorHandler:wrap(function()
+    return TabGroup3:Tab({ 
         Name = "Webhook", 
         Image = "rbxassetid://10734952273" 
-    }),
-    SeamlessFix = TabGroup3:Tab({ 
+    })
+end, "Create Webhook tab")()
+
+Tabs.SeamlessFix = ErrorHandler:wrap(function()
+    return TabGroup3:Tab({ 
         Name = "Automation", 
         Image = "rbxassetid://10734923549" 
-    }),
-    Misc = TabGroup3:Tab({ 
+    })
+end, "Create SeamlessFix tab")()
+
+Tabs.Misc = ErrorHandler:wrap(function()
+    return TabGroup3:Tab({ 
         Name = "Misc", 
         Image = "rbxassetid://10734949856" 
-    }),
-    Settings = TabGroup3:Tab({ 
+    })
+end, "Create Misc tab")()
+
+Tabs.Settings = ErrorHandler:wrap(function()
+    return TabGroup3:Tab({ 
         Name = "Settings", 
         Image = "rbxassetid://10734949856" 
     })
-}
+end, "Create Settings tab")()
 
-local ToggleGui = Instance.new("ScreenGui")
-ToggleGui.Name = "ALS_Fluent_Toggle"
-ToggleGui.ResetOnSpawn = false
-ToggleGui.IgnoreGuiInset = true
-ToggleGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-ToggleGui.Parent = game:GetService("CoreGui")
+local tabCount = 0
+for name, tab in pairs(Tabs) do
+    if tab then
+        tabCount = tabCount + 1
+    else
+        ErrorHandler:log("WARN", "Failed to create tab: " .. name)
+    end
+end
 
-local ToggleButton = Instance.new("ImageButton")
-ToggleButton.Name = "ToggleButton"
-ToggleButton.Size = UDim2.new(0, 75, 0, 75)
-ToggleButton.Position = UDim2.new(0, 24, 0, 24)
-ToggleButton.AnchorPoint = Vector2.new(0, 0)
-ToggleButton.BackgroundTransparency = 1
-ToggleButton.Image = "rbxassetid://72399447876912"
-ToggleButton.Active = true
-ToggleButton.Draggable = true
-ToggleButton.Parent = ToggleGui
+
+
+local ToggleGui, ToggleButton
+
+ErrorHandler:wrap(function()
+    ToggleGui = Instance.new("ScreenGui")
+    ToggleGui.Name = "ALS_Fluent_Toggle"
+    ToggleGui.ResetOnSpawn = false
+    ToggleGui.IgnoreGuiInset = true
+    ToggleGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    ToggleGui.Parent = game:GetService("CoreGui")
+    
+    ToggleButton = Instance.new("ImageButton")
+    ToggleButton.Name = "ToggleButton"
+    ToggleButton.Size = UDim2.new(0, 75, 0, 75)
+    ToggleButton.Position = UDim2.new(0, 24, 0, 24)
+    ToggleButton.AnchorPoint = Vector2.new(0, 0)
+    ToggleButton.BackgroundTransparency = 1
+    ToggleButton.Image = "rbxassetid://72399447876912"
+    ToggleButton.Active = true
+    ToggleButton.Draggable = true
+    ToggleButton.Parent = ToggleGui
+    
+end, "Create toggle button GUI")()
 
 local function getCurrentMenuKey()
     local keyName = getgenv().Config.inputs["MenuKeybind"] or "LeftControl"
@@ -1034,237 +3050,197 @@ local function getCurrentMenuKey()
 end
 
 local function toggleUI()
-    local currentKey = getCurrentMenuKey()
-    VIM:SendKeyEvent(true, currentKey, false, game)
-    task.wait(0.05)
-    VIM:SendKeyEvent(false, currentKey, false, game)
+    ErrorHandler:wrap(function()
+        local currentKey = getCurrentMenuKey()
+        VIM:SendKeyEvent(true, currentKey, false, game)
+        task.wait(0.05)
+        VIM:SendKeyEvent(false, currentKey, false, game)
+    end, "Toggle UI")()
 end
-ToggleButton.MouseButton1Click:Connect(toggleUI)
 
-local Sections = {
-    MainLeft = Tabs.Main:Section({ Side = "Left" }),
-    MainRight = Tabs.Main:Section({ Side = "Right" }),
-    
-    AutoPlayLeft = Tabs.AutoPlay:Section({ Side = "Left" }),
-    AutoPlayRight = Tabs.AutoPlay:Section({ Side = "Right" }),
-    
-    MacroLeft = Tabs.Macro:Section({ Side = "Left" }),
-    MacroRight = Tabs.Macro:Section({ Side = "Right" }),
-    
-    PortalsLeft = Tabs.Portals:Section({ Side = "Left" }),
-    PortalsRight = Tabs.Portals:Section({ Side = "Right" }),
-    
-    BossRushLeft = Tabs.BossRush:Section({ Side = "Left" }),
-    BossRushRight = Tabs.BossRush:Section({ Side = "Right" }),
-    
-    BreachLeft = Tabs.Breach:Section({ Side = "Left" }),
-    BreachRight = Tabs.Breach:Section({ Side = "Right" }),
-    
-    FinalExpeditionLeft = Tabs.FinalExpedition:Section({ Side = "Left" }),
-    FinalExpeditionRight = Tabs.FinalExpedition:Section({ Side = "Right" }),
-    
-    InfinityCastleLeft = Tabs.InfinityCastle:Section({ Side = "Left" }),
-    InfinityCastleRight = Tabs.InfinityCastle:Section({ Side = "Right" }),
-    
-    EventLeft = Tabs.Event:Section({ Side = "Left" }),
-    EventRight = Tabs.Event:Section({ Side = "Right" }),
-    
-    Event2Left = Tabs.Event2:Section({ Side = "Left" }),
-    Event2Right = Tabs.Event2:Section({ Side = "Right" }),
-    
-    SlimeRushLeft = Tabs.SlimeRush:Section({ Side = "Left" }),
-    SlimeRushRight = Tabs.SlimeRush:Section({ Side = "Right" }),
-    
-    WebhookLeft = Tabs.Webhook:Section({ Side = "Left" }),
-    
-    SeamlessFixLeft = Tabs.SeamlessFix:Section({ Side = "Left" }),
-    SeamlessFixRight = Tabs.SeamlessFix:Section({ Side = "Right" }),
-    
-    MiscLeft = Tabs.Misc:Section({ Side = "Left" }),
-    MiscRight = Tabs.Misc:Section({ Side = "Right" }),
-    
-    SettingsLeft = Tabs.Settings:Section({ Side = "Left" }),
-    SettingsRight = Tabs.Settings:Section({ Side = "Right" })
-}
+if ToggleButton then
+    ConnectionManager:track(
+        ToggleButton.MouseButton1Click:Connect(toggleUI),
+        { group = "UI", context = "Toggle button click" }
+    )
+end
 
-Tabs.Main:Select()
+
+local Sections = {}
+
+local function createSection(tab, tabName, side)
+    return ErrorHandler:wrap(function()
+        if not tab then
+            ErrorHandler:log("WARN", string.format("Tab %s is nil, cannot create section", tabName))
+            return nil
+        end
+        return tab:Section({ Side = side })
+    end, string.format("Create %s %s section", tabName, side))()
+end
+
+Sections.MainLeft = createSection(Tabs.Main, "Main", "Left")
+Sections.MainRight = createSection(Tabs.Main, "Main", "Right")
+
+Sections.AutoPlayLeft = createSection(Tabs.AutoPlay, "AutoPlay", "Left")
+Sections.AutoPlayRight = createSection(Tabs.AutoPlay, "AutoPlay", "Right")
+
+Sections.MacroLeft = createSection(Tabs.Macro, "Macro", "Left")
+Sections.MacroRight = createSection(Tabs.Macro, "Macro", "Right")
+
+Sections.PortalsLeft = createSection(Tabs.Portals, "Portals", "Left")
+Sections.PortalsRight = createSection(Tabs.Portals, "Portals", "Right")
+
+Sections.BossRushLeft = createSection(Tabs.BossRush, "BossRush", "Left")
+Sections.BossRushRight = createSection(Tabs.BossRush, "BossRush", "Right")
+
+Sections.BreachLeft = createSection(Tabs.Breach, "Breach", "Left")
+Sections.BreachRight = createSection(Tabs.Breach, "Breach", "Right")
+
+Sections.FinalExpeditionLeft = createSection(Tabs.FinalExpedition, "FinalExpedition", "Left")
+Sections.FinalExpeditionRight = createSection(Tabs.FinalExpedition, "FinalExpedition", "Right")
+
+Sections.InfinityCastleLeft = createSection(Tabs.InfinityCastle, "InfinityCastle", "Left")
+Sections.InfinityCastleRight = createSection(Tabs.InfinityCastle, "InfinityCastle", "Right")
+
+Sections.EventLeft = createSection(Tabs.Event, "Event", "Left")
+Sections.EventRight = createSection(Tabs.Event, "Event", "Right")
+
+Sections.Event2Left = createSection(Tabs.Event2, "Event2", "Left")
+Sections.Event2Right = createSection(Tabs.Event2, "Event2", "Right")
+
+Sections.SlimeRushLeft = createSection(Tabs.SlimeRush, "SlimeRush", "Left")
+Sections.SlimeRushRight = createSection(Tabs.SlimeRush, "SlimeRush", "Right")
+
+Sections.WebhookLeft = createSection(Tabs.Webhook, "Webhook", "Left")
+
+Sections.SeamlessFixLeft = createSection(Tabs.SeamlessFix, "SeamlessFix", "Left")
+Sections.SeamlessFixRight = createSection(Tabs.SeamlessFix, "SeamlessFix", "Right")
+
+Sections.MiscLeft = createSection(Tabs.Misc, "Misc", "Left")
+Sections.MiscRight = createSection(Tabs.Misc, "Misc", "Right")
+
+Sections.SettingsLeft = createSection(Tabs.Settings, "Settings", "Left")
+Sections.SettingsRight = createSection(Tabs.Settings, "Settings", "Right")
+
+local sectionCount = 0
+for name, section in pairs(Sections) do
+    if section then
+        sectionCount = sectionCount + 1
+    else
+        ErrorHandler:log("WARN", "Failed to create section: " .. name)
+    end
+end
+
+
+ErrorHandler:wrap(function()
+    if Tabs.Main then
+        Tabs.Main:Select()
+    end
+end, "Select Main tab")()
+
+
+
+
+local function createUIElementWithRetry(elementType, section, config, retryAttempts)
+    retryAttempts = retryAttempts or 3
+    local retryDelay = 0.5
+    
+    for attempt = 1, retryAttempts do
+        local success, element = pcall(function()
+            return UIFactory:createElement(elementType, section, config)
+        end)
+        
+        if success and element then
+            if attempt > 1 then
+                ErrorHandler:log("INFO", string.format("✓ Created %s '%s' on attempt %d", 
+                    elementType, config.name or "Unknown", attempt))
+            end
+            return element
+        else
+            ErrorHandler:log("WARN", string.format("Failed to create %s '%s' (attempt %d/%d): %s", 
+                elementType, config.name or "Unknown", attempt, retryAttempts, tostring(element)))
+            
+            if attempt < retryAttempts then
+                task.wait(retryDelay)
+            end
+        end
+    end
+    
+    ErrorHandler:log("ERROR", string.format("Failed to create %s '%s' after %d attempts", 
+        elementType, config.name or "Unknown", retryAttempts))
+    
+    return nil
+end
 
 
 local function createToggle(section, name, flag, callback, default)
-    name = tostring(name or "Toggle")
-    default = default or false
-    local savedValue = getgenv().Config.toggles[flag]
-    if savedValue == nil then
-        savedValue = default
-    end
-    
-    return section:Toggle({
-        Name = name,
-        Default = savedValue,
-        Callback = function(value)
-            getgenv().Config.toggles[flag] = value
-            saveConfig(getgenv().Config)
-            
-            if callback then 
-                callback(value) 
-            end
-        end,
-    }, flag)
+    return UIFactory:createElement("Toggle", section, {
+        name = name or "Toggle",
+        flag = flag,
+        callback = callback,
+        default = default or false,
+        autoSave = true
+    })
 end
 
 local function createToggleNoSave(section, name, flag, callback, default)
-    name = tostring(name or "Toggle")
-    default = default or false
-    
-    return section:Toggle({
-        Name = name,
-        Default = default,
-        Callback = function(value)
-            if callback then 
-                callback(value) 
-            end
-        end,
-    }, flag)
+    return UIFactory:createElement("Toggle", section, {
+        name = name or "Toggle",
+        flag = flag,
+        callback = callback,
+        default = default or false,
+        autoSave = false
+    })
 end
 
 local function createInput(section, name, flag, placeholder, charType, callback, default)
-    name = tostring(name or "Input")
-    placeholder = placeholder or ""
-    charType = charType or "All"
-    default = default or ""
-    
-    local savedValue = getgenv().Config.inputs[flag]
-    if savedValue == nil then
-        savedValue = default
-    end
-    
-    local inputElement = section:Input({
-        Name = name,
-        Placeholder = placeholder,
-        AcceptedCharacters = charType,
-        Callback = function(value)
-            getgenv().Config.inputs[flag] = value
-            saveConfig(getgenv().Config)
-            if callback then 
-                callback(value) 
-            end
-        end,
-    }, flag)
-    
-    if savedValue and savedValue ~= "" then
-        pcall(function()
-            inputElement:UpdateText(tostring(savedValue))
-        end)
-    end
-    
-    return inputElement
+    return UIFactory:createElement("Input", section, {
+        name = name or "Input",
+        flag = flag,
+        placeholder = placeholder or "",
+        charType = charType or "All",
+        callback = callback,
+        default = default or "",
+        autoSave = true
+    })
 end
 
 local function createDropdown(section, name, flag, options, multi, callback, default)
-    name = tostring(name or "Dropdown")
-    options = options or {}
-    multi = multi or false
-    default = default or (multi and {} or 1)
-    
-    local savedValue = getgenv().Config.dropdowns[flag]
-    if savedValue == nil then
-        savedValue = default
-    end
-    
-    
-    local defaultValue = savedValue
-    if multi and type(savedValue) == "table" then
-        local isDictionary = false
-        for k, v in pairs(savedValue) do
-            if type(v) == "boolean" then
-                isDictionary = true
-                break
-            end
-        end
-        
-        if isDictionary then
-            defaultValue = {}
-            for optionName, isSelected in pairs(savedValue) do
-                if isSelected == true then
-                    table.insert(defaultValue, optionName)
-                end
-            end
-        end
-    elseif not multi and type(savedValue) == "string" then
-        defaultValue = 1
-        for i, option in ipairs(options) do
-            if option == savedValue then
-                defaultValue = i
-                break
-            end
-        end
-    elseif not multi and type(savedValue) == "number" then
-        defaultValue = savedValue
-    end
-    
-    
-    return section:Dropdown({
-        Name = name,
-        Search = true,
-        Options = options,
-        Multi = multi,
-        Required = false,
-        Default = defaultValue,
-        Callback = function(value)
-            getgenv().Config.dropdowns[flag] = value
-            saveConfig(getgenv().Config)
-            if callback then 
-                callback(value) 
-            end
-        end,
-    }, flag)
+    return UIFactory:createElement("Dropdown", section, {
+        name = name or "Dropdown",
+        flag = flag,
+        options = options or {},
+        multi = multi or false,
+        callback = callback,
+        default = default or (multi and {} or 1),
+        autoSave = true
+    })
 end
 
 local function createSlider(section, name, flag, minimum, maximum, default, callback, displayMethod, precision)
-    name = tostring(name or "Slider")
-    minimum = minimum or 0
-    maximum = maximum or 100
-    default = default or minimum
-    displayMethod = displayMethod or "Default"
-    precision = precision or nil
-    
-    local savedValue = getgenv().Config.inputs[flag]
-    if savedValue ~= nil then
-        savedValue = tonumber(savedValue)
-        if savedValue then
-            default = savedValue
-        end
-    end
-    
-    local sliderConfig = {
-        Name = name,
-        Minimum = minimum,
-        Maximum = maximum,
-        Default = default,
-        DisplayMethod = displayMethod,
-        Callback = function(value)
-            getgenv().Config.inputs[flag] = value
-            saveConfig(getgenv().Config)
-            if callback then 
-                callback(value) 
-            end
-        end,
-    }
-    
-    if precision then
-        sliderConfig.Precision = precision
-    end
-    
-    return section:Slider(sliderConfig, flag)
+    return UIFactory:createElement("Slider", section, {
+        name = name or "Slider",
+        flag = flag,
+        minimum = minimum or 0,
+        maximum = maximum or 100,
+        default = default or minimum,
+        displayMethod = displayMethod or "Default",
+        precision = precision,
+        callback = callback,
+        autoSave = true
+    })
 end
 
 local function createMutuallyExclusiveToggle(section, name, flag, otherToggle, otherFlag, callback, default)
-    local toggle = createToggle(
-        section,
-        name,
-        flag,
-        function(value)
-            if callback then callback(value) end
+    local toggle = UIFactory:createElement("Toggle", section, {
+        name = name,
+        flag = flag,
+        default = default or false,
+        autoSave = true,
+        callback = function(value)
+            if callback then 
+                callback(value) 
+            end
             
             if value and otherToggle then
                 getgenv().Config.toggles[otherFlag] = false
@@ -1273,11 +3249,12 @@ local function createMutuallyExclusiveToggle(section, name, flag, otherToggle, o
                     otherToggle:UpdateState(false)
                 end)
             end
-        end,
-        default
-    )
+        end
+    })
+    
     return toggle
 end
+
 
 local function createCardPriorityInputs(section, cardTable, targetPriorityTable, keyPrefix)
     if not cardTable or type(cardTable) ~= "table" then return end
@@ -1495,6 +3472,7 @@ local function loadMacros()
     local files = listfiles(MACRO_FOLDER)
     if not files then return end
     local convertedCount = 0
+    local loadedCount = 0
     
     for _, file in pairs(files) do
         if file:sub(-5) == ".json" then
@@ -1514,15 +3492,30 @@ local function loadMacros()
                                 getgenv().Macros[fileName] = convertedData
                                 saveMacro(fileName, convertedData)
                                 convertedCount = convertedCount + 1
+                                loadedCount = loadedCount + 1
+                                print("[Macro] ✅ Loaded (converted): " .. fileName .. " (" .. #convertedData .. " steps)")
+                            else
+                                warn("[Macro] ❌ Failed to convert: " .. fileName .. " (0 steps after conversion)")
                             end
                         else
-                            getgenv().Macros[fileName] = data
+                            if type(data) == "table" then
+                                getgenv().Macros[fileName] = data
+                                loadedCount = loadedCount + 1
+                                if #data > 0 then
+                                    print("[Macro] ✅ Loaded: " .. fileName .. " (" .. #data .. " steps)")
+                                end
+                            else
+                                warn("[Macro] ❌ Skipped: " .. fileName .. " (invalid format)")
+                            end
                         end
                     end
+                else
+                    warn("[Macro] ❌ Failed to decode: " .. fileName)
                 end
             end
         end
     end
+    
     
     if convertedCount > 0 then
         Window:Notify({
@@ -1649,9 +3642,12 @@ local cashConnection
 pcall(function()
     if LocalPlayer:FindFirstChild("Cash") then
         getgenv().MacroCurrentCash = LocalPlayer.Cash.Value
-        cashConnection = trackConnection(LocalPlayer.Cash:GetPropertyChangedSignal("Value"):Connect(function()
-            getgenv().MacroCurrentCash = LocalPlayer.Cash.Value
-        end))
+        cashConnection = ConnectionManager:trackGroup("MacroSystem",
+            LocalPlayer.Cash:GetPropertyChangedSignal("Value"):Connect(function()
+                getgenv().MacroCurrentCash = LocalPlayer.Cash.Value
+            end),
+            "Macro Cash Tracking"
+        )
     end
 end)
 
@@ -1665,31 +3661,34 @@ local function trackCash()
         if LocalPlayer:FindFirstChild("Cash") then
             getgenv().MacroLastCash = LocalPlayer.Cash.Value
             
-            cashTrackingConnection = trackConnection(LocalPlayer.Cash:GetPropertyChangedSignal("Value"):Connect(function()
-                local currentCash = tonumber(LocalPlayer.Cash.Value) or 0
-                local lastCash = tonumber(getgenv().MacroLastCash) or 0
-                
-                if lastCash > 0 and currentCash < lastCash then
-                    local decrease = lastCash - currentCash
+            cashTrackingConnection = ConnectionManager:trackGroup("MacroSystem",
+                LocalPlayer.Cash:GetPropertyChangedSignal("Value"):Connect(function()
+                    local currentCash = tonumber(LocalPlayer.Cash.Value) or 0
+                    local lastCash = tonumber(getgenv().MacroLastCash) or 0
                     
-                    if not getgenv().MacroCashHistory or type(getgenv().MacroCashHistory) ~= "table" then
-                        getgenv().MacroCashHistory = {}
+                    if lastCash > 0 and currentCash < lastCash then
+                        local decrease = lastCash - currentCash
+                        
+                        if not getgenv().MacroCashHistory or type(getgenv().MacroCashHistory) ~= "table" then
+                            getgenv().MacroCashHistory = {}
+                        end
+                        
+                        table.insert(getgenv().MacroCashHistory, 1, {
+                            time = tick(),
+                            decrease = decrease,
+                            before = lastCash,
+                            after = currentCash
+                        })
+                        
+                        if #getgenv().MacroCashHistory > MAX_CASH_HISTORY then
+                            table.remove(getgenv().MacroCashHistory)
+                        end
                     end
                     
-                    table.insert(getgenv().MacroCashHistory, 1, {
-                        time = tick(),
-                        decrease = decrease,
-                        before = lastCash,
-                        after = currentCash
-                    })
-                    
-                    if #getgenv().MacroCashHistory > MAX_CASH_HISTORY then
-                        table.remove(getgenv().MacroCashHistory)
-                    end
-                end
-                
-                getgenv().MacroLastCash = currentCash
-            end))
+                    getgenv().MacroLastCash = currentCash
+                end),
+                "Macro Cash History Tracking"
+            )
         end
     end)
 end
@@ -1920,24 +3919,37 @@ getgenv().SeamlessRounds = tonumber(getgenv().Config.inputs.SeamlessRounds) or 4
 getgenv().AutoExecuteTeleportEnabled = getgenv().Config.toggles.AutoExecuteTeleport or false
 getgenv().AutoExecuteEnabled = getgenv().Config.toggles.AutoExecuteToggle or false
 
-local queueteleport = queue_on_teleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport)
+local queueteleport = queue_on_teleport or queueonteleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport)
 
 if queueteleport then
+    local scriptToQueue = 'repeat task.wait() until game:IsLoaded() and game.Players.LocalPlayer; task.wait(2); loadstring(game:HttpGet("https://raw.githubusercontent.com/Byorl/ALS-Scripts/refs/heads/main/Maclib.lua"))()'
+    
     LocalPlayer.OnTeleport:Connect(function(State)
         if getgenv().AutoExecuteEnabled then
             pcall(function()
-                queueteleport('loadstring(game:HttpGet("https://raw.githubusercontent.com/Byorl/ALS-Scripts/refs/heads/main/Maclib.lua"))()')
-                debugPrint("[ALS] Auto Execute queued")
+                queueteleport(scriptToQueue)
+                print("[ALS] ✅ Auto Execute queued via OnTeleport")
             end)
         end
     end)
     
+    task.spawn(function()
+        while true do
+            task.wait(5)
+            if getgenv().AutoExecuteEnabled then
+                pcall(function()
+                    queueteleport(scriptToQueue)
+                end)
+            end
+        end
+    end)
+    
     if getgenv().AutoExecuteEnabled then
-        debugPrint("[ALS] Auto Execute active")
+        print("[ALS] ✅ Auto Execute active (will re-queue every 5s)")
     end
 else
     if getgenv().AutoExecuteEnabled then
-        warn("[ALS] Auto Execute enabled but queue_on_teleport not supported by your executor")
+        warn("[ALS] ⚠️ Auto Execute enabled but queue_on_teleport not supported by your executor")
     end
 end
 
@@ -2116,13 +4128,9 @@ local function updateGameState()
             getgenv().SlowerCardLastPromptId = nil
             getgenv().OneEyeDevilCurrentIndex = 0  
             
-            if getgenv().MacroCashHistory and #getgenv().MacroCashHistory > 10 then
-                local temp = {}
-                for i = 1, 10 do
-                    temp[i] = getgenv().MacroCashHistory[i]
-                end
-                getgenv().MacroCashHistory = temp
-            end
+            pcall(function()
+                MemoryManager:cleanup()
+            end)
             
             if getgenv()._EtoEvoAbilityUsed then
                 getgenv()._EtoEvoAbilityUsed = {}
@@ -2130,16 +4138,6 @@ local function updateGameState()
             
             if getgenv().FinalExpChestRewards then
                 getgenv().FinalExpChestRewards = nil
-            end
-            
-            if getgenv().MacroActionsV2 and #getgenv().MacroActionsV2 > 500 then
-                debugPrint("[Memory] Trimming MacroActionsV2: " .. #getgenv().MacroActionsV2 .. " actions")
-                local temp = {}
-                local startIdx = math.max(1, #getgenv().MacroActionsV2 - 300)
-                for i = startIdx, #getgenv().MacroActionsV2 do
-                    table.insert(temp, getgenv().MacroActionsV2[i])
-                end
-                getgenv().MacroActionsV2 = temp
             end
             
             pcall(function()
@@ -2176,8 +4174,12 @@ local function updateGameState()
 end
 
 task.spawn(function()
+    local baseInterval = getgenv().IsMacPlatform and 2 or 1
+    local updateInterval = MobileOptimizer:getPollingInterval(baseInterval)
+    ErrorHandler:log("DEBUG", string.format("Game state update interval: %.1fs", updateInterval))
+    
     while true do
-        task.wait(1) 
+        task.wait(updateInterval) 
         updateGameState()
     end
 end)
@@ -2314,7 +4316,18 @@ local function setupTowerUpgradeListener(tower)
     trackConnection(ancestryConnection)
 end
 
-task.spawn(function()    
+task.spawn(function()
+    local maxWait = 0
+    while not workspace:FindFirstChild("Towers") and maxWait < 30 do
+        task.wait(0.5)
+        maxWait = maxWait + 0.5
+    end
+    
+    if not workspace:FindFirstChild("Towers") then
+        warn("[Macro] workspace.Towers not found after 30s, tower monitoring disabled")
+        return
+    end
+    
     trackConnection(workspace.Towers.ChildAdded:Connect(function(tower)
         task.spawn(function()
             for attempt = 1, 10 do
@@ -2521,9 +4534,12 @@ local function setupRecordingHook()
     
     task.spawn(function()
         local lastTowerCount = {}
+        local baseInterval = getgenv().IsMacPlatform and 1 or 0.5
+        local checkInterval = MobileOptimizer:getPollingInterval(baseInterval)
+        ErrorHandler:log("DEBUG", string.format("Tower tracking interval: %.1fs", checkInterval))
         
         while true do
-            task.wait(0.5) 
+            task.wait(checkInterval) 
             
             if not getgenv().MacroRecordingV2 then
                 task.wait(1) 
@@ -3069,21 +5085,45 @@ local function validateMacro(macroData)
 end
 
 local function playMacroV2()
-    if getgenv().MacroPlaybackActive then return end
-    if not getgenv().CurrentMacro or not getgenv().Macros[getgenv().CurrentMacro] then
+    if checkIfInLobby() then
+        print("[Macro] ⚠️ Cannot start macro in lobby")
+        return
+    end
+    
+    if getgenv().MacroPlaybackActive then 
+        print("[Macro] ⚠️ Playback already active")
+        return 
+    end
+    
+    if not getgenv().CurrentMacro then
+        warn("[Macro] ❌ No macro selected (CurrentMacro is nil)")
+        return
+    end
+    
+    if not getgenv().Macros[getgenv().CurrentMacro] then
+        warn("[Macro] ❌ Macro not found: " .. tostring(getgenv().CurrentMacro))
+        warn("[Macro] Available macros: " .. table.concat(getMacroNames(), ", "))
         return
     end
     
     getgenv().MacroPlaybackActive = true
     
+    getgenv().MacroCurrentStep = 0
+    getgenv().MacroActionText = ""
+    getgenv().MacroUnitText = ""
+    getgenv().MacroWaitingText = ""
+    
     task.spawn(function()
         local macroData = getgenv().Macros[getgenv().CurrentMacro]
         if not macroData or #macroData == 0 then
+            warn("[Macro] ❌ Macro data is empty for: " .. tostring(getgenv().CurrentMacro))
             getgenv().MacroPlaybackActive = false
             return
         end
         
+        
         getgenv().MacroPlaybackMacroData = macroData
+        getgenv().MacroTotalSteps = #macroData
         
         local valid, err = validateMacro(macroData)
         if not valid then
@@ -3096,15 +5136,15 @@ local function playMacroV2()
         
         local step = 1
         
-        local elapsedTime = 0
+        local gameStarted = false
         pcall(function()
-            local elapsed = RS:FindFirstChild("ElapsedTime")
-            if elapsed and elapsed.Value then
-                elapsedTime = elapsed.Value
+            local gs = RS:FindFirstChild("GameStarted")
+            if gs and gs.Value ~= nil then
+                gameStarted = gs.Value
             end
         end)
         
-        if not getgenv().MacroGameState.hasStartButton and getgenv().MacroGameState.currentWave > 0 and elapsedTime > 5 then
+        if not getgenv().MacroGameState.hasStartButton and getgenv().MacroGameState.currentWave > 0 and gameStarted then
             step = detectMacroProgress(macroData)
             
             if step == -1 then
@@ -3119,38 +5159,39 @@ local function playMacroV2()
             
         end
         
-        local gameStarted = false
-        local waitStartTime = tick()
-        
-        print("[Macro] Waiting for game to start...")
-        
-        while getgenv().MacroPlayEnabled do
-            local gs = false
-            pcall(function()
-                local gameStartedValue = RS:FindFirstChild("GameStarted")
-                if gameStartedValue and gameStartedValue.Value ~= nil then
-                    gs = gameStartedValue.Value
+        if not gameStarted then
+            local waitStartTime = tick()
+            
+            print("[Macro] Waiting for game to start (GameStarted = false)...")
+            
+            while getgenv().MacroPlayEnabled do
+                local gs = false
+                pcall(function()
+                    local gameStartedValue = RS:FindFirstChild("GameStarted")
+                    if gameStartedValue and gameStartedValue.Value ~= nil then
+                        gs = gameStartedValue.Value
+                    end
+                end)
+                
+                if gs then
+                    gameStarted = true
+                    print("[Macro] ✅ Game started (GameStarted = true), beginning macro playback")
+                    break
                 end
-            end)
-            
-            if gs then
-                gameStarted = true
-                print("[Macro] ✅ Game started, beginning macro playback")
-                break
+                
+                getgenv().MacroStatusText = "Waiting for Start"
+                getgenv().MacroWaitingText = "GameStarted = false..."
+                getgenv().UpdateMacroStatus()
+                
+                local elapsed = tick() - waitStartTime
+                if elapsed > 300 then
+                    warn("[Macro] Timeout waiting for game start (5 min)")
+                    getgenv().MacroPlaybackActive = false
+                    return
+                end
+                
+                task.wait(0.3)
             end
-            
-            getgenv().MacroStatusText = "Waiting for Start"
-            getgenv().MacroWaitingText = "Game not started..."
-            getgenv().UpdateMacroStatus()
-            
-            local elapsed = tick() - waitStartTime
-            if elapsed > 300 then
-                warn("[Macro] Timeout waiting for game start (5 min)")
-                getgenv().MacroPlaybackActive = false
-                return
-            end
-            
-            task.wait(0.3)
         end
         
         if not getgenv().MacroPlayEnabled then
@@ -3159,7 +5200,6 @@ local function playMacroV2()
         end
         
         task.wait(1.5)
-        print("[Macro] Initializing cash tracking...")
         
         if not getgenv().MacroPlayEnabled then
             getgenv().MacroPlaybackActive = false
@@ -3210,27 +5250,17 @@ local function playMacroV2()
             end)
             
             if lastGameStartedState and not gameStarted and getgenv().SeamlessFixEnabled then
-                getgenv().MacroStatusText = "Seamless Restart - Resetting Macro"
+                print("[Macro] 🔄 Seamless restart detected (GameStarted = false), stopping playback")
+                
+                getgenv().MacroPlaybackActive = false
+                getgenv().MacroCurrentStep = 0
+                getgenv().MacroActionText = ""
+                getgenv().MacroUnitText = ""
                 getgenv().MacroWaitingText = "Waiting for new round..."
+                getgenv().MacroStatusText = "Seamless Restart"
                 getgenv().UpdateMacroStatus()
-                print("[Macro] 🔄 Seamless restart detected (GameStarted = false), resetting to step 1")
-                
-                while not gameStarted and getgenv().MacroPlayEnabled do
-                    task.wait(0.3)
-                    pcall(function()
-                        local gs = RS:FindFirstChild("GameStarted")
-                        if gs and gs.Value ~= nil then
-                            gameStarted = gs.Value
-                        end
-                    end)
-                end
-                
-                if not getgenv().MacroPlayEnabled then break end
-                
-                step = 1
-                task.wait(2)
-                lastGameStartedState = gameStarted
-                continue
+
+                return
             end
             lastGameStartedState = gameStarted
             
@@ -3345,10 +5375,8 @@ local function playMacroV2()
             if success and result then
                 actionSuccess = true
                 actionMessage = msg or "Success"
-                debugPrint("[Macro] Step", step, "✓")
             else
                 actionMessage = msg or "Action failed"
-                debugPrint("[Macro] Step", step, "✗:", actionMessage)
             end
             
             if not actionSuccess then
@@ -3372,12 +5400,14 @@ local function playMacroV2()
         
         if step > #macroData then
             getgenv().MacroStatusText = "Macro Complete"
-            getgenv().MacroWaitingText = "Waiting for game end..."
+            getgenv().MacroWaitingText = "Waiting for seamless restart..."
             getgenv().MacroCurrentStep = #macroData
             getgenv().MacroTotalSteps = #macroData
             getgenv().MacroActionText = "Complete"
             getgenv().MacroUnitText = ""
             getgenv().UpdateMacroStatus()
+            
+            print("[Macro] ✅ Macro completed all steps, waiting for seamless restart")
             
             getgenv().MacroPlaybackActive = false
             return
@@ -3401,6 +5431,7 @@ monitorEndGameUI()
 task.spawn(function()
     local lastRestartAttempt = 0
     local lastEndGameUIState = false
+    local restartCooldown = false
     
     while true do
         task.wait(0.3)
@@ -3411,9 +5442,19 @@ task.spawn(function()
             currentEndGameUIState = endGameUI and endGameUI.Enabled or false
         end)
         
-        if lastEndGameUIState and not currentEndGameUIState and getgenv().MacroPlayEnabled then
-            debugPrint("[Macro] Auto-restarting...")
-            task.wait(1)
+        if lastEndGameUIState and not currentEndGameUIState and getgenv().MacroPlayEnabled and not restartCooldown then
+            debugPrint("[Macro] EndGameUI removed, preparing restart...")
+            restartCooldown = true
+            
+            task.wait(1.5)
+            
+            if getgenv().MacroPlaybackActive then
+                debugPrint("[Macro] Already playing, skipping restart")
+                restartCooldown = false
+                lastEndGameUIState = currentEndGameUIState
+                task.wait(3)
+                continue
+            end
             
             getgenv().MacroPlaybackActive = false
             getgenv().MacroStatusText = "Idle"
@@ -3433,20 +5474,63 @@ task.spawn(function()
             debugPrint("[Macro] Starting playback...")
             playMacroV2()
             lastRestartAttempt = tick()
+            
+            task.delay(3, function()
+                restartCooldown = false
+            end)
         end
         
         lastEndGameUIState = currentEndGameUIState
         
-        if getgenv().MacroPlayEnabled and not getgenv().MacroPlaybackActive then
+        if getgenv().MacroPlayEnabled and not getgenv().MacroPlaybackActive and not restartCooldown then
             local now = tick()
-            if now - lastRestartAttempt > 3 then
-                debugPrint("[Macro] Restarting playback...")
-                getgenv().MacroGameState.gameEnded = false
-                getgenv().MacroGameState.hasEndGameUI = false
-                getgenv().MacroGameState.lastGameEndedState = false
+            if now - lastRestartAttempt > 5 then
+                local shouldRestart = false
+                local restartReason = ""
                 
-                lastRestartAttempt = now
-                playMacroV2()
+                local currentWave = 0
+                pcall(function()
+                    local wave = RS:FindFirstChild("Wave")
+                    if wave and wave.Value then
+                        currentWave = wave.Value
+                    end
+                end)
+                
+                local gameStarted = false
+                pcall(function()
+                    local gs = RS:FindFirstChild("GameStarted")
+                    if gs and gs.Value ~= nil then
+                        gameStarted = gs.Value
+                    end
+                end)
+                
+                if currentWave > 0 and gameStarted and not currentEndGameUIState then
+                    shouldRestart = true
+                    restartReason = string.format("Game active (Wave %d)", currentWave)
+                end
+                
+                if shouldRestart then
+                    restartCooldown = true
+                    
+                    getgenv().MacroCurrentStep = 0
+                    getgenv().MacroActionText = ""
+                    getgenv().MacroUnitText = ""
+                    getgenv().MacroWaitingText = ""
+                    getgenv().MacroStatusText = "Idle"
+                    
+                    getgenv().MacroGameState.gameEnded = false
+                    getgenv().MacroGameState.hasEndGameUI = false
+                    getgenv().MacroGameState.lastGameEndedState = false
+                    
+                    getgenv().UpdateMacroStatus()
+                    
+                    lastRestartAttempt = now
+                    playMacroV2()
+                    
+                    task.delay(3, function()
+                        restartCooldown = false
+                    end)
+                end
             end
         end
     end
@@ -3760,8 +5844,10 @@ if not autoStartSuccess then
 end
 
 task.spawn(function()
+    local pollingInterval = MobileOptimizer:getPollingInterval(0.5)
+    
     while true do
-        task.wait(0.5)
+        task.wait(pollingInterval)
         
         if getgenv().AutoJoinConfig and getgenv().AutoJoinConfig.enabled then
             pcall(function()
@@ -3809,7 +5895,9 @@ task.spawn(function()
 end)
 
 task.spawn(function()
-    while task.wait(2) do
+    local pollingInterval = MobileOptimizer:getPollingInterval(2)
+    
+    while task.wait(pollingInterval) do
         if not getgenv().AutoJoinConfig or not getgenv().AutoJoinConfig.enabled then
             continue
         end
@@ -3826,11 +5914,15 @@ task.spawn(function()
             if not teleporter then return end
             
             if getgenv().AutoJoinConfig.friendsOnly then
-                teleporter.Interact:FireServer("FriendsOnly")
+                ErrorHandler:wrapAsync(function()
+                    teleporter.Interact:FireServer("FriendsOnly")
+                end, "Set friends only mode")
             end
             
             if mode == "Raid" then
-                teleporter.Interact:FireServer("Select", map, act)
+                ErrorHandler:wrapAsync(function()
+                    teleporter.Interact:FireServer("Select", map, act)
+                end, "Select Raid mode")
                 
             elseif mode == "Siege" then
                 local siegeDiff = difficulty
@@ -3839,33 +5931,47 @@ task.spawn(function()
                 elseif difficulty == "Normal" or difficulty == "Nightmare" then
                     siegeDiff = "Normal"
                 end
-                teleporter.Select:FireServer(map, siegeDiff)
+                ErrorHandler:wrapAsync(function()
+                    teleporter.Select:FireServer(map, siegeDiff)
+                end, "Select Siege mode")
                 
             elseif mode == "Dungeon" then
-                teleporter.Interact:FireServer("Select", map)
+                ErrorHandler:wrapAsync(function()
+                    teleporter.Interact:FireServer("Select", map)
+                end, "Select Dungeon mode")
                 
             elseif mode == "Survival" then
-                teleporter.Interact:FireServer("Select", map)
+                ErrorHandler:wrapAsync(function()
+                    teleporter.Interact:FireServer("Select", map)
+                end, "Select Survival mode")
                 
             elseif mode == "Story" then
                 local storyDiff = difficulty
                 if difficulty == "Purgatory" or difficulty == "Insanity" then
                     storyDiff = "Nightmare"
                 end
-                teleporter.Interact:FireServer("Select", map, act, storyDiff, "Story")
+                ErrorHandler:wrapAsync(function()
+                    teleporter.Interact:FireServer("Select", map, act, storyDiff, "Story")
+                end, "Select Story mode")
                 
             elseif mode == "Infinite" then
                 local infDiff = difficulty
                 if difficulty == "Purgatory" or difficulty == "Insanity" then
                     infDiff = "Nightmare"
                 end
-                teleporter.Interact:FireServer("Select", map, act, infDiff, "Infinite")
+                ErrorHandler:wrapAsync(function()
+                    teleporter.Interact:FireServer("Select", map, act, infDiff, "Infinite")
+                end, "Select Infinite mode")
                 
             elseif mode == "Elemental Cavern" then
-                teleporter.Interact:FireServer("Select", map, difficulty)
+                ErrorHandler:wrapAsync(function()
+                    teleporter.Interact:FireServer("Select", map, difficulty)
+                end, "Select Elemental Cavern mode")
                 
             elseif mode == "Challenge" then
-                teleporter.Interact:FireServer("Select", "Challenge", act)
+                ErrorHandler:wrapAsync(function()
+                    teleporter.Interact:FireServer("Select", "Challenge", act)
+                end, "Select Challenge mode")
             end
             
             if getgenv().AutoJoinConfig.autoStart then
@@ -3873,7 +5979,9 @@ task.spawn(function()
                 
                 local teleporter = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("Teleporter")
                 if teleporter and teleporter:FindFirstChild("Interact") then
-                    teleporter.Interact:FireServer("Skip")
+                    ErrorHandler:wrapAsync(function()
+                        teleporter.Interact:FireServer("Skip")
+                    end, "Auto-start game")
                 end
             end
         end)
@@ -4119,10 +6227,6 @@ getgenv().SlimeRushSlowerCardSelectionEnabled = getgenv().Config.toggles.SlimeRu
 getgenv().SlimeRushSmartCardSelectionEnabled = getgenv().Config.toggles.SlimeRushSmartCardToggle or false
 getgenv().SlowerCardSelectionEnabled = getgenv().Config.toggles.SlowerCardSelectionToggle or false
 
-print("[Init] Slime Rush Enabled:", getgenv().SlimeRushEnabled)
-print("[Init] Slime Rush Fast:", getgenv().SlimeRushCardSelectionEnabled)
-print("[Init] Slime Rush Slower:", getgenv().SlimeRushSlowerCardSelectionEnabled)
-print("[Init] Slime Rush Smart:", getgenv().SlimeRushSmartCardSelectionEnabled)
 
 local savedPortalConfig = getgenv().Config.portals or {}
 getgenv().PortalConfig = {
@@ -4441,11 +6545,13 @@ Sections.InfinityCastleLeft:SubLabel({
 })
 
 task.spawn(function()
+    local pollingInterval = MobileOptimizer:getPollingInterval(2)
+    
     while true do
-        task.wait(2)
+        task.wait(pollingInterval)
         
         if getgenv().InfinityCastleAutoJoinEnabled then
-            pcall(function()
+            ErrorHandler:wrapAsync(function()
                 local remotes = RS:FindFirstChild("Remotes")
                 local infinityCastleRemotes = remotes and remotes:FindFirstChild("InfinityCastle")
                 local enterEvent = infinityCastleRemotes and infinityCastleRemotes:FindFirstChild("Enter")
@@ -6216,6 +8322,8 @@ getgenv().AutoPlayConfig.autoUpgradePriority = getgenv().Config.toggles.AutoPlay
 getgenv().AutoPlayConfig.focusFarm = getgenv().Config.toggles.AutoPlayFocusFarm or false
 getgenv().AutoPlayConfig.hologram = getgenv().Config.toggles.AutoPlayHologram or false
 getgenv().AutoPlayConfig.placeBeforeUpgrade = getgenv().Config.toggles.AutoPlayPlaceBeforeUpgrade or false
+getgenv().AutoPlayConfig.autoPlaceAtPosition = getgenv().Config.toggles.AutoPlayPlaceAtPosition or false
+getgenv().AutoPlayConfig.positionHologram = getgenv().Config.toggles.AutoPlayPositionHologram or false
 getgenv().AutoPlayConfig.pathPercentage = tonumber(getgenv().Config.inputs.AutoPlayPathPercentage) or 1
 getgenv().AutoPlayConfig.distanceFromPath = tonumber(getgenv().Config.inputs.AutoPlayDistanceFromPath) or 0
 
@@ -7034,16 +9142,12 @@ Sections.MacroLeft:Button({
             Lifetime = 2
         })
         
-        local success, result = pcall(function()
+        local success, result = ErrorHandler:wrapAsync(function()
             return game:HttpGet(importLink)
-        end)
+        end, "Download macro from Discord")
         
         if not success or not result then
-            Window:Notify({
-                Title = "Macro Import",
-                Description = "Failed to download macro!",
-                Lifetime = 3
-            })
+            ErrorHandler:notify(Window, "Macro Import", "Failed to download macro from Discord link")
             return
         end
         
@@ -7136,6 +9240,36 @@ getgenv().MacroRecordToggle = createToggleNoSave(
             getgenv().MacroCurrentStep = 0
             getgenv().MacroTotalSteps = 0
             
+            pcall(function()
+                local workspace = game:GetService("Workspace")
+                if workspace:FindFirstChild("Towers") then
+                    local towerCount = 0
+                    print("[Macro] Scanning for existing towers...")
+                    for _, tower in pairs(workspace.Towers:GetChildren()) do
+                        print("[Macro Debug] Found tower: " .. tower.Name)
+                        local owner = tower:FindFirstChild("Owner")
+                        if owner then
+                            print("[Macro Debug]   Owner: " .. tostring(owner.Value) .. ", LocalPlayer: " .. tostring(LocalPlayer))
+                        end
+                        if owner and owner.Value == LocalPlayer then
+                            if tower:FindFirstChild("Upgrade") then
+                                if not towerTracker.upgradeConnections[tower] then
+                                    print("[Macro] Setting up listener for existing tower: " .. tower.Name)
+                                    setupTowerUpgradeListener(tower)
+                                end
+                                towerTracker.upgradeLevels[tower] = tower.Upgrade.Value
+                                towerCount = towerCount + 1
+                                print("[Macro] Initialized upgrade level for " .. tower.Name .. ": " .. tower.Upgrade.Value)
+                            else
+                                print("[Macro Debug]   No Upgrade found for " .. tower.Name)
+                            end
+                        end
+                    end
+                    print("[Macro] Recording started - initialized " .. towerCount .. " existing towers")
+                else
+                    print("[Macro] Warning: workspace.Towers not found")
+                end
+            end)
             
             if getgenv().UpdateMacroStatus then
                 getgenv().UpdateMacroStatus()
@@ -7152,6 +9286,16 @@ getgenv().MacroRecordToggle = createToggleNoSave(
             if #getgenv().MacroDataV2 > 0 and getgenv().CurrentMacro then
                 local success = saveMacro(getgenv().CurrentMacro, getgenv().MacroDataV2)
                 if success then
+                    loadMacros()
+                    local macroNames = getMacroNames()
+                    if macroDropdown then
+                        pcall(function()
+                            macroDropdown:ClearOptions()
+                            macroDropdown:InsertOptions(macroNames)
+                            macroDropdown:UpdateSelection(getgenv().CurrentMacro)
+                        end)
+                    end
+                    
                     Window:Notify({
                         Title = "Macro Recording",
                         Description = "Saved " .. #getgenv().MacroDataV2 .. " steps to " .. getgenv().CurrentMacro,
@@ -7489,11 +9633,7 @@ createToggle(
 Sections.MiscLeft:Header({ Text = "⚡ Performance" })
 Sections.MiscLeft:SubLabel({ Text = "Boost FPS and reduce lag" })
 
-local isInLobby = false
-pcall(function()
-    local lobbyCheck = workspace:FindFirstChild("Lobby") or game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId).Name:find("Lobby")
-    isInLobby = lobbyCheck ~= nil
-end)
+local isInLobby = GameStateDetector:isLobby()
 
 if not isInLobby then
     createToggle(
@@ -7602,12 +9742,16 @@ createToggle(
     function(value)
         getgenv().AutoExecuteEnabled = value
         
-        local queueteleport = queue_on_teleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport)
+        local queueteleport = queue_on_teleport or queueonteleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport)
         
         if value and queueteleport then
-            debugPrint("[ALS] Auto Execute enabled")
+            local scriptToQueue = 'repeat task.wait() until game:IsLoaded() and game.Players.LocalPlayer; task.wait(2); loadstring(game:HttpGet("https://raw.githubusercontent.com/Byorl/ALS-Scripts/refs/heads/main/Maclib.lua"))()'
+            pcall(function()
+                queueteleport(scriptToQueue)
+            end)
+            print("[ALS] ✅ Auto Execute enabled and queued")
         elseif value and not queueteleport then
-            warn("[ALS] Auto Execute not supported by executor")
+            warn("[ALS] ⚠️ Auto Execute not supported by your executor")
         end
         
         Window:Notify({
@@ -7675,7 +9819,7 @@ if not isInLobby then
     Mouse.Button1Down:Connect(function()
         if not getgenv().PlaceAnywhereEnabled then return end
         
-        pcall(function()
+        ErrorHandler:wrapAsync(function()
             local unitName, unitCFrame = getUnitAtMouse()
             if unitName and unitCFrame then
                 local placeRemote = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("PlaceTower")
@@ -7696,7 +9840,7 @@ if not isInLobby then
     UIS.TouchTap:Connect(function(touchPositions, gameProcessedEvent)
         if not getgenv().PlaceAnywhereEnabled or gameProcessedEvent then return end
         
-        pcall(function()
+        ErrorHandler:wrapAsync(function()
             local unitName, unitCFrame = getUnitAtMouse()
             if unitName and unitCFrame then
                 local placeRemote = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("PlaceTower")
@@ -7736,11 +9880,13 @@ createToggle(
 
 if not isInLobby then
     task.spawn(function()
+        local pollingInterval = MobileOptimizer:getPollingInterval(2)
+        
         while true do
-            task.wait(2)
+            task.wait(pollingInterval)
             
             if getgenv().AutoVolcanoEnabled then
-                pcall(function()
+                ErrorHandler:wrapAsync(function()
                     local gamemode = RS:FindFirstChild("Gamemode")
                     local mapName = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("MapName")
                     
@@ -7784,11 +9930,13 @@ createToggle(
 
 if not isInLobby then
     task.spawn(function()
+        local pollingInterval = MobileOptimizer:getPollingInterval(1)
+        
         while true do
-            task.wait(1)
+            task.wait(pollingInterval)
             
             if getgenv().AutoOrbEnabled then
-                pcall(function()
+                ErrorHandler:wrapAsync(function()
                     local gamemode = RS:FindFirstChild("Gamemode")
                     local mapName = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("MapName")
                     
@@ -7842,8 +9990,10 @@ createToggle(
 
 if not isInLobby then
     task.spawn(function()
+        local pollingInterval = MobileOptimizer:getPollingInterval(10)
+        
         while true do
-            task.wait(10)
+            task.wait(pollingInterval)
             
             if getgenv().AntiMagicZoneEnabled then
                 pcall(function()
@@ -8033,6 +10183,36 @@ Sections.SettingsRight:Button({
         Window:Notify({
             Title = "Memory Report",
             Description = "Check console (F9) for report",
+            Lifetime = 3
+        })
+    end
+})
+
+Sections.SettingsRight:Button({
+    Name = "🔌 Connection Manager Stats",
+    Callback = function()
+        local stats = ConnectionManager:getStats()
+        local report = string.format(
+            "\n=== Connection Manager Stats ===\n" ..
+            "Active Connections: %d\n" ..
+            "Tower Connections: %d\n" ..
+            "Named Groups: %d\n" ..
+            "Total Tracked: %d\n" ..
+            "Total Cleaned: %d\n" ..
+            "Last Cleanup: %.1fs ago\n" ..
+            "================================\n",
+            stats.active,
+            stats.towers,
+            stats.groups,
+            stats.totalTracked,
+            stats.totalCleaned,
+            tick() - stats.lastCleanup
+        )
+        print(report)
+        
+        Window:Notify({
+            Title = "Connection Manager",
+            Description = string.format("%d active, %d cleaned", stats.active, stats.totalCleaned),
             Lifetime = 3
         })
     end
@@ -8505,8 +10685,10 @@ Sections.SeamlessFixRight:SubLabel({
 
 if not isInLobby then
     task.spawn(function()
+        local pollingInterval = MobileOptimizer:getPollingInterval(2)
+        
         while true do
-            task.wait(2)
+            task.wait(pollingInterval)
             
             if getgenv().InfiniteRestartEnabled then
                 pcall(function()
@@ -8560,8 +10742,15 @@ if not isInLobby then
                             local restartRemote = remotes and remotes:FindFirstChild("RestartMatch")
                             
                             if restartRemote then
-                                restartRemote:FireServer()
-                                print("[Wave Restart] ✅ Restart signal sent")
+                                local success = ErrorHandler:wrapAsync(function()
+                                    restartRemote:FireServer()
+                                end, "Wave restart")
+                                
+                                if success then
+                                    print("[Wave Restart] ✅ Restart signal sent")
+                                else
+                                    ErrorHandler:notify(Window, "Wave Restart Error", "Failed to send restart signal")
+                                end
                                 
                                 Window:Notify({
                                     Title = "Wave Restart",
@@ -8924,16 +11113,20 @@ task.spawn(function()
                 local clickMethod = "Unknown"
                 
                 local function tryGuiServiceMethod()
+                    getgenv()._ButtonPressActive = true
                     local success = pcall(function()
                         if not buttonToPress or not buttonToPress.Parent then
+                            getgenv()._ButtonPressActive = false
                             return
                         end
                         
                         if not buttonToPress:IsDescendantOf(game) then
+                            getgenv()._ButtonPressActive = false
                             return
                         end
                         
                         if not buttonToPress:IsDescendantOf(LocalPlayer.PlayerGui) then
+                            getgenv()._ButtonPressActive = false
                             return
                         end
                         
@@ -8986,6 +11179,7 @@ task.spawn(function()
                             end
                         end
                     end)
+                    getgenv()._ButtonPressActive = false
                     return success and pressSuccess
                 end
                 
@@ -9053,6 +11247,12 @@ do
     task.spawn(function()
     while true do
         task.wait(1)
+        
+        if checkIfInLobby() then
+            task.wait(2)
+            continue
+        end
+        
         if getgenv().AutoReadyEnabled then
             local success, err = pcall(function()
                 local bottomGui = LocalPlayer.PlayerGui:FindFirstChild("Bottom")
@@ -9070,7 +11270,9 @@ do
                                         local remotes = RS:FindFirstChild("Remotes")
                                         local playerReady = remotes and remotes:FindFirstChild("PlayerReady")
                                         if playerReady then
-                                            playerReady:FireServer()
+                                            ErrorHandler:wrapAsync(function()
+                                                playerReady:FireServer()
+                                            end, "Auto ready")
                                             task.wait(2)
                                         end
                                     end
@@ -9152,13 +11354,15 @@ end
 getgenv()._AbilityHelpers1.useAbility = function(tower, abilityName)
     if tower then
         if abilityName == "Who Decided That?" then
-            pcall(function() 
+            ErrorHandler:wrapAsync(function() 
                 RS.Remotes.Ability:InvokeServer(tower, abilityName)
                 print("[Soul Ability] Used: " .. abilityName)
-            end)
+            end, "Use ability: " .. abilityName)
         else
             local correctedName = getgenv()._AbilityHelpers1.fixAbilityName(abilityName)
-            pcall(function() RS.Remotes.Ability:InvokeServer(tower, correctedName) end)
+            ErrorHandler:wrapAsync(function() 
+                RS.Remotes.Ability:InvokeServer(tower, correctedName) 
+            end, "Use ability: " .. correctedName)
         end
     end
 end
@@ -9488,11 +11692,17 @@ local function processAbility(tower, unitName, abilityName, cfg, currentWave, ha
     end
 end
 
-local lastGameStartedForAbilities = true
+getgenv()._lastGameStartedForAbilities = true
 
 task.spawn(function()
     while true do
         task.wait(0.3)
+        
+        if checkIfInLobby() then
+            task.wait(2)
+            continue
+        end
+        
         pcall(function()
             checkGameEndedReset()
             local currentWave = funcs.getCurrentWave()
@@ -9506,11 +11716,10 @@ task.spawn(function()
                 end
             end)
             
-            if getgenv().SeamlessFixEnabled and lastGameStartedForAbilities and not gameStarted then
-                print("[Auto Abilities] 🔄 Seamless restart detected, resetting trackers")
+            if getgenv().SeamlessFixEnabled and getgenv()._lastGameStartedForAbilities and not gameStarted then
                 funcs.resetRoundTrackers()
             end
-            lastGameStartedForAbilities = gameStarted
+            getgenv()._lastGameStartedForAbilities = gameStarted
             
             if currentWave < lastWave then
                 funcs.resetRoundTrackers()
@@ -9550,8 +11759,34 @@ end
 
 do
     task.spawn(function()
+        local pollingInterval = MobileOptimizer:getPollingInterval(1)
+        local lastWave = 0
+        
         while true do
-            task.wait(1)
+            task.wait(pollingInterval)
+            
+            local currentWave = 0
+            pcall(function()
+                local wave = RS:FindFirstChild("Wave")
+                if wave and wave.Value then
+                    currentWave = wave.Value
+                end
+            end)
+            
+            if currentWave < lastWave and currentWave <= 5 then
+                getgenv().BulmaWishUsedThisRound = false
+            end
+            
+            if getgenv().SeamlessFixEnabled and lastWave >= 50 and currentWave < 50 then
+                getgenv().BulmaWishUsedThisRound = false
+            end
+            
+            if currentWave == 1 and lastWave > 10 then
+                getgenv().BulmaWishUsedThisRound = false
+            end
+            
+            lastWave = currentWave
+            
             if getgenv().BulmaEnabled then
             local success, err = pcall(function()
                 local towers = workspace:FindFirstChild("Towers")
@@ -9584,15 +11819,15 @@ do
                 if ballCount == 7 and not getgenv().BulmaWishUsedThisRound then
                     getgenv().BulmaWishUsedThisRound = true
                     
-                    pcall(function()
+                    ErrorHandler:wrapAsync(function()
                         RS.Remotes.Ability:InvokeServer(bulma, "Summon Wish Dragon")
-                    end)
+                    end, "Summon Wish Dragon")
                     task.wait(0.5)
                     
                     local wishType = getgenv().BulmaWishType or "Power"
-                    pcall(function()
+                    ErrorHandler:wrapAsync(function()
                         RS.Remotes.Ability:InvokeServer(bulma, "Wish: " .. wishType)
-                    end)
+                    end, "Use Bulma wish")
                     
                     Window:Notify({
                         Title = "Bulma Auto-Wish",
@@ -9664,13 +11899,13 @@ do
     local function useCloneSynthesis(jinMoriTower)
         if not jinMoriTower then return false end
         
-        local success, err = pcall(function()
+        local success, err = ErrorHandler:wrapAsync(function()
             local Ability = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("Ability")
             if Ability then
                 Ability:InvokeServer(jinMoriTower, "Clone Synthesis")
                 return true
             end
-        end)
+        end, "Use Clone Synthesis")
         
         return success
     end
@@ -9690,13 +11925,13 @@ do
         local cash = tonumber(getPlayerCash()) or 0
         if cash < (tonumber(nextUpgradeCost) or 0) then return false end
         
-        local success, err = pcall(function()
+        local success, err = ErrorHandler:wrapAsync(function()
             local UpgradeEvent = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("Upgrade")
             if UpgradeEvent then
                 UpgradeEvent:InvokeServer(cloneTower)
                 return true
             end
-        end)
+        end, "Upgrade Jin Mori clone")
         
         return success
     end
@@ -9704,7 +11939,7 @@ do
     local function useCloneDiffusion(cloneTower)
         if not cloneTower then return false end
         
-        local success, err = pcall(function()
+        local success, err = ErrorHandler:wrapAsync(function()
             local Ability = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("Ability")
             if Ability then
                 Ability:InvokeServer(cloneTower, "Clone Diffusion")
@@ -9715,8 +11950,34 @@ do
         return success
     end
     
+    local lastWave = 0
     while true do
         task.wait(1)
+        
+        local currentWave = 0
+        pcall(function()
+            local wave = RS:FindFirstChild("Wave")
+            if wave and wave.Value then
+                currentWave = wave.Value
+            end
+        end)
+        
+        if currentWave < lastWave and currentWave <= 5 then
+            getgenv().WukongTrackedClones = {}
+            getgenv()._WukongLastSynthesisTime = 0
+        end
+        
+        if getgenv().SeamlessFixEnabled and lastWave >= 50 and currentWave < 50 then
+            getgenv().WukongTrackedClones = {}
+            getgenv()._WukongLastSynthesisTime = 0
+        end
+        
+        if currentWave == 1 and lastWave > 10 then
+            getgenv().WukongTrackedClones = {}
+            getgenv()._WukongLastSynthesisTime = 0
+        end
+        
+        lastWave = currentWave
         
         if not getgenv().WukongEnabled then continue end
         
@@ -9830,8 +12091,31 @@ do
         end
         
         
+        local lastWave = 0
         while true do
             task.wait(1)
+            
+            local currentWave = 0
+            pcall(function()
+                local wave = RS:FindFirstChild("Wave")
+                if wave and wave.Value then
+                    currentWave = wave.Value
+                end
+            end)
+            
+            if currentWave < lastWave and currentWave <= 5 then
+                getgenv().SkeletonKnightLastUse = 0
+            end
+            
+            if getgenv().SeamlessFixEnabled and lastWave >= 50 and currentWave < 50 then
+                getgenv().SkeletonKnightLastUse = 0
+            end
+            
+            if currentWave == 1 and lastWave > 10 then
+                getgenv().SkeletonKnightLastUse = 0
+            end
+            
+            lastWave = currentWave
                         
             if not getgenv().SkeletonKnightEnabled then
                 task.wait(2)
@@ -9889,7 +12173,7 @@ do
                 continue
             end
                         
-            local success, err = pcall(function()
+            local success, err = ErrorHandler:wrapAsync(function()
                 local AbilityEvent = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("Ability")
                 if not AbilityEvent then
                     AbilityEvent = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("Ability")
@@ -9961,8 +12245,31 @@ do
         end
         
         
+        local lastWave = 0
         while true do
             task.wait(1)
+            
+            local currentWave = 0
+            pcall(function()
+                local wave = RS:FindFirstChild("Wave")
+                if wave and wave.Value then
+                    currentWave = wave.Value
+                end
+            end)
+            
+            if currentWave < lastWave and currentWave <= 5 then
+                getgenv().AlucardHypnosisLastUse = 0
+            end
+            
+            if getgenv().SeamlessFixEnabled and lastWave >= 50 and currentWave < 50 then
+                getgenv().AlucardHypnosisLastUse = 0
+            end
+            
+            if currentWave == 1 and lastWave > 10 then
+                getgenv().AlucardHypnosisLastUse = 0
+            end
+            
+            lastWave = currentWave
                         
             if not getgenv().AlucardHypnosisEnabled then
                 task.wait(2)
@@ -10015,7 +12322,7 @@ do
                 continue
             end
                         
-            local success, err = pcall(function()
+            local success, err = ErrorHandler:wrapAsync(function()
                 local AbilityEvent = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("Ability")
                 if not AbilityEvent then
                     AbilityEvent = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("Ability")
@@ -10047,61 +12354,64 @@ end
 
 do
     task.spawn(function()
-        trackConnection(LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
-        if child.Name == "EndGameUI" then
-            getgenv().BulmaWishUsedThisRound = false
-            getgenv().WukongTrackedClones = {}
-            getgenv()._WukongLastSynthesisTime = 0
-            getgenv().SkeletonKnightLastUse = 0
-            getgenv().AlucardHypnosisLastUse = 0
-            getgenv().OneEyeDevilCurrentIndex = 0 
-            
-            if getgenv()._EtoEvoAbilityUsed then
-                getgenv()._EtoEvoAbilityUsed = {}
-            end
-            
-            getgenv().GriffithLightUsedThisRound = false
-            
-            if getgenv().MacroRecordingV2 then
-                task.spawn(function()
-                    task.wait(1)
+        ConnectionManager:trackGroup("GameState",
+            LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
+                if child.Name == "EndGameUI" then
+                    getgenv().BulmaWishUsedThisRound = false
+                            getgenv().WukongTrackedClones = {}
+                    getgenv()._WukongLastSynthesisTime = 0
+                    getgenv().SkeletonKnightLastUse = 0
+                    getgenv().AlucardHypnosisLastUse = 0
+                    getgenv().OneEyeDevilCurrentIndex = 0 
                     
-                    getgenv().MacroRecordingV2 = false
-                    
-                    if #getgenv().MacroDataV2 > 0 and getgenv().CurrentMacro then
-                        local success = saveMacro(getgenv().CurrentMacro, getgenv().MacroDataV2)
-                        if success then
-                            Window:Notify({
-                                Title = "Macro Recording",
-                                Description = "Auto-saved " .. #getgenv().MacroDataV2 .. " steps (game ended)",
-                                Lifetime = 5
-                            })
-                        else
-                            Window:Notify({
-                                Title = "Macro Recording",
-                                Description = "Failed to auto-save macro",
-                                Lifetime = 3
-                            })
-                        end
+                    if getgenv()._EtoEvoAbilityUsed then
+                        getgenv()._EtoEvoAbilityUsed = {}
                     end
                     
-                    getgenv().MacroStatusText = "Idle"
-                    getgenv().MacroCurrentStep = 0
-                    getgenv().MacroTotalSteps = 0
+                    getgenv().GriffithLightUsedThisRound = false
                     
-                    if getgenv().UpdateMacroStatus then
-                        getgenv().UpdateMacroStatus()
+                    if getgenv().MacroRecordingV2 then
+                        task.spawn(function()
+                            task.wait(1)
+                            
+                            getgenv().MacroRecordingV2 = false
+                            
+                            if #getgenv().MacroDataV2 > 0 and getgenv().CurrentMacro then
+                                local success = saveMacro(getgenv().CurrentMacro, getgenv().MacroDataV2)
+                                if success then
+                                    Window:Notify({
+                                        Title = "Macro Recording",
+                                        Description = "Auto-saved " .. #getgenv().MacroDataV2 .. " steps (game ended)",
+                                        Lifetime = 5
+                                    })
+                                else
+                                    Window:Notify({
+                                        Title = "Macro Recording",
+                                        Description = "Failed to auto-save macro",
+                                        Lifetime = 3
+                                    })
+                                end
+                            end
+                            
+                            getgenv().MacroStatusText = "Idle"
+                            getgenv().MacroCurrentStep = 0
+                            getgenv().MacroTotalSteps = 0
+                            
+                            if getgenv().UpdateMacroStatus then
+                                getgenv().UpdateMacroStatus()
+                            end
+                            
+                            pcall(function()
+                                if getgenv().MacroRecordToggle then
+                                    getgenv().MacroRecordToggle:UpdateState(false)
+                                end
+                            end)
+                        end)
                     end
-                    
-                    pcall(function()
-                        if getgenv().MacroRecordToggle then
-                            getgenv().MacroRecordToggle:UpdateState(false)
-                        end
-                    end)
-                end)
-            end
-        end
-    end))
+                end
+            end),
+            "Game State EndGameUI Tracking"
+        )
     end)
 end
 
@@ -10323,7 +12633,6 @@ do
                 end)
                 
                 if getgenv().SeamlessFixEnabled and lastGameStartedForEto and not gameStarted then
-                    print("[Eto Evo] 🔄 Seamless restart detected, resetting cooldowns")
                     resetEtoEvoCooldowns()
                     isWaitingForPrompt = false
                 end
@@ -10583,7 +12892,6 @@ do
                 end)
                 
                 if getgenv().SeamlessFixEnabled and lastGameStartedForGriffith and not gameStarted then
-                    print("[Griffith Light] 🔄 Seamless restart detected, resetting state")
                     getgenv().GriffithLightUsedThisRound = false
                     isWaitingForPrompt = false
                     cashAboveThresholdStart = 0
@@ -10720,14 +13028,6 @@ do
     end
 end)
 
-
-local function isInLobby()
-    local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
-    if not playerGui then return false end
-    
-    local lobbyUI = playerGui:FindFirstChild("LobbyUI")
-    return lobbyUI ~= nil
-end
 
 task.spawn(function()
     while true do
@@ -11617,15 +13917,22 @@ local function getMatchResult()
         if not stats then return "00:00:00", "0", "Unknown" end
         
         local r = (stats:FindFirstChild("Result") and stats.Result.Text) or "Unknown"
-        local t = (stats:FindFirstChild("ElapsedTime") and stats.ElapsedTime.Text) or "00:00:00"
         local w = (stats:FindFirstChild("EndWave") and stats.EndWave.Text) or "0"
         
-        if t:find("Total Time:") then
-            local m, s = t:match("Total Time:%s*(%d+):(%d+)")
-            if m and s then
-                t = string.format("%02d:%02d:%02d", 0, tonumber(m) or 0, tonumber(s) or 0)
+        local t = "00:00:00"
+        pcall(function()
+            local elapsed = RS:FindFirstChild("ElapsedTime")
+            if elapsed and elapsed.Value then
+                local roundTime = elapsed.Value - (getgenv()._RoundStartTime or 0)
+                if roundTime < 0 then roundTime = elapsed.Value end
+                
+                local seconds = math.floor(roundTime)
+                local hours = math.floor(seconds / 3600)
+                local minutes = math.floor((seconds % 3600) / 60)
+                local secs = seconds % 60
+                t = string.format("%02d:%02d:%02d", hours, minutes, secs)
             end
-        end
+        end)
         
         if w:find("Wave Reached:") then
             local wm = w:match("Wave Reached:%s*(%d+)")
@@ -11669,8 +13976,20 @@ do
             ExperienceItemsData = {},
             UnitCounts = {}
         }
+    end
+    
+    if not getgenv()._RoundStartTime then
+        getgenv()._RoundStartTime = 0
         task.spawn(function()
             task.wait(2)
+            
+            pcall(function()
+                local elapsed = RS:FindFirstChild("ElapsedTime")
+                if elapsed and elapsed.Value then
+                    getgenv()._RoundStartTime = elapsed.Value
+                end
+            end)
+            
             local clientData = getClientData()
             if clientData then
                 getgenv()._WebhookInitialData.Jewels = clientData.Jewels or 0
@@ -11765,7 +14084,10 @@ do
                     
                     local elapsed = RS:FindFirstChild("ElapsedTime")
                     if elapsed and elapsed.Value then
-                        local seconds = math.floor(elapsed.Value)
+                        local roundTime = elapsed.Value - (getgenv()._RoundStartTime or 0)
+                        if roundTime < 0 then roundTime = elapsed.Value end
+                        
+                        local seconds = math.floor(roundTime)
                         local hours = math.floor(seconds / 3600)
                         local minutes = math.floor((seconds % 3600) / 60)
                         local secs = seconds % 60
@@ -11828,7 +14150,42 @@ do
             local rewardsText = ""
             
             if isSeamlessRestart then
-                rewardsText = "Seamless Restart - No EndGameUI rewards\nUpdated stats shown below"
+                local currencyKeys = {
+                    {key = "Jewels", name = "Jewels"},
+                    {key = "Gold", name = "Gold"},
+                    {key = "Emeralds", name = "Emeralds"},
+                    {key = "Rerolls", name = "Rerolls"},
+                    {key = "HeroTokens", name = "Hero Coins"},
+                    {key = "EXP", name = "Player EXP"},
+                    {key = "CandyBasket", name = "Candy Basket"}
+                }
+                
+                for _, currency in ipairs(currencyKeys) do
+                    local initial = (getgenv()._WebhookInitialData and getgenv()._WebhookInitialData[currency.key]) or 0
+                    local current = clientData[currency.key] or 0
+                    local gained = current - initial
+                    
+                    if gained > 0 then
+                        rewardsText = rewardsText .. "+" .. formatNumber(gained) .. " " .. currency.name .. " [ Total: " .. formatNumber(current) .. " ]\n"
+                    end
+                end
+                
+                if clientData.ItemData then
+                    for itemName, itemInfo in pairs(clientData.ItemData) do
+                        local initial = (getgenv()._WebhookInitialData and getgenv()._WebhookInitialData.ItemData and getgenv()._WebhookInitialData.ItemData[itemName]) or 0
+                        local current = itemInfo.Amount or 0
+                        local gained = current - initial
+                        
+                        if gained > 0 then
+                            local displayName = itemName:gsub("([A-Z])", " %1"):gsub("^%s+", "")
+                            rewardsText = rewardsText .. "+" .. formatNumber(gained) .. " " .. displayName .. " [ Total: " .. formatNumber(current) .. " ]\n"
+                        end
+                    end
+                end
+                
+                if rewardsText == "" then
+                    rewardsText = "No rewards earned this round"
+                end
             elseif #rewards > 0 then
                 for _, r in ipairs(rewards) do
                     local initialValue = 0
@@ -12070,8 +14427,9 @@ do
             webhookConnection:Disconnect()
         end
         
-        webhookConnection = trackConnection(LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
-            if child.Name == "EndGameUI" and getgenv().WebhookEnabled then
+        webhookConnection = ConnectionManager:trackGroup("Webhook",
+            LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
+                if child.Name == "EndGameUI" and getgenv().WebhookEnabled then
                 if getgenv().WebhookProcessing then
                     return
                 end
@@ -12205,7 +14563,13 @@ do
     end
     
     getgenv()._RefreshWebhookInitialData = function()
-        print("[Webhook] Refreshing initial data...")
+        pcall(function()
+            local elapsed = RS:FindFirstChild("ElapsedTime")
+            if elapsed and elapsed.Value then
+                getgenv()._RoundStartTime = elapsed.Value
+            end
+        end)
+        
         local clientData = getClientData()
         if clientData then
             getgenv()._WebhookInitialData.Jewels = clientData.Jewels or 0
@@ -12250,10 +14614,11 @@ do
         end
     end
     
-    trackConnection(LocalPlayer.PlayerGui.ChildRemoved:Connect(function(child)
-        if child.Name == "EndGameUI" then
-            task.wait(1)
-            if getgenv().WebhookProcessing then
+    ConnectionManager:trackGroup("Webhook",
+        LocalPlayer.PlayerGui.ChildRemoved:Connect(function(child)
+            if child.Name == "EndGameUI" then
+                task.wait(1)
+                if getgenv().WebhookProcessing then
                 warn("[Webhook] Force clearing WebhookProcessing flag due to UI removal")
                 getgenv().WebhookProcessing = false
             end
@@ -13817,10 +16182,11 @@ if not isInLobby then
             end
         end)
         
-        trackConnection(LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
-            pcall(function()
-                if child.Name == "EndGameUI" then
-                    local currentTime = tick()
+        ConnectionManager:trackGroup("SeamlessRetry",
+            LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
+                pcall(function()
+                    if child.Name == "EndGameUI" then
+                        local currentTime = tick()
                     if currentTime - lastEndgameTime < DEBOUNCE_TIME then
                         return
                     end
@@ -13885,15 +16251,19 @@ if not isInLobby then
             end)
         end))
         
-        trackConnection(LocalPlayer.PlayerGui.ChildRemoved:Connect(function(child) 
-            if child.Name == "EndGameUI" then 
-                task.wait(3) 
-                hasRun = false 
-            end 
-        end))
+        ConnectionManager:trackGroup("SeamlessRetry",
+            LocalPlayer.PlayerGui.ChildRemoved:Connect(function(child) 
+                if child.Name == "EndGameUI" then 
+                    task.wait(3) 
+                    hasRun = false 
+                end 
+            end),
+            "Seamless EndGameUI Removed"
+        )
         
-        trackConnection(LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
-            if child.Name == "TeleportUI" and maxRoundsReached then
+        ConnectionManager:trackGroup("SeamlessRetry",
+            LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
+                if child.Name == "TeleportUI" and maxRoundsReached then
                 endgameCount = 0
                 getgenv()._SeamlessEndgameCount = 0
                 maxRoundsReached = false
@@ -14033,14 +16403,18 @@ end
 
 do
     task.spawn(function()
+        local removeInterval = getgenv().IsMacPlatform and 1 or 0.5
         while true do
-            task.wait(0.5) 
+            task.wait(removeInterval) 
             if getgenv().RemoveEnemiesEnabled then
                 pcall(function()
                     local enemies = workspace:FindFirstChild("Enemies")
                     if enemies then
                         local enemyList = enemies:GetChildren()
-                        for i = 1, #enemyList do
+                        local batchSize = getgenv().IsMacPlatform and 5 or 10
+                        local maxEnemies = getgenv().IsMacPlatform and 50 or #enemyList
+                        
+                        for i = 1, math.min(#enemyList, maxEnemies) do
                             local enemy = enemyList[i]
                             pcall(function()
                                 if enemy and enemy.Parent and enemy:IsA("Model") then
@@ -14050,7 +16424,7 @@ do
                                     end
                                 end
                             end)
-                            if i % 10 == 0 then
+                            if i % batchSize == 0 then
                                 task.wait()
                             end
                         end
@@ -14103,8 +16477,9 @@ end
 
 if not isInLobby then
     task.spawn(function()
+        local particleInterval = getgenv().IsMacPlatform and 4 or 2
         while true do
-            task.wait(2)
+            task.wait(particleInterval)
             pcall(function()
                 local targets = {workspace.Enemies, workspace.Towers, workspace:FindFirstChild("Effects")}
                 for _, parent in pairs(targets) do
@@ -14321,8 +16696,6 @@ if not isInLobby then
                 local customPos = getgenv().AutoPlayConfig.unitPositions[slotNum]
                 if customPos then
                     return CFrame.new(customPos)
-                else
-                    return nil
                 end
             end
             
@@ -14592,10 +16965,15 @@ if not isInLobby then
         end
         
         local function autoPlaceLoop()
-            task.wait(3)
+            task.wait(1)
             
             while true do
-                task.wait(3)  
+                task.wait(1)
+                
+                if checkIfInLobby() then
+                    task.wait(2)
+                    continue
+                end
                 
                 if not getgenv().AutoPlayConfig.autoPlace and not getgenv().AutoPlayConfig.autoPlaceAtPosition then
                     task.wait(1)
@@ -14620,9 +16998,17 @@ if not isInLobby then
                         local placeCap = math.floor(getgenv().AutoPlayConfig.placeCaps[slotNum] or 1)
                         local currentCount = getPlacedTowerCount(slotNum)
                         
+                        if getgenv().DebugMode then
+                            print(string.format("[Auto Place] Slot %d: %s (Cap: %d, Current: %d)", slotNum, unitName, placeCap, currentCount))
+                        end
+                        
                         if placeCap > 0 and currentCount < placeCap then
                             local cost = getgenv().GetPlaceCost and getgenv().GetPlaceCost(unitName) or 0
                             local isFarm = isFarmUnit(unitName)
+                            
+                            if getgenv().DebugMode then
+                                print(string.format("[Auto Place] Adding %s to queue (Cost: %d, IsFarm: %s)", unitName, cost, tostring(isFarm)))
+                            end
                             
                             table.insert(unitsToPlace, {
                                 slotNum = slotNum,
@@ -14653,9 +17039,23 @@ if not isInLobby then
                     if currentCash >= unitData.cost then
                         local position = getPlacementPosition(unitData.slotNum, pathIndex, distance)
                         if position then
+                            if getgenv().DebugMode then
+                                print(string.format("[Auto Place] Attempting to place %s (Slot %d) at position", unitData.unitName, unitData.slotNum))
+                            end
                             if placeTower(unitData.unitName, position, unitData.slotNum) then
+                                if getgenv().DebugMode then
+                                    print(string.format("[Auto Place] ✅ Successfully placed %s", unitData.unitName))
+                                end
                                 task.wait(1)
                                 break 
+                            else
+                                if getgenv().DebugMode then
+                                    print(string.format("[Auto Place] ❌ Failed to place %s", unitData.unitName))
+                                end
+                            end
+                        else
+                            if getgenv().DebugMode then
+                                print(string.format("[Auto Place] ❌ No valid position for %s (Slot %d)", unitData.unitName, unitData.slotNum))
                             end
                         end
                     end
@@ -14667,7 +17067,12 @@ if not isInLobby then
             task.wait(2)
             
             while true do
-                task.wait(1) 
+                task.wait(1)
+                
+                if checkIfInLobby() then
+                    task.wait(2)
+                    continue
+                end
                 
                 if not getgenv().AutoPlayConfig.autoUpgrade and not getgenv().AutoPlayConfig.autoUpgradePriority then 
                     continue 
@@ -14858,3 +17263,41 @@ if not isInLobby then
 end
 end
 end
+
+
+task.spawn(function()
+    local GuiService = game:GetService("GuiService")
+    local lastClearTime = tick()
+    
+    while task.wait(0.5) do
+        pcall(function()
+
+            if tick() - lastClearTime > 1 then
+                if GuiService.SelectedObject then
+
+                    GuiService.SelectedObject = nil
+                end
+            end
+            lastClearTime = tick()
+        end)
+    end
+end)
+
+print("[ALS] ✅ GUI hover fix initialized")
+
+
+getgenv()._ButtonPressActive = false
+
+task.spawn(function()
+    local GuiService = game:GetService("GuiService")
+    
+    while task.wait(0.1) do
+        pcall(function()
+            if not getgenv()._ButtonPressActive and GuiService.SelectedObject then
+                GuiService.SelectedObject = nil
+            end
+        end)
+    end
+end)
+
+print("[ALS] ✅ GUI hover fix initialized - tooltips should work now")
