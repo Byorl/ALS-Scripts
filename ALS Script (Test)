@@ -1,12 +1,10 @@
 repeat task.wait() until game:IsLoaded()
 
--- Wait for critical game services and player to be ready
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
 repeat task.wait() until LocalPlayer
 
--- Wait for character with timeout
 local characterWaitTime = 0
 local maxCharacterWait = 30
 
@@ -14,13 +12,11 @@ while not LocalPlayer.Character and characterWaitTime < maxCharacterWait do
     task.wait(0.5)
     characterWaitTime = characterWaitTime + 0.5
     
-    -- Check if we're in a loading screen UI
     local loadingUI = LocalPlayer.PlayerGui:FindFirstChild("LoadingUI") or 
                       LocalPlayer.PlayerGui:FindFirstChild("TeleportUI")
     
     if loadingUI and loadingUI.Enabled then
-        -- Still loading, keep waiting
-        characterWaitTime = 0 -- Reset timer while loading UI is visible
+        characterWaitTime = 0 
     end
 end
 
@@ -275,11 +271,6 @@ function MobileOptimizer:init()
         self.pollingInterval = 1.0 
         
         self.maxConcurrentOperations = 3
-        
-        ErrorHandler:log("INFO", "Mobile optimizations enabled:")
-        ErrorHandler:log("INFO", string.format("  - Polling interval: %.1fs (reduced for mobile)", self.pollingInterval))
-        ErrorHandler:log("INFO", string.format("  - Max concurrent operations: %d", self.maxConcurrentOperations))
-        ErrorHandler:log("INFO", "  - Visual effects: Disabled")
     else
         self.pollingInterval = 0.5
         self.maxConcurrentOperations = 10
@@ -909,8 +900,6 @@ function ConnectionManager:startAutoCleanup()
             end)
         end
     end)
-    
-    ErrorHandler:log("INFO", "ConnectionManager auto-cleanup started")
 end
 
 local MemoryManager = {
@@ -1284,8 +1273,6 @@ function MemoryManager:startAutoCleanup()
             end)
         end
     end)
-    
-    ErrorHandler:log("INFO", "MemoryManager auto-cleanup started")
 end
 
 
@@ -1299,7 +1286,6 @@ function UIFactory:init(config, saveCallback)
     self.config = config
     self.saveCallback = saveCallback
     self.initialized = true
-    ErrorHandler:log("INFO", "UIFactory initialized")
 end
 
 function UIFactory:createElement(elementType, section, options)
@@ -1736,7 +1722,6 @@ end)
 
 task.spawn(function()
     GameStateDetector:runPendingInitializations()
-    ErrorHandler:log("INFO", "Initialization system started")
 end)
 
 if not getgenv()._GlobalConnections then
@@ -2422,8 +2407,6 @@ UIFactory:init(getgenv().Config, function(config)
     ConfigManager:save()
 end)
 
-ErrorHandler:log("INFO", "ConfigManager initialized with debounced saves")
-ErrorHandler:log("INFO", "UIFactory initialized with config and save callback")
 
 local function safeGarbageCollect()
     pcall(function()
@@ -2459,7 +2442,6 @@ local ConnectionManager = getgenv().ConnectionManager
 
 
 local platformInfo = PlatformDetector:detect()
-ErrorHandler:log("INFO", "Initializing UI with platform: " .. platformInfo.executor)
 
 local defaultWidth = 720
 local defaultHeight = 480
@@ -2904,7 +2886,6 @@ if not TabGroup1 or not TabGroup2 or not TabGroup3 then
     return
 end
 
-ErrorHandler:log("INFO", "Tab groups created successfully")
 
 local Tabs = {}
 
@@ -3029,7 +3010,6 @@ for name, tab in pairs(Tabs) do
     end
 end
 
-ErrorHandler:log("INFO", string.format("Created %d tabs successfully", tabCount))
 
 
 local ToggleGui, ToggleButton
@@ -3053,7 +3033,6 @@ ErrorHandler:wrap(function()
     ToggleButton.Draggable = true
     ToggleButton.Parent = ToggleGui
     
-    ErrorHandler:log("INFO", "Toggle button created successfully")
 end, "Create toggle button GUI")()
 
 local function getCurrentMenuKey()
@@ -3078,7 +3057,6 @@ if ToggleButton then
         ToggleButton.MouseButton1Click:Connect(toggleUI),
         { group = "UI", context = "Toggle button click" }
     )
-    ErrorHandler:log("INFO", "Toggle button connection tracked")
 end
 
 
@@ -3147,7 +3125,6 @@ for name, section in pairs(Sections) do
     end
 end
 
-ErrorHandler:log("INFO", string.format("Created %d sections successfully", sectionCount))
 
 ErrorHandler:wrap(function()
     if Tabs.Main then
@@ -5133,7 +5110,6 @@ local function playMacroV2()
             return
         end
         
-        print("[Macro] 📋 Loaded macro data: " .. #macroData .. " steps")
         
         getgenv().MacroPlaybackMacroData = macroData
         getgenv().MacroTotalSteps = #macroData
@@ -5147,7 +5123,6 @@ local function playMacroV2()
             return
         end
         
-        print("[Macro] 🎬 Starting playback from step 1")
         local step = 1
         
         local gameStarted = false
@@ -5527,7 +5502,6 @@ task.spawn(function()
                 end
                 
                 if shouldRestart then
-                    print("[Macro] 🔄 Fallback restart: " .. restartReason)
                     restartCooldown = true
                     
                     getgenv().MacroCurrentStep = 0
@@ -6245,10 +6219,6 @@ getgenv().SlimeRushSlowerCardSelectionEnabled = getgenv().Config.toggles.SlimeRu
 getgenv().SlimeRushSmartCardSelectionEnabled = getgenv().Config.toggles.SlimeRushSmartCardToggle or false
 getgenv().SlowerCardSelectionEnabled = getgenv().Config.toggles.SlowerCardSelectionToggle or false
 
-print("[Init] Slime Rush Enabled:", getgenv().SlimeRushEnabled)
-print("[Init] Slime Rush Fast:", getgenv().SlimeRushCardSelectionEnabled)
-print("[Init] Slime Rush Slower:", getgenv().SlimeRushSlowerCardSelectionEnabled)
-print("[Init] Slime Rush Smart:", getgenv().SlimeRushSmartCardSelectionEnabled)
 
 local savedPortalConfig = getgenv().Config.portals or {}
 getgenv().PortalConfig = {
@@ -8344,6 +8314,8 @@ getgenv().AutoPlayConfig.autoUpgradePriority = getgenv().Config.toggles.AutoPlay
 getgenv().AutoPlayConfig.focusFarm = getgenv().Config.toggles.AutoPlayFocusFarm or false
 getgenv().AutoPlayConfig.hologram = getgenv().Config.toggles.AutoPlayHologram or false
 getgenv().AutoPlayConfig.placeBeforeUpgrade = getgenv().Config.toggles.AutoPlayPlaceBeforeUpgrade or false
+getgenv().AutoPlayConfig.autoPlaceAtPosition = getgenv().Config.toggles.AutoPlayPlaceAtPosition or false
+getgenv().AutoPlayConfig.positionHologram = getgenv().Config.toggles.AutoPlayPositionHologram or false
 getgenv().AutoPlayConfig.pathPercentage = tonumber(getgenv().Config.inputs.AutoPlayPathPercentage) or 1
 getgenv().AutoPlayConfig.distanceFromPath = tonumber(getgenv().Config.inputs.AutoPlayDistanceFromPath) or 0
 
@@ -11701,13 +11673,11 @@ local function processAbility(tower, unitName, abilityName, cfg, currentWave, ha
     end
 end
 
-local lastGameStartedForAbilities = true
+getgenv()._lastGameStartedForAbilities = true
 
 task.spawn(function()
-    local pollingInterval = MobileOptimizer:getPollingInterval(0.3)
-    
     while true do
-        task.wait(pollingInterval)
+        task.wait(0.3)
         pcall(function()
             checkGameEndedReset()
             local currentWave = funcs.getCurrentWave()
@@ -11721,11 +11691,11 @@ task.spawn(function()
                 end
             end)
             
-            if getgenv().SeamlessFixEnabled and lastGameStartedForAbilities and not gameStarted then
+            if getgenv().SeamlessFixEnabled and getgenv()._lastGameStartedForAbilities and not gameStarted then
                 print("[Auto Abilities] 🔄 Seamless restart detected, resetting trackers")
                 funcs.resetRoundTrackers()
             end
-            lastGameStartedForAbilities = gameStarted
+            getgenv()._lastGameStartedForAbilities = gameStarted
             
             if currentWave < lastWave then
                 funcs.resetRoundTrackers()
@@ -11766,9 +11736,33 @@ end
 do
     task.spawn(function()
         local pollingInterval = MobileOptimizer:getPollingInterval(1)
+        local lastWave = 0
         
         while true do
             task.wait(pollingInterval)
+            
+            local currentWave = 0
+            pcall(function()
+                local wave = RS:FindFirstChild("Wave")
+                if wave and wave.Value then
+                    currentWave = wave.Value
+                end
+            end)
+            
+            if currentWave < lastWave and currentWave <= 5 then
+                getgenv().BulmaWishUsedThisRound = false
+            end
+            
+            if getgenv().SeamlessFixEnabled and lastWave >= 50 and currentWave < 50 then
+                getgenv().BulmaWishUsedThisRound = false
+            end
+            
+            if currentWave == 1 and lastWave > 10 then
+                getgenv().BulmaWishUsedThisRound = false
+            end
+            
+            lastWave = currentWave
+            
             if getgenv().BulmaEnabled then
             local success, err = pcall(function()
                 local towers = workspace:FindFirstChild("Towers")
@@ -11932,8 +11926,34 @@ do
         return success
     end
     
+    local lastWave = 0
     while true do
         task.wait(1)
+        
+        local currentWave = 0
+        pcall(function()
+            local wave = RS:FindFirstChild("Wave")
+            if wave and wave.Value then
+                currentWave = wave.Value
+            end
+        end)
+        
+        if currentWave < lastWave and currentWave <= 5 then
+            getgenv().WukongTrackedClones = {}
+            getgenv()._WukongLastSynthesisTime = 0
+        end
+        
+        if getgenv().SeamlessFixEnabled and lastWave >= 50 and currentWave < 50 then
+            getgenv().WukongTrackedClones = {}
+            getgenv()._WukongLastSynthesisTime = 0
+        end
+        
+        if currentWave == 1 and lastWave > 10 then
+            getgenv().WukongTrackedClones = {}
+            getgenv()._WukongLastSynthesisTime = 0
+        end
+        
+        lastWave = currentWave
         
         if not getgenv().WukongEnabled then continue end
         
@@ -12047,8 +12067,31 @@ do
         end
         
         
+        local lastWave = 0
         while true do
             task.wait(1)
+            
+            local currentWave = 0
+            pcall(function()
+                local wave = RS:FindFirstChild("Wave")
+                if wave and wave.Value then
+                    currentWave = wave.Value
+                end
+            end)
+            
+            if currentWave < lastWave and currentWave <= 5 then
+                getgenv().SkeletonKnightLastUse = 0
+            end
+            
+            if getgenv().SeamlessFixEnabled and lastWave >= 50 and currentWave < 50 then
+                getgenv().SkeletonKnightLastUse = 0
+            end
+            
+            if currentWave == 1 and lastWave > 10 then
+                getgenv().SkeletonKnightLastUse = 0
+            end
+            
+            lastWave = currentWave
                         
             if not getgenv().SkeletonKnightEnabled then
                 task.wait(2)
@@ -12178,8 +12221,31 @@ do
         end
         
         
+        local lastWave = 0
         while true do
             task.wait(1)
+            
+            local currentWave = 0
+            pcall(function()
+                local wave = RS:FindFirstChild("Wave")
+                if wave and wave.Value then
+                    currentWave = wave.Value
+                end
+            end)
+            
+            if currentWave < lastWave and currentWave <= 5 then
+                getgenv().AlucardHypnosisLastUse = 0
+            end
+            
+            if getgenv().SeamlessFixEnabled and lastWave >= 50 and currentWave < 50 then
+                getgenv().AlucardHypnosisLastUse = 0
+            end
+            
+            if currentWave == 1 and lastWave > 10 then
+                getgenv().AlucardHypnosisLastUse = 0
+            end
+            
+            lastWave = currentWave
                         
             if not getgenv().AlucardHypnosisEnabled then
                 task.wait(2)
@@ -13837,15 +13903,20 @@ local function getMatchResult()
         if not stats then return "00:00:00", "0", "Unknown" end
         
         local r = (stats:FindFirstChild("Result") and stats.Result.Text) or "Unknown"
-        local t = (stats:FindFirstChild("ElapsedTime") and stats.ElapsedTime.Text) or "00:00:00"
         local w = (stats:FindFirstChild("EndWave") and stats.EndWave.Text) or "0"
         
-        if t:find("Total Time:") then
-            local m, s = t:match("Total Time:%s*(%d+):(%d+)")
-            if m and s then
-                t = string.format("%02d:%02d:%02d", 0, tonumber(m) or 0, tonumber(s) or 0)
+        -- Get accurate time from ReplicatedStorage.ElapsedTime instead of UI
+        local t = "00:00:00"
+        pcall(function()
+            local elapsed = RS:FindFirstChild("ElapsedTime")
+            if elapsed and elapsed.Value then
+                local seconds = math.floor(elapsed.Value)
+                local hours = math.floor(seconds / 3600)
+                local minutes = math.floor((seconds % 3600) / 60)
+                local secs = seconds % 60
+                t = string.format("%02d:%02d:%02d", hours, minutes, secs)
             end
-        end
+        end)
         
         if w:find("Wave Reached:") then
             local wm = w:match("Wave Reached:%s*(%d+)")
@@ -16824,10 +16895,10 @@ if not isInLobby then
         end
         
         local function autoPlaceLoop()
-            task.wait(3)
+            task.wait(1)
             
             while true do
-                task.wait(3)  
+                task.wait(1)  
                 
                 if not getgenv().AutoPlayConfig.autoPlace and not getgenv().AutoPlayConfig.autoPlaceAtPosition then
                     task.wait(1)
