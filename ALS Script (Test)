@@ -2682,14 +2682,32 @@ local function isPlayerInValidState()
 end
 
 local maxWaitTime = 0
-local maxWait = 20
+local maxWait = 60
+local lastStateCheck = tick()
 repeat
     task.wait(0.2)
     maxWaitTime = maxWaitTime + 0.2
+    
+    if tick() - lastStateCheck > 10 then
+        lastStateCheck = tick()
+        if isTeleportUIVisible() and not isPlayerInValidState() then
+            warn("[ALS] Still loading after " .. math.floor(maxWaitTime) .. "s, attempting recovery...")
+            local TeleportService = game:GetService("TeleportService")
+            pcall(function()
+                TeleportService:Teleport(12886143095, LocalPlayer)
+            end)
+            task.wait(5)
+        end
+    end
 until (not isTeleportUIVisible() and isPlayerInValidState()) or maxWaitTime > maxWait
 
 if maxWaitTime > maxWait and not isPlayerInValidState() then
-    task.wait(3)
+    warn("[ALS] Failed to load properly after " .. maxWait .. "s, forcing rejoin...")
+    local TeleportService = game:GetService("TeleportService")
+    pcall(function()
+        TeleportService:Teleport(12886143095, LocalPlayer)
+    end)
+    task.wait(10)
 end
 
 task.wait(1)
@@ -3302,7 +3320,7 @@ getgenv().CreateSlider = createSlider
 getgenv().CreateMutuallyExclusiveToggle = createMutuallyExclusiveToggle
 
 
-local MACRO_FOLDER = CONFIG_FOLDER .. "/macros"
+local MACRO_FOLDER = ConfigManager:getUserFolder() .. "/macros"
 local SETTINGS_FILE = MACRO_FOLDER .. "/settings.json"
 
 if not isfolder(MACRO_FOLDER) then makefolder(MACRO_FOLDER) end
@@ -14400,6 +14418,13 @@ do
                     sendSuccess = true
                     print("[Webhook] ✅ Webhook sent successfully!")
                     
+                    pcall(function()
+                        local elapsed = RS:FindFirstChild("ElapsedTime")
+                        if elapsed and elapsed.Value then
+                            getgenv()._RoundStartTime = elapsed.Value
+                        end
+                    end)
+                    
                     Window:Notify({
                         Title = "Webhook Sent",
                         Description = hasUnitDrop and "Unit drop detected!" or "Match results sent",
@@ -17313,6 +17338,10 @@ task.spawn(function()
     
     while task.wait(0.1) do
         pcall(function()
+            if checkIfInLobby() then
+                return
+            end
+            
             if not getgenv()._ButtonPressActive and GuiService.SelectedObject then
                 GuiService.SelectedObject = nil
             end
