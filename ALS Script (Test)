@@ -2483,7 +2483,6 @@ if not Window then
     return
 end
 
-ErrorHandler:log("INFO", "Window created successfully")
 
 local globalSettings = {}
 
@@ -2532,7 +2531,6 @@ ErrorHandler:wrap(function()
     })
 end, "Create Show User Info global setting")()
 
-ErrorHandler:log("INFO", "Global settings initialized")
 
 Window.onUnloaded(function()
     debugPrint("[Cleanup] Unloading script...")
@@ -3137,7 +3135,6 @@ end
 ErrorHandler:wrap(function()
     if Tabs.Main then
         Tabs.Main:Select()
-        ErrorHandler:log("INFO", "Main tab selected")
     end
 end, "Select Main tab")()
 
@@ -3506,8 +3503,6 @@ local function loadMacros()
                                 loadedCount = loadedCount + 1
                                 if #data > 0 then
                                     print("[Macro] ✅ Loaded: " .. fileName .. " (" .. #data .. " steps)")
-                                else
-                                    print("[Macro] ✅ Loaded (empty): " .. fileName)
                                 end
                             else
                                 warn("[Macro] ❌ Skipped: " .. fileName .. " (invalid format)")
@@ -3521,7 +3516,6 @@ local function loadMacros()
         end
     end
     
-    print("[Macro] Load complete: " .. loadedCount .. " macros loaded")
     
     if convertedCount > 0 then
         Window:Notify({
@@ -5206,7 +5200,6 @@ local function playMacroV2()
         end
         
         task.wait(1.5)
-        print("[Macro] Initializing cash tracking...")
         
         if not getgenv().MacroPlayEnabled then
             getgenv().MacroPlaybackActive = false
@@ -5382,10 +5375,8 @@ local function playMacroV2()
             if success and result then
                 actionSuccess = true
                 actionMessage = msg or "Success"
-                debugPrint("[Macro] Step", step, "✓")
             else
                 actionMessage = msg or "Action failed"
-                debugPrint("[Macro] Step", step, "✗:", actionMessage)
             end
             
             if not actionSuccess then
@@ -11726,7 +11717,6 @@ task.spawn(function()
             end)
             
             if getgenv().SeamlessFixEnabled and getgenv()._lastGameStartedForAbilities and not gameStarted then
-                print("[Auto Abilities] 🔄 Seamless restart detected, resetting trackers")
                 funcs.resetRoundTrackers()
             end
             getgenv()._lastGameStartedForAbilities = gameStarted
@@ -12643,7 +12633,6 @@ do
                 end)
                 
                 if getgenv().SeamlessFixEnabled and lastGameStartedForEto and not gameStarted then
-                    print("[Eto Evo] 🔄 Seamless restart detected, resetting cooldowns")
                     resetEtoEvoCooldowns()
                     isWaitingForPrompt = false
                 end
@@ -12903,7 +12892,6 @@ do
                 end)
                 
                 if getgenv().SeamlessFixEnabled and lastGameStartedForGriffith and not gameStarted then
-                    print("[Griffith Light] 🔄 Seamless restart detected, resetting state")
                     getgenv().GriffithLightUsedThisRound = false
                     isWaitingForPrompt = false
                     cashAboveThresholdStart = 0
@@ -13935,7 +13923,10 @@ local function getMatchResult()
         pcall(function()
             local elapsed = RS:FindFirstChild("ElapsedTime")
             if elapsed and elapsed.Value then
-                local seconds = math.floor(elapsed.Value)
+                local roundTime = elapsed.Value - (getgenv()._RoundStartTime or 0)
+                if roundTime < 0 then roundTime = elapsed.Value end
+                
+                local seconds = math.floor(roundTime)
                 local hours = math.floor(seconds / 3600)
                 local minutes = math.floor((seconds % 3600) / 60)
                 local secs = seconds % 60
@@ -13985,8 +13976,20 @@ do
             ExperienceItemsData = {},
             UnitCounts = {}
         }
+    end
+    
+    if not getgenv()._RoundStartTime then
+        getgenv()._RoundStartTime = 0
         task.spawn(function()
             task.wait(2)
+            
+            pcall(function()
+                local elapsed = RS:FindFirstChild("ElapsedTime")
+                if elapsed and elapsed.Value then
+                    getgenv()._RoundStartTime = elapsed.Value
+                end
+            end)
+            
             local clientData = getClientData()
             if clientData then
                 getgenv()._WebhookInitialData.Jewels = clientData.Jewels or 0
@@ -14081,7 +14084,10 @@ do
                     
                     local elapsed = RS:FindFirstChild("ElapsedTime")
                     if elapsed and elapsed.Value then
-                        local seconds = math.floor(elapsed.Value)
+                        local roundTime = elapsed.Value - (getgenv()._RoundStartTime or 0)
+                        if roundTime < 0 then roundTime = elapsed.Value end
+                        
+                        local seconds = math.floor(roundTime)
                         local hours = math.floor(seconds / 3600)
                         local minutes = math.floor((seconds % 3600) / 60)
                         local secs = seconds % 60
@@ -14144,7 +14150,42 @@ do
             local rewardsText = ""
             
             if isSeamlessRestart then
-                rewardsText = "Seamless Restart - No EndGameUI rewards\nUpdated stats shown below"
+                local currencyKeys = {
+                    {key = "Jewels", name = "Jewels"},
+                    {key = "Gold", name = "Gold"},
+                    {key = "Emeralds", name = "Emeralds"},
+                    {key = "Rerolls", name = "Rerolls"},
+                    {key = "HeroTokens", name = "Hero Coins"},
+                    {key = "EXP", name = "Player EXP"},
+                    {key = "CandyBasket", name = "Candy Basket"}
+                }
+                
+                for _, currency in ipairs(currencyKeys) do
+                    local initial = (getgenv()._WebhookInitialData and getgenv()._WebhookInitialData[currency.key]) or 0
+                    local current = clientData[currency.key] or 0
+                    local gained = current - initial
+                    
+                    if gained > 0 then
+                        rewardsText = rewardsText .. "+" .. formatNumber(gained) .. " " .. currency.name .. " [ Total: " .. formatNumber(current) .. " ]\n"
+                    end
+                end
+                
+                if clientData.ItemData then
+                    for itemName, itemInfo in pairs(clientData.ItemData) do
+                        local initial = (getgenv()._WebhookInitialData and getgenv()._WebhookInitialData.ItemData and getgenv()._WebhookInitialData.ItemData[itemName]) or 0
+                        local current = itemInfo.Amount or 0
+                        local gained = current - initial
+                        
+                        if gained > 0 then
+                            local displayName = itemName:gsub("([A-Z])", " %1"):gsub("^%s+", "")
+                            rewardsText = rewardsText .. "+" .. formatNumber(gained) .. " " .. displayName .. " [ Total: " .. formatNumber(current) .. " ]\n"
+                        end
+                    end
+                end
+                
+                if rewardsText == "" then
+                    rewardsText = "No rewards earned this round"
+                end
             elseif #rewards > 0 then
                 for _, r in ipairs(rewards) do
                     local initialValue = 0
@@ -14522,7 +14563,13 @@ do
     end
     
     getgenv()._RefreshWebhookInitialData = function()
-        print("[Webhook] Refreshing initial data...")
+        pcall(function()
+            local elapsed = RS:FindFirstChild("ElapsedTime")
+            if elapsed and elapsed.Value then
+                getgenv()._RoundStartTime = elapsed.Value
+            end
+        end)
+        
         local clientData = getClientData()
         if clientData then
             getgenv()._WebhookInitialData.Jewels = clientData.Jewels or 0
