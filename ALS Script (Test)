@@ -5079,6 +5079,11 @@ local function validateMacro(macroData)
 end
 
 local function playMacroV2()
+    if isInLobby() then
+        print("[Macro] ⚠️ Cannot start macro in lobby")
+        return
+    end
+    
     if getgenv().MacroPlaybackActive then 
         print("[Macro] ⚠️ Playback already active")
         return 
@@ -11234,6 +11239,12 @@ do
     task.spawn(function()
     while true do
         task.wait(1)
+        
+        if isInLobby() then
+            task.wait(2)
+            continue
+        end
+        
         if getgenv().AutoReadyEnabled then
             local success, err = pcall(function()
                 local bottomGui = LocalPlayer.PlayerGui:FindFirstChild("Bottom")
@@ -11678,6 +11689,12 @@ getgenv()._lastGameStartedForAbilities = true
 task.spawn(function()
     while true do
         task.wait(0.3)
+        
+        if isInLobby() then
+            task.wait(2)
+            continue
+        end
+        
         pcall(function()
             checkGameEndedReset()
             local currentWave = funcs.getCurrentWave()
@@ -13905,7 +13922,6 @@ local function getMatchResult()
         local r = (stats:FindFirstChild("Result") and stats.Result.Text) or "Unknown"
         local w = (stats:FindFirstChild("EndWave") and stats.EndWave.Text) or "0"
         
-        -- Get accurate time from ReplicatedStorage.ElapsedTime instead of UI
         local t = "00:00:00"
         pcall(function()
             local elapsed = RS:FindFirstChild("ElapsedTime")
@@ -16624,8 +16640,6 @@ if not isInLobby then
                 local customPos = getgenv().AutoPlayConfig.unitPositions[slotNum]
                 if customPos then
                     return CFrame.new(customPos)
-                else
-                    return nil
                 end
             end
             
@@ -16898,7 +16912,12 @@ if not isInLobby then
             task.wait(1)
             
             while true do
-                task.wait(1)  
+                task.wait(1)
+                
+                if isInLobby() then
+                    task.wait(2)
+                    continue
+                end
                 
                 if not getgenv().AutoPlayConfig.autoPlace and not getgenv().AutoPlayConfig.autoPlaceAtPosition then
                     task.wait(1)
@@ -16923,9 +16942,17 @@ if not isInLobby then
                         local placeCap = math.floor(getgenv().AutoPlayConfig.placeCaps[slotNum] or 1)
                         local currentCount = getPlacedTowerCount(slotNum)
                         
+                        if getgenv().DebugMode then
+                            print(string.format("[Auto Place] Slot %d: %s (Cap: %d, Current: %d)", slotNum, unitName, placeCap, currentCount))
+                        end
+                        
                         if placeCap > 0 and currentCount < placeCap then
                             local cost = getgenv().GetPlaceCost and getgenv().GetPlaceCost(unitName) or 0
                             local isFarm = isFarmUnit(unitName)
+                            
+                            if getgenv().DebugMode then
+                                print(string.format("[Auto Place] Adding %s to queue (Cost: %d, IsFarm: %s)", unitName, cost, tostring(isFarm)))
+                            end
                             
                             table.insert(unitsToPlace, {
                                 slotNum = slotNum,
@@ -16956,9 +16983,23 @@ if not isInLobby then
                     if currentCash >= unitData.cost then
                         local position = getPlacementPosition(unitData.slotNum, pathIndex, distance)
                         if position then
+                            if getgenv().DebugMode then
+                                print(string.format("[Auto Place] Attempting to place %s (Slot %d) at position", unitData.unitName, unitData.slotNum))
+                            end
                             if placeTower(unitData.unitName, position, unitData.slotNum) then
+                                if getgenv().DebugMode then
+                                    print(string.format("[Auto Place] ✅ Successfully placed %s", unitData.unitName))
+                                end
                                 task.wait(1)
                                 break 
+                            else
+                                if getgenv().DebugMode then
+                                    print(string.format("[Auto Place] ❌ Failed to place %s", unitData.unitName))
+                                end
+                            end
+                        else
+                            if getgenv().DebugMode then
+                                print(string.format("[Auto Place] ❌ No valid position for %s (Slot %d)", unitData.unitName, unitData.slotNum))
                             end
                         end
                     end
@@ -16970,7 +17011,12 @@ if not isInLobby then
             task.wait(2)
             
             while true do
-                task.wait(1) 
+                task.wait(1)
+                
+                if isInLobby() then
+                    task.wait(2)
+                    continue
+                end
                 
                 if not getgenv().AutoPlayConfig.autoUpgrade and not getgenv().AutoPlayConfig.autoUpgradePriority then 
                     continue 
