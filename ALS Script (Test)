@@ -1,5 +1,48 @@
 repeat task.wait() until game:IsLoaded()
 
+-- Wait for critical game services and player to be ready
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+repeat task.wait() until LocalPlayer
+
+-- Wait for character with timeout
+local characterWaitTime = 0
+local maxCharacterWait = 30
+
+while not LocalPlayer.Character and characterWaitTime < maxCharacterWait do
+    task.wait(0.5)
+    characterWaitTime = characterWaitTime + 0.5
+    
+    -- Check if we're in a loading screen UI
+    local loadingUI = LocalPlayer.PlayerGui:FindFirstChild("LoadingUI") or 
+                      LocalPlayer.PlayerGui:FindFirstChild("TeleportUI")
+    
+    if loadingUI and loadingUI.Enabled then
+        -- Still loading, keep waiting
+        characterWaitTime = 0 -- Reset timer while loading UI is visible
+    end
+end
+
+if not LocalPlayer.Character and characterWaitTime >= maxCharacterWait then
+    warn("[ALS] Character not loaded after " .. maxCharacterWait .. "s, attempting recovery...")
+    
+    local TeleportService = game:GetService("TeleportService")
+    local success = pcall(function()
+        TeleportService:Teleport(12886143095, LocalPlayer)
+    end)
+    
+    if success then
+        task.wait(10) 
+    end
+    
+    if not LocalPlayer.Character then
+        warn("[ALS] Failed to load character, script may not work properly")
+    end
+end
+
+task.wait(1)
+
 getgenv().DebugMode = getgenv().DebugMode or false
 
 local function debugPrint(...)
@@ -4267,13 +4310,9 @@ local function setupTowerUpgradeListener(tower)
     
     towerTracker.upgradeConnections[tower] = connection
     
-    ConnectionManager:trackTower(tower, connection, "Tower Upgrade: " .. tostring(tower.Name))
-    
     local ancestryConnection
     ancestryConnection = tower.AncestryChanged:Connect(function()
         if not tower:IsDescendantOf(game) then
-            ConnectionManager:disconnectTower(tower)
-            
             if towerTracker.upgradeConnections[tower] then
                 towerTracker.upgradeConnections[tower]:Disconnect()
                 towerTracker.upgradeConnections[tower] = nil
@@ -4291,33 +4330,34 @@ local function setupTowerUpgradeListener(tower)
         end
     end)
     
-    ConnectionManager:trackTower(tower, ancestryConnection, "Tower Ancestry: " .. tostring(tower.Name))
+    trackConnection(ancestryConnection)
 end
 
-GameStateDetector:registerInitialization("TowerMonitoring", function()
-    local workspace = game:GetService("Workspace")
-    
-    if not workspace:FindFirstChild("Towers") then
-        ErrorHandler:log("WARN", "workspace.Towers not found, tower monitoring initialization failed")
-        return false
+task.spawn(function()
+    local maxWait = 0
+    while not workspace:FindFirstChild("Towers") and maxWait < 30 do
+        task.wait(0.5)
+        maxWait = maxWait + 0.5
     end
     
-    ConnectionManager:trackGroup("TowerMonitoring", 
-        workspace.Towers.ChildAdded:Connect(function(tower)
-            task.spawn(function()
-                for attempt = 1, 10 do
-                    task.wait(0.1)
-                    local owner = tower:FindFirstChild("Owner")
-                    if owner and owner.Value == LocalPlayer then
-                        setupTowerUpgradeListener(tower)
-                        return
-                    end
-                    if owner then return end
+    if not workspace:FindFirstChild("Towers") then
+        warn("[Macro] workspace.Towers not found after 30s, tower monitoring disabled")
+        return
+    end
+    
+    trackConnection(workspace.Towers.ChildAdded:Connect(function(tower)
+        task.spawn(function()
+            for attempt = 1, 10 do
+                task.wait(0.1)
+                local owner = tower:FindFirstChild("Owner")
+                if owner and owner.Value == LocalPlayer then
+                    setupTowerUpgradeListener(tower)
+                    return
                 end
-            end)
-        end),
-        "Workspace Towers ChildAdded"
-    )
+                if owner then return end
+            end
+        end)
+    end))
     
     task.wait(0.5)
     for _, tower in pairs(workspace.Towers:GetChildren()) do
@@ -4326,14 +4366,7 @@ GameStateDetector:registerInitialization("TowerMonitoring", function()
             setupTowerUpgradeListener(tower)
         end
     end
-    
-    ErrorHandler:log("INFO", "Tower monitoring initialized successfully")
-    return true
-end, {
-    requiresGame = true, 
-    retryOnFailure = true,
-    timeout = 3
-})
+end)
 
 local originalNamecall
 local namecallHook
@@ -5232,7 +5265,7 @@ local function playMacroV2()
             end)
             
             if lastGameStartedState and not gameStarted and getgenv().SeamlessFixEnabled then
-                print("[Macro] 🔄 Seamless restart detected (GameStarted = false), completely restarting macro")
+                print("[Macro] 🔄 Seamless restart detected (GameStarted = false), stopping playback")
                 
                 getgenv().MacroPlaybackActive = false
                 getgenv().MacroCurrentStep = 0
@@ -5241,24 +5274,7 @@ local function playMacroV2()
                 getgenv().MacroWaitingText = "Waiting for new round..."
                 getgenv().MacroStatusText = "Seamless Restart"
                 getgenv().UpdateMacroStatus()
-                
-                while not gameStarted and getgenv().MacroPlayEnabled do
-                    task.wait(0.3)
-                    pcall(function()
-                        local gs = RS:FindFirstChild("GameStarted")
-                        if gs and gs.Value ~= nil then
-                            gameStarted = gs.Value
-                        end
-                    end)
-                end
-                
-                if not getgenv().MacroPlayEnabled then 
-                    return
-                end
-                
-                print("[Macro] ✅ GameStarted = true, restarting macro from beginning")
-                task.wait(1)
-                playMacroV2()
+
                 return
             end
             lastGameStartedState = gameStarted
@@ -5432,10 +5448,10 @@ monitorEndGameUI()
 task.spawn(function()
     local lastRestartAttempt = 0
     local lastEndGameUIState = false
-    local lastGameStartedForMonitor = false
+    local restartCooldown = false
     
     while true do
-        task.wait(0.2)
+        task.wait(0.3)
         
         local currentEndGameUIState = false
         pcall(function()
@@ -5443,9 +5459,19 @@ task.spawn(function()
             currentEndGameUIState = endGameUI and endGameUI.Enabled or false
         end)
         
-        if lastEndGameUIState and not currentEndGameUIState and getgenv().MacroPlayEnabled then
-            debugPrint("[Macro] Auto-restarting...")
-            task.wait(1)
+        if lastEndGameUIState and not currentEndGameUIState and getgenv().MacroPlayEnabled and not restartCooldown then
+            debugPrint("[Macro] EndGameUI removed, preparing restart...")
+            restartCooldown = true
+            
+            task.wait(1.5)
+            
+            if getgenv().MacroPlaybackActive then
+                debugPrint("[Macro] Already playing, skipping restart")
+                restartCooldown = false
+                lastEndGameUIState = currentEndGameUIState
+                task.wait(3)
+                continue
+            end
             
             getgenv().MacroPlaybackActive = false
             getgenv().MacroStatusText = "Idle"
@@ -5465,69 +5491,66 @@ task.spawn(function()
             debugPrint("[Macro] Starting playback...")
             playMacroV2()
             lastRestartAttempt = tick()
+            
+            task.delay(3, function()
+                restartCooldown = false
+            end)
         end
         
         lastEndGameUIState = currentEndGameUIState
         
-        local currentGameStarted = false
-        local currentWave = 0
-        pcall(function()
-            local gs = RS:FindFirstChild("GameStarted")
-            if gs and gs.Value ~= nil then
-                currentGameStarted = gs.Value
-            end
-            local wave = RS:FindFirstChild("Wave")
-            if wave and wave.Value then
-                currentWave = wave.Value
-            end
-        end)
-        
-        if lastGameStartedForMonitor and not currentGameStarted and getgenv().MacroPlayEnabled and getgenv().MacroPlaybackActive then
-            print("[Macro] 🔄 Monitor detected GameStarted = false during playback, forcing stop")
-            getgenv().MacroPlaybackActive = false
-            task.wait(0.3)
-        end
-        
-        if not lastGameStartedForMonitor and currentGameStarted and getgenv().MacroPlayEnabled and not getgenv().MacroPlaybackActive then
-            print("[Macro] 🔄 GameStarted changed false→true, restarting immediately!")
-            
-            getgenv().MacroCurrentStep = 0
-            getgenv().MacroActionText = ""
-            getgenv().MacroUnitText = ""
-            getgenv().MacroWaitingText = ""
-            getgenv().MacroStatusText = "Idle"
-            
-            getgenv().MacroGameState.gameEnded = false
-            getgenv().MacroGameState.hasEndGameUI = false
-            getgenv().MacroGameState.lastGameEndedState = false
-            
-            getgenv().UpdateMacroStatus()
-            
-            lastRestartAttempt = tick()
-            playMacroV2()
-        elseif getgenv().MacroPlayEnabled and not getgenv().MacroPlaybackActive and currentGameStarted and currentWave >= 1 then
+        if getgenv().MacroPlayEnabled and not getgenv().MacroPlaybackActive and not restartCooldown then
             local now = tick()
-            if now - lastRestartAttempt > 2 then
-                print("[Macro] 🔄 Auto-restarting: Game active (GameStarted=true, Wave=" .. currentWave .. ")")
+            if now - lastRestartAttempt > 5 then
+                local shouldRestart = false
+                local restartReason = ""
                 
-                getgenv().MacroCurrentStep = 0
-                getgenv().MacroActionText = ""
-                getgenv().MacroUnitText = ""
-                getgenv().MacroWaitingText = ""
-                getgenv().MacroStatusText = "Idle"
+                local currentWave = 0
+                pcall(function()
+                    local wave = RS:FindFirstChild("Wave")
+                    if wave and wave.Value then
+                        currentWave = wave.Value
+                    end
+                end)
                 
-                getgenv().MacroGameState.gameEnded = false
-                getgenv().MacroGameState.hasEndGameUI = false
-                getgenv().MacroGameState.lastGameEndedState = false
+                local gameStarted = false
+                pcall(function()
+                    local gs = RS:FindFirstChild("GameStarted")
+                    if gs and gs.Value ~= nil then
+                        gameStarted = gs.Value
+                    end
+                end)
                 
-                getgenv().UpdateMacroStatus()
+                if currentWave > 0 and gameStarted and not currentEndGameUIState then
+                    shouldRestart = true
+                    restartReason = string.format("Game active (Wave %d)", currentWave)
+                end
                 
-                lastRestartAttempt = now
-                playMacroV2()
+                if shouldRestart then
+                    print("[Macro] 🔄 Fallback restart: " .. restartReason)
+                    restartCooldown = true
+                    
+                    getgenv().MacroCurrentStep = 0
+                    getgenv().MacroActionText = ""
+                    getgenv().MacroUnitText = ""
+                    getgenv().MacroWaitingText = ""
+                    getgenv().MacroStatusText = "Idle"
+                    
+                    getgenv().MacroGameState.gameEnded = false
+                    getgenv().MacroGameState.hasEndGameUI = false
+                    getgenv().MacroGameState.lastGameEndedState = false
+                    
+                    getgenv().UpdateMacroStatus()
+                    
+                    lastRestartAttempt = now
+                    playMacroV2()
+                    
+                    task.delay(3, function()
+                        restartCooldown = false
+                    end)
+                end
             end
         end
-        
-        lastGameStartedForMonitor = currentGameStarted
     end
 end)
 
@@ -9237,6 +9260,36 @@ getgenv().MacroRecordToggle = createToggleNoSave(
             getgenv().MacroCurrentStep = 0
             getgenv().MacroTotalSteps = 0
             
+            pcall(function()
+                local workspace = game:GetService("Workspace")
+                if workspace:FindFirstChild("Towers") then
+                    local towerCount = 0
+                    print("[Macro] Scanning for existing towers...")
+                    for _, tower in pairs(workspace.Towers:GetChildren()) do
+                        print("[Macro Debug] Found tower: " .. tower.Name)
+                        local owner = tower:FindFirstChild("Owner")
+                        if owner then
+                            print("[Macro Debug]   Owner: " .. tostring(owner.Value) .. ", LocalPlayer: " .. tostring(LocalPlayer))
+                        end
+                        if owner and owner.Value == LocalPlayer then
+                            if tower:FindFirstChild("Upgrade") then
+                                if not towerTracker.upgradeConnections[tower] then
+                                    print("[Macro] Setting up listener for existing tower: " .. tower.Name)
+                                    setupTowerUpgradeListener(tower)
+                                end
+                                towerTracker.upgradeLevels[tower] = tower.Upgrade.Value
+                                towerCount = towerCount + 1
+                                print("[Macro] Initialized upgrade level for " .. tower.Name .. ": " .. tower.Upgrade.Value)
+                            else
+                                print("[Macro Debug]   No Upgrade found for " .. tower.Name)
+                            end
+                        end
+                    end
+                    print("[Macro] Recording started - initialized " .. towerCount .. " existing towers")
+                else
+                    print("[Macro] Warning: workspace.Towers not found")
+                end
+            end)
             
             if getgenv().UpdateMacroStatus then
                 getgenv().UpdateMacroStatus()
