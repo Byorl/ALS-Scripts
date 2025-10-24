@@ -10850,6 +10850,24 @@ task.spawn(function()
             end
         end
         
+        if getgenv().BulmaWishType and MacLib.Flags["BulmaWishType"] then
+            pcall(function()
+                MacLib.Flags["BulmaWishType"]:UpdateSelection(getgenv().BulmaWishType)
+            end)
+        end
+        
+        if getgenv().SkeletonKnightTargetUnit and MacLib.Flags["SkeletonKnightTargetUnit"] then
+            pcall(function()
+                MacLib.Flags["SkeletonKnightTargetUnit"]:UpdateSelection(getgenv().SkeletonKnightTargetUnit)
+            end)
+        end
+        
+        if getgenv().AlucardHypnosisTargetUnit and MacLib.Flags["AlucardHypnosisTargetUnit"] then
+            pcall(function()
+                MacLib.Flags["AlucardHypnosisTargetUnit"]:UpdateSelection(getgenv().AlucardHypnosisTargetUnit)
+            end)
+        end
+        
     end)
 end)
 
@@ -11603,21 +11621,8 @@ getgenv()._AbilitySystemFuncs = {
     resetRoundTrackers = getgenv()._AbilityHelpers3.resetRoundTrackers
 }
 
-do
-local lastWave = 0
-local Towers = workspace:WaitForChild("Towers", 10)
-local funcs = getgenv()._AbilitySystemFuncs
-
-local function checkGameEndedReset()
-    local ok = pcall(function()
-        local endGameUI = LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
-        if endGameUI and endGameUI:FindFirstChild("Frame") then
-            funcs.resetRoundTrackers()
-        end
-    end)
-end
-
-local function processAbility(tower, unitName, abilityName, cfg, currentWave, hasBoss)
+getgenv()._ProcessAbility = function(tower, unitName, abilityName, cfg, currentWave, hasBoss)
+    local funcs = getgenv()._AbilitySystemFuncs
     local infoName = funcs.getTowerInfoName(tower) 
     local towerLevel = funcs.getUpgradeLevel(tower)
     local savedCfg = getgenv().Config.abilities[unitName] and getgenv().Config.abilities[unitName][abilityName]
@@ -11694,6 +11699,20 @@ end
 
 getgenv()._lastGameStartedForAbilities = true
 
+do
+local lastWave = 0
+local Towers = workspace:WaitForChild("Towers", 10)
+local funcs = getgenv()._AbilitySystemFuncs
+
+local function checkGameEndedReset()
+    local ok = pcall(function()
+        local endGameUI = LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
+        if endGameUI and endGameUI:FindFirstChild("Frame") then
+            funcs.resetRoundTrackers()
+        end
+    end)
+end
+
 task.spawn(function()
     while true do
         task.wait(0.3)
@@ -11703,7 +11722,7 @@ task.spawn(function()
             continue
         end
         
-        pcall(function()
+        local function processAllAbilities()
             checkGameEndedReset()
             local currentWave = funcs.getCurrentWave()
             local hasBoss = funcs.bossExists()
@@ -11745,12 +11764,14 @@ task.spawn(function()
                     local owner = tower:FindFirstChild("Owner")
                     if tower.Name == towerNameToFind and owner and owner.Value == LocalPlayer then
                         for abilityName, cfg in pairs(abilitiesConfig) do
-                            processAbility(tower, unitName, abilityName, cfg, currentWave, hasBoss)
+                            getgenv()._ProcessAbility(tower, unitName, abilityName, cfg, currentWave, hasBoss)
                         end
                     end
                 end
             end
-        end)
+        end
+        
+        pcall(processAllAbilities)
     end
 end)
 
@@ -13909,7 +13930,7 @@ local function getRewards()
     return ok and res or {}
 end
 
-local function getMatchResult()
+getgenv()._GetMatchResult = function()
     local ok, time, wave, result = pcall(function()
         local ui = LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
         if not ui then return "00:00:00", "0", "Unknown" end
@@ -13950,7 +13971,7 @@ local function getMatchResult()
     if ok then return time, wave, result else return "00:00:00", "0", "Unknown" end
 end
 
-local function getMapInfo()
+getgenv()._GetMapInfo = function()
     local ok, name, difficulty = pcall(function()
         local map = workspace:FindFirstChild("Map")
         if not map then return "Unknown Map", "Unknown" end
@@ -14065,8 +14086,8 @@ do
             local isSeamlessRestart = getgenv()._WebhookSeamlessRestart or false
             
             local rewards = getRewards()
-            local matchTime, matchWave, matchResult = getMatchResult()
-            local mapName, mapDifficulty = getMapInfo()
+            local matchTime, matchWave, matchResult = getgenv()._GetMatchResult()
+            local mapName, mapDifficulty = getgenv()._GetMapInfo()
             local clientData = getClientData()
             
             if not clientData then
@@ -17283,7 +17304,6 @@ task.spawn(function()
     end
 end)
 
-print("[ALS] ✅ GUI hover fix initialized")
 
 
 getgenv()._ButtonPressActive = false
@@ -17300,4 +17320,3 @@ task.spawn(function()
     end
 end)
 
-print("[ALS] ✅ GUI hover fix initialized - tooltips should work now")
