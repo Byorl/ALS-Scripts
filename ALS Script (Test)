@@ -2099,6 +2099,14 @@ pcall(function()
     isMac = tostring(platform):find("OSX") or tostring(platform):find("Mac")
 end)
 
+local function checkIfInLobby()
+    local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+    if not playerGui then return false end
+    
+    local lobbyUI = playerGui:FindFirstChild("LobbyUI")
+    return lobbyUI ~= nil
+end
+
 if not isMac then
     pcall(function()
         local httpService = game:GetService("HttpService")
@@ -3493,12 +3501,16 @@ local function loadMacros()
                                 warn("[Macro] ❌ Failed to convert: " .. fileName .. " (0 steps after conversion)")
                             end
                         else
-                            if type(data) == "table" and #data > 0 then
+                            if type(data) == "table" then
                                 getgenv().Macros[fileName] = data
                                 loadedCount = loadedCount + 1
-                                print("[Macro] ✅ Loaded: " .. fileName .. " (" .. #data .. " steps)")
+                                if #data > 0 then
+                                    print("[Macro] ✅ Loaded: " .. fileName .. " (" .. #data .. " steps)")
+                                else
+                                    print("[Macro] ✅ Loaded (empty): " .. fileName)
+                                end
                             else
-                                warn("[Macro] ❌ Skipped: " .. fileName .. " (empty or invalid format)")
+                                warn("[Macro] ❌ Skipped: " .. fileName .. " (invalid format)")
                             end
                         end
                     end
@@ -5079,7 +5091,7 @@ local function validateMacro(macroData)
 end
 
 local function playMacroV2()
-    if isInLobby() then
+    if checkIfInLobby() then
         print("[Macro] ⚠️ Cannot start macro in lobby")
         return
     end
@@ -11110,16 +11122,20 @@ task.spawn(function()
                 local clickMethod = "Unknown"
                 
                 local function tryGuiServiceMethod()
+                    getgenv()._ButtonPressActive = true
                     local success = pcall(function()
                         if not buttonToPress or not buttonToPress.Parent then
+                            getgenv()._ButtonPressActive = false
                             return
                         end
                         
                         if not buttonToPress:IsDescendantOf(game) then
+                            getgenv()._ButtonPressActive = false
                             return
                         end
                         
                         if not buttonToPress:IsDescendantOf(LocalPlayer.PlayerGui) then
+                            getgenv()._ButtonPressActive = false
                             return
                         end
                         
@@ -11172,6 +11188,7 @@ task.spawn(function()
                             end
                         end
                     end)
+                    getgenv()._ButtonPressActive = false
                     return success and pressSuccess
                 end
                 
@@ -11240,7 +11257,7 @@ do
     while true do
         task.wait(1)
         
-        if isInLobby() then
+        if checkIfInLobby() then
             task.wait(2)
             continue
         end
@@ -11690,7 +11707,7 @@ task.spawn(function()
     while true do
         task.wait(0.3)
         
-        if isInLobby() then
+        if checkIfInLobby() then
             task.wait(2)
             continue
         end
@@ -13023,14 +13040,6 @@ do
     end
 end)
 
-
-local function isInLobby()
-    local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
-    if not playerGui then return false end
-    
-    local lobbyUI = playerGui:FindFirstChild("LobbyUI")
-    return lobbyUI ~= nil
-end
 
 task.spawn(function()
     while true do
@@ -16914,7 +16923,7 @@ if not isInLobby then
             while true do
                 task.wait(1)
                 
-                if isInLobby() then
+                if checkIfInLobby() then
                     task.wait(2)
                     continue
                 end
@@ -17013,7 +17022,7 @@ if not isInLobby then
             while true do
                 task.wait(1)
                 
-                if isInLobby() then
+                if checkIfInLobby() then
                     task.wait(2)
                     continue
                 end
@@ -17207,3 +17216,41 @@ if not isInLobby then
 end
 end
 end
+
+
+task.spawn(function()
+    local GuiService = game:GetService("GuiService")
+    local lastClearTime = tick()
+    
+    while task.wait(0.5) do
+        pcall(function()
+
+            if tick() - lastClearTime > 1 then
+                if GuiService.SelectedObject then
+
+                    GuiService.SelectedObject = nil
+                end
+            end
+            lastClearTime = tick()
+        end)
+    end
+end)
+
+print("[ALS] ✅ GUI hover fix initialized")
+
+
+getgenv()._ButtonPressActive = false
+
+task.spawn(function()
+    local GuiService = game:GetService("GuiService")
+    
+    while task.wait(0.1) do
+        pcall(function()
+            if not getgenv()._ButtonPressActive and GuiService.SelectedObject then
+                GuiService.SelectedObject = nil
+            end
+        end)
+    end
+end)
+
+print("[ALS] ✅ GUI hover fix initialized - tooltips should work now")
