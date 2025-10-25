@@ -12350,7 +12350,7 @@ task.spawn(function()
 end)
 
 
-local GuiService = game:GetService("GuiService")
+getgenv()._GuiService = game:GetService("GuiService")
 
 getgenv()._isTeleporting = false
 
@@ -13272,16 +13272,18 @@ end
 
 getgenv()._lastGameStartedForAbilities = true
 
+getgenv()._InitializeGameSystems = function()
+
 do
-local lastWave = 0
-local Towers = workspace:WaitForChild("Towers", 10)
-local funcs = getgenv()._AbilitySystemFuncs
+getgenv()._AbilitySystem_lastWave = 0
+getgenv()._AbilitySystem_Towers = workspace:WaitForChild("Towers", 10)
+getgenv()._AbilitySystem_funcs = getgenv()._AbilitySystemFuncs
 
 getgenv()._checkGameEndedReset = function()
     local ok = pcall(function()
         local endGameUI = LocalPlayer.PlayerGui:FindFirstChild("EndGameUI")
         if endGameUI and endGameUI:FindFirstChild("Frame") then
-            funcs.resetRoundTrackers()
+            getgenv()._AbilitySystem_funcs.resetRoundTrackers()
         end
     end)
 end
@@ -13297,8 +13299,8 @@ task.spawn(function()
         
         local function processAllAbilities()
             getgenv()._checkGameEndedReset()
-            local currentWave = funcs.getCurrentWave()
-            local hasBoss = funcs.bossExists()
+            local currentWave = getgenv()._AbilitySystem_funcs.getCurrentWave()
+            local hasBoss = getgenv()._AbilitySystem_funcs.bossExists()
             
             local gameStarted = true
             pcall(function()
@@ -13309,21 +13311,21 @@ task.spawn(function()
             end)
             
             if getgenv().SeamlessFixEnabled and getgenv()._lastGameStartedForAbilities and not gameStarted then
-                funcs.resetRoundTrackers()
+                getgenv()._AbilitySystem_funcs.resetRoundTrackers()
             end
             getgenv()._lastGameStartedForAbilities = gameStarted
             
-            if currentWave < lastWave then
-                funcs.resetRoundTrackers()
+            if currentWave < getgenv()._AbilitySystem_lastWave then
+                getgenv()._AbilitySystem_funcs.resetRoundTrackers()
             end
             
-            if currentWave == 1 and lastWave > 10 then
-                funcs.resetRoundTrackers()
+            if currentWave == 1 and getgenv()._AbilitySystem_lastWave > 10 then
+                getgenv()._AbilitySystem_funcs.resetRoundTrackers()
             end
             
-            lastWave = currentWave
+            getgenv()._AbilitySystem_lastWave = currentWave
             
-            if not Towers then return end
+            if not getgenv()._AbilitySystem_Towers then return end
             if not getgenv().UnitAbilities or type(getgenv().UnitAbilities) ~= "table" then return end
             
             for unitName, abilitiesConfig in pairs(getgenv().UnitAbilities) do
@@ -13333,7 +13335,7 @@ task.spawn(function()
                     towerNameToFind = getgenv().EZAUnitMapping[unitName]
                 end
                 
-                for _, tower in pairs(Towers:GetChildren()) do
+                for _, tower in pairs(getgenv()._AbilitySystem_Towers:GetChildren()) do
                     local owner = tower:FindFirstChild("Owner")
                     if tower.Name == towerNameToFind and owner and owner.Value == LocalPlayer then
                         for abilityName, cfg in pairs(abilitiesConfig) do
@@ -19283,3 +19285,6 @@ task.spawn(function()
     end
 end)
 
+end
+
+getgenv()._InitializeGameSystems()
