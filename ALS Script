@@ -5154,8 +5154,10 @@ getgenv()._TowerTrackerPendingActions = towerTracker.pendingActions
 getgenv()._TowerUpgradeConnections = towerTracker.upgradeConnections
 
 local function cleanupTowerTracker()
-    for tower, conn in pairs(towerTracker.upgradeConnections) do
-        pcall(function() conn:Disconnect() end)
+    if towerTracker.upgradeConnections then
+        for tower, conn in pairs(towerTracker.upgradeConnections) do
+            pcall(function() conn:Disconnect() end)
+        end
     end
     towerTracker.placeCounts = {}
     towerTracker.upgradeLevels = {}
@@ -5606,19 +5608,22 @@ local function setupRecordingHook()
     
     mt.__namecall = newcclosure(function(self, ...)
         local method = getnamecallmethod()
-        local args = {...}
+        
+        local result = {oldNamecall(self, ...)}
         
         if getgenv().MacroRecordingV2 and (method == "InvokeServer" or method == "FireServer") then
-            if typeof(self) == "Instance" and (self:IsA("RemoteEvent") or self:IsA("RemoteFunction")) then
-                local remoteName = self.Name
-                
+            local args = {...}
+            task.spawn(function()
                 pcall(function()
-                    processRemoteCall(remoteName, method, args)
+                    if typeof(self) == "Instance" and (self:IsA("RemoteEvent") or self:IsA("RemoteFunction")) then
+                        local remoteName = self.Name
+                        processRemoteCall(remoteName, method, args)
+                    end
                 end)
-            end
+            end)
         end
         
-        return oldNamecall(self, ...)
+        return table.unpack(result)
     end)
     
     setreadonly(mt, true)
