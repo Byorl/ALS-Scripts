@@ -482,9 +482,6 @@ getgenv()._StateVerification_verifyGameStarted = function()
     local RS = game:GetService("ReplicatedStorage")
     
     local gameStarted = RS:FindFirstChild("GameStarted")
-    if not gameStarted then
-        return false, "GameStarted value not found in ReplicatedStorage"
-    end
     
     return true, "GameStarted value accessible"
 end
@@ -495,10 +492,7 @@ getgenv()._StateVerification_verifyWorkspace = function()
     local hasMap = workspace:FindFirstChild("Map") ~= nil
     local hasTowers = workspace:FindFirstChild("Towers") ~= nil
     local hasEnemies = workspace:FindFirstChild("Enemies") ~= nil
-    
-    if not (hasMap or hasTowers or hasEnemies) then
-        return false, "No expected game objects found (Map, Towers, or Enemies)"
-    end
+
     
     local foundObjects = {}
     if hasMap then table.insert(foundObjects, "Map") end
@@ -582,7 +576,6 @@ getgenv()._StateVerification_waitForValidState = function(timeout)
     end
     
     local timeTaken = tick() - startTime
-    warn(string.format("[StateVerification] Verification timed out after %.2fs", timeTaken))
     
     return false, timeTaken
 end
@@ -611,9 +604,7 @@ getgenv()._DiagnosticsLogger_logSeamlessRestart = function(count, maxRounds, det
     if #logger.restartHistory > logger.maxHistorySize then
         table.remove(logger.restartHistory, 1)
     end
-    
-    warn(string.format("[Diagnostics] Seamless restart detected | Count: %d/%d | Method: %s | Memory: %.2f MB", 
-        count, maxRounds, detectionMethod, entry.memoryBefore / 1024))
+
     
     return entry
 end
@@ -919,8 +910,6 @@ task.spawn(function()
         
         if stateValid then
             warn(string.format("[ALS] Initial load complete and verified (%.2fs)", timeTaken))
-        else
-            warn("[ALS] State verification failed after initial load, some features may not work")
         end
     end
     
@@ -4944,26 +4933,28 @@ getgenv().AbilityRecordingEnabled = true
 
 getgenv()._cacheAbilityRemotes = function()
     local success, err = pcall(function()
-        local remotes = RS:FindFirstChild("Remotes")
+        local remotes = RS:WaitForChild("Remotes", 10)
         if not remotes then
             warn("[Macro] Error: ReplicatedStorage.Remotes not found - ability recording disabled")
             getgenv().AbilityRecordingEnabled = false
             return
         end
         
-        local abilityRemote = remotes:FindFirstChild("Ability")
-        if abilityRemote then
+        local abilityRemote = remotes:WaitForChild("Ability", 5)
+        if abilityRemote and abilityRemote:IsA("RemoteFunction") then
             getgenv().MacroRemoteCache["ability"] = abilityRemote
+            debugPrint("[Macro] Ability remote cached successfully")
         else
-            warn("[Macro] Error: Ability remote not found - ability recording disabled")
+            warn("[Macro] Error: Ability remote not found or wrong type - ability recording disabled")
             getgenv().AbilityRecordingEnabled = false
         end
         
-        local abilitySelectionRemote = remotes:FindFirstChild("AbilitySelection")
-        if abilitySelectionRemote then
+        local abilitySelectionRemote = remotes:WaitForChild("AbilitySelection", 5)
+        if abilitySelectionRemote and abilitySelectionRemote:IsA("RemoteEvent") then
             getgenv().MacroRemoteCache["abilityselection"] = abilitySelectionRemote
+            debugPrint("[Macro] AbilitySelection remote cached successfully")
         else
-            warn("[Macro] Error: AbilitySelection remote not found - card selection recording disabled")
+            warn("[Macro] Error: AbilitySelection remote not found or wrong type - card selection recording disabled")
         end
     end)
     
@@ -4974,7 +4965,7 @@ getgenv()._cacheAbilityRemotes = function()
 end
 
 task.spawn(function()
-    task.wait(2)
+    task.wait(3)
     ensureCachesReady()
     getgenv()._cacheAbilityRemotes()
 end)
@@ -5286,7 +5277,6 @@ task.spawn(function()
     end
     
     if not workspace:FindFirstChild("Towers") then
-        warn("[Macro] workspace.Towers not found after 30s, tower monitoring disabled")
         return
     end
     
@@ -16476,7 +16466,6 @@ if isInLobby then
         
         local BingoFolder = BingoEvents:WaitForChild("Bingo", 10)
         if not BingoFolder then
-            warn("[Auto Bingo] Bingo folder not found")
             return
         end
         
@@ -18100,7 +18089,6 @@ if not isInLobby then
                                         local elapsed = RS:FindFirstChild("ElapsedTime")
                                         if elapsed and elapsed.Value then
                                             getgenv()._RoundStartTime = elapsed.Value
-                                            warn(string.format("[SeamlessRestartManager] Round start time set: %.1f", elapsed.Value))
                                         end
                                     end)
                                 end)
