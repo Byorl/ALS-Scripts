@@ -15884,11 +15884,16 @@ do
         end)
     end
     
+    if not getgenv()._lastWebhookHash then
+        getgenv()._lastWebhookHash = ""
+    end
+    
+    if not getgenv()._lastWebhookTime then
+        getgenv()._lastWebhookTime = 0
+    end
+    
     task.spawn(function()
-        local lastWebhookHash = ""
-        local lastWebhookTime = 0
         local WEBHOOK_COOLDOWN = 10
-        local isProcessing = false
     
     local function sendWebhook()
         local success, err = pcall(function()
@@ -15897,23 +15902,21 @@ do
                 return 
             end
             
+            if getgenv().WebhookProcessing and not getgenv()._ForceWebhookSend then
+                print("[Webhook] ⚠️ Already processing, skipping duplicate call")
+                return
+            end
+            
             if not getgenv()._ForceWebhookSend then
-                if isProcessing and not getgenv().WebhookProcessing then 
-                    return 
-                end
-                
                 local currentTime = tick()
-                if currentTime - lastWebhookTime < WEBHOOK_COOLDOWN then 
-                    getgenv().WebhookProcessing = false
+                if currentTime - getgenv()._lastWebhookTime < WEBHOOK_COOLDOWN then 
+                    print("[Webhook] ⏱️ Cooldown active - " .. string.format("%.1f", WEBHOOK_COOLDOWN - (currentTime - getgenv()._lastWebhookTime)) .. "s remaining")
                     return 
                 end
             end
             
-            lastWebhookTime = tick()
-            isProcessing = true
-            if not getgenv().WebhookProcessing then
-                getgenv().WebhookProcessing = true
-            end
+            getgenv()._lastWebhookTime = tick()
+            getgenv().WebhookProcessing = true
             
             local isSeamlessRestart = getgenv()._WebhookSeamlessRestart or false
             
@@ -15923,7 +15926,6 @@ do
             local clientData = getClientData()
             
             if not clientData then
-                isProcessing = false
                 getgenv().WebhookProcessing = false
                 return
             end
@@ -15970,24 +15972,18 @@ do
             end
             
             if not matchWave or matchWave == "0" or matchWave == "" then
-                task.wait(0.5)
-                isProcessing = false
                 getgenv().WebhookProcessing = false
                 return
             end
             
             if not matchResult or matchResult == "Unknown" or matchResult == "" then
                 warn("[Webhook] Invalid match result, skipping send")
-                task.wait(0.5)
-                isProcessing = false
                 getgenv().WebhookProcessing = false
                 return
             end
             
             if not matchTime or matchTime == "00:00:00" or matchTime == "" then
                 warn("[Webhook] Invalid match time, skipping send")
-                task.wait(0.5)
-                isProcessing = false
                 getgenv().WebhookProcessing = false
                 return
             end
@@ -16308,17 +16304,14 @@ do
             local timeSinceLastSend = tick() - getgenv()._lastWebhookSendTime
             if timeSinceLastSend < 5 then
                 print("[Webhook] ⏱️ Cooldown active - " .. string.format("%.1f", 5 - timeSinceLastSend) .. "s remaining")
-                task.wait(0.5)
-                isProcessing = false
                 getgenv().WebhookProcessing = false
                 return
             end
             
             local webhookHash = getgenv()._webhookSessionID .. "_" .. LocalPlayer.Name .. "_" .. matchTime .. "_" .. matchWave .. "_" .. rewardsText .. "_" .. (hasUnitDrop and unitDropName or "")
-            if webhookHash == lastWebhookHash then
+            
+            if webhookHash == getgenv()._lastWebhookHash then
                 print("[Webhook] 🔄 Duplicate detected (same as last)")
-                task.wait(0.5)
-                isProcessing = false
                 getgenv().WebhookProcessing = false
                 return
             end
@@ -16327,8 +16320,6 @@ do
                 for _, oldHash in ipairs(getgenv()._lastWebhookHashList) do
                     if oldHash == webhookHash then
                         print("[Webhook] 🔄 Duplicate detected (in history)")
-                        task.wait(0.5)
-                        isProcessing = false
                         getgenv().WebhookProcessing = false
                         return
                     end
@@ -16337,7 +16328,7 @@ do
                 getgenv()._lastWebhookHashList = {}
             end
             
-            lastWebhookHash = webhookHash
+            getgenv()._lastWebhookHash = webhookHash
             table.insert(getgenv()._lastWebhookHashList, webhookHash)
             
             if #getgenv()._lastWebhookHashList > 5 then
@@ -16399,14 +16390,11 @@ do
             end
             
             task.wait(0.5)
-            isProcessing = false
             getgenv().WebhookProcessing = false
         end)
         
         if not success then
             warn("[Webhook] ❌ Critical error in sendWebhook: " .. tostring(err))
-            task.wait(0.5)
-            isProcessing = false
             getgenv().WebhookProcessing = false
         end
     end
