@@ -1,9 +1,87 @@
 repeat task.wait() until game:IsLoaded()
 
+local missingFunctions = {}
+
+if not getnamecallmethod then
+    table.insert(missingFunctions, "getnamecallmethod")
+    getgenv().getnamecallmethod = function()
+        return "Unknown"
+    end
+    getnamecallmethod = getgenv().getnamecallmethod
+end
+
+if not newcclosure then
+    table.insert(missingFunctions, "newcclosure")
+    getgenv().newcclosure = function(f)
+        return f
+    end
+    newcclosure = getgenv().newcclosure
+end
+
+if not getrawmetatable then
+    table.insert(missingFunctions, "getrawmetatable")
+end
+
+if not setreadonly then
+    table.insert(missingFunctions, "setreadonly")
+    getgenv().setreadonly = function() end
+    setreadonly = getgenv().setreadonly
+end
+
+if not getconnections then
+    table.insert(missingFunctions, "getconnections")
+    getgenv().getconnections = function()
+        return {}
+    end
+    getconnections = getgenv().getconnections
+end
+
+if #missingFunctions > 0 then
+    warn("[ALS] Executor compatibility mode enabled. Missing functions: " .. table.concat(missingFunctions, ", "))
+    warn("[ALS] Macro recording may not work properly, but playback should function.")
+end
+
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
 repeat task.wait() until LocalPlayer
+
+task.spawn(function()
+    local RS = game:GetService("ReplicatedStorage")
+    local StarterPlayer = game:GetService("StarterPlayer")
+    
+    local afkInstancesToRemove = {
+        {parent = RS, path = {"FusionPackage", "Components", "Lobby", "AFKChamber"}},
+        {parent = RS, path = {"FusionPackage", "Stories", "Lobby", "AFKChamber.story"}},
+        {parent = RS, path = {"FusionPackage", "TestStories", "AFKChamber.story"}},
+        {parent = StarterPlayer, path = {"StarterPlayerScripts", "AFK"}}
+    }
+    
+    local removedCount = 0
+    
+    for _, instanceInfo in ipairs(afkInstancesToRemove) do
+        pcall(function()
+            local current = instanceInfo.parent
+            for i = 1, #instanceInfo.path - 1 do
+                current = current:FindFirstChild(instanceInfo.path[i])
+                if not current then return end
+            end
+            
+            if current then
+                local target = current:FindFirstChild(instanceInfo.path[#instanceInfo.path])
+                if target then
+                    target:Destroy()
+                    removedCount = removedCount + 1
+                    print("[ALS] Removed AFK instance: " .. table.concat(instanceInfo.path, "."))
+                end
+            end
+        end)
+    end
+    
+    if removedCount > 0 then
+        print("[ALS] ✅ Removed " .. removedCount .. " AFK-related instances")
+    end
+end)
 
 getgenv().DebugMode = getgenv().DebugMode or false
 
@@ -951,6 +1029,19 @@ task.spawn(function()
         end
     end
 end)
+
+getgenv()._safeGetConnections = function(signal)
+    if not getconnections then
+        return {}
+    end
+    local success, result = pcall(function()
+        return getconnections(signal)
+    end)
+    if success and result then
+        return result
+    end
+    return {}
+end
 
 local PlatformDetector = {
     executor = "Unknown",
@@ -2879,24 +2970,52 @@ local loadSuccess, loadError = pcall(function()
     
     local loadFunc, loadErr = loadstring(response)
     if not loadFunc then
+        warn("[ALS] MacLib compilation error: " .. tostring(loadErr))
+        warn("[ALS] This is usually caused by:")
+        warn("[ALS] 1. Executor compatibility issues")
+        warn("[ALS] 2. Corrupted download")
+        warn("[ALS] 3. Outdated executor")
         error("Failed to compile MacLib: " .. tostring(loadErr))
     end
     
-    MacLib = loadFunc()
+    local executeSuccess, executeResult = pcall(function()
+        return loadFunc()
+    end)
+    
+    if not executeSuccess then
+        warn("[ALS] MacLib execution error: " .. tostring(executeResult))
+        error("Failed to execute MacLib: " .. tostring(executeResult))
+    end
+    
+    MacLib = executeResult
 end)
 
 if not loadSuccess or not MacLib then
     ErrorHandler:log("ERROR", "CRITICAL: Failed to load MacLib: " .. tostring(loadError))
-    warn("[ALS] Failed to load MacLib: " .. tostring(loadError))
-    warn("[ALS] Please try rejoining the game or use a different executor.")
+    warn("[ALS] ❌ Failed to load MacLib: " .. tostring(loadError))
+    warn("[ALS] ")
+    warn("[ALS] Possible solutions:")
+    warn("[ALS] 1. Try a different executor (Wave, Solara, Electron)")
+    warn("[ALS] 2. Rejoin the game")
+    warn("[ALS] 3. Check if your executor is up to date")
+    warn("[ALS] 4. Disable any antivirus that might be blocking downloads")
+    warn("[ALS] ")
+    warn("[ALS] If the error mentions 'Expected identifier', this is a MacLib")
+    warn("[ALS] compatibility issue with your executor.")
     
     pcall(function()
         game:GetService("StarterGui"):SetCore("SendNotification", {
             Title = "ALS Script - Critical Error",
-            Text = "Failed to load MacLib. Please rejoin or use a different executor.",
-            Duration = 10
+            Text = "Failed to load MacLib. Check console (F9) for details.",
+            Duration = 15
         })
     end)
+    return
+end
+
+if not MacLib.Window then
+    warn("[ALS] ❌ MacLib loaded but missing Window function")
+    warn("[ALS] This indicates a corrupted or incompatible MacLib version")
     return
 end
 
@@ -4836,7 +4955,7 @@ getgenv().SeamlessRounds = tonumber(getgenv().Config.inputs.SeamlessRounds) or 4
 getgenv().AutoExecuteTeleportEnabled = getgenv().Config.toggles.AutoExecuteTeleport or false
 getgenv().AutoExecuteEnabled = getgenv().Config.toggles.AutoExecuteToggle or false
 
-local queueteleport = queue_on_teleport or queueonteleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport)
+local queueteleport = queue_on_teleport or queueonteleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport) or (Xeno and Xeno.queue_on_teleport)
 
 if queueteleport then
     local scriptToQueue = 'repeat task.wait() until game:IsLoaded() and game.Players.LocalPlayer; task.wait(2); loadstring(game:HttpGet("https://raw.githubusercontent.com/Byorl/ALS-Scripts/refs/heads/main/Maclib.lua"))()'
@@ -4887,6 +5006,8 @@ end
 
 getgenv().WebhookEnabled = getgenv().Config.toggles.WebhookToggle or false
 getgenv().WebhookProcessing = false
+getgenv().WebhookIncludePlayerCount = getgenv().Config.toggles.WebhookIncludePlayerCount or false
+getgenv().WebhookIncludePlayerNames = getgenv().Config.toggles.WebhookIncludePlayerNames or false
 
 getgenv().GetClientData = getClientData
 getgenv().GetTowerInfo = getTowerInfo
@@ -5141,6 +5262,44 @@ getgenv().MacroRecordingV2 = false
 getgenv().MacroDataV2 = {}
 getgenv().MacroRecordingStartTime = 0
 
+getgenv()._GetEZADisplayName = function(actualTowerName)
+    if getgenv().EZAUnitMapping then
+        for ezaName, actualName in pairs(getgenv().EZAUnitMapping) do
+            if actualName == actualTowerName then
+                return ezaName
+            end
+        end
+    end
+    
+    local clientData = getgenv().GetClientData and getgenv().GetClientData()
+    if clientData and clientData.Slots then
+        for _, slotName in ipairs({"Slot1", "Slot2", "Slot3", "Slot4", "Slot5", "Slot6"}) do
+            local slotData = clientData.Slots[slotName]
+            if slotData and slotData.Value == actualTowerName and slotData.UnitID then
+                local unitData = (clientData.UnitData and clientData.UnitData[slotData.UnitID]) or clientData[slotData.UnitID]
+                if unitData and unitData.EZA == true then
+                    return actualTowerName .. "EZA"
+                end
+            end
+        end
+    end
+    
+    return actualTowerName
+end
+
+getgenv()._GetActualTowerName = function(displayName)
+    if getgenv().EZAUnitMapping and getgenv().EZAUnitMapping[displayName] then
+        return getgenv().EZAUnitMapping[displayName]
+    end
+    
+    if displayName:match("EZA$") then
+        local actualName = displayName:gsub("EZA$", "")
+        return actualName
+    end
+    
+    return displayName
+end
+
 local towerTracker = {
     placeCounts = {},
     upgradeLevels = {},
@@ -5199,6 +5358,8 @@ local function setupTowerUpgradeListener(tower)
             towerTracker.upgradeLevels[tower] = currentLevel
             towerTracker.lastUpgradeTime[tower] = now
             
+            local displayName = getgenv()._GetEZADisplayName(towerName)
+            
             for i = 1, levelsGained do
                 local upgradeLevel = oldLevel + i - 1
                 local cost = 0
@@ -5223,7 +5384,7 @@ local function setupTowerUpgradeListener(tower)
                     Time = now - getgenv().MacroRecordingStartTime,
                     IsInvoke = true,
                     Cost = cost,
-                    TowerName = towerName,
+                    TowerName = displayName,
                     ActionType = "Upgrade",
                     Wave = getgenv().MacroGameState.currentWave
                 })
@@ -5233,7 +5394,7 @@ local function setupTowerUpgradeListener(tower)
             getgenv().MacroCurrentStep = #getgenv().MacroDataV2
             getgenv().MacroTotalSteps = #getgenv().MacroDataV2
             getgenv().MacroActionText = "Upgrade"
-            getgenv().MacroUnitText = towerName
+            getgenv().MacroUnitText = displayName
             
             if getgenv().UpdateMacroStatus then
                 getgenv().UpdateMacroStatus()
@@ -5602,6 +5763,11 @@ end
 local function setupRecordingHook()
     if namecallHook then return end
     
+    if not getrawmetatable or not getnamecallmethod or not setreadonly or not newcclosure then
+        warn("[Macro] Executor missing required functions for recording hook (getrawmetatable, getnamecallmethod, setreadonly, or newcclosure)")
+        return
+    end
+    
     local mt = getrawmetatable(game)
     local oldNamecall = mt.__namecall
     setreadonly(mt, false)
@@ -5685,6 +5851,12 @@ local function setupRecordingHook()
                                 return
                             end
                             
+                            local displayName = getgenv()._GetEZADisplayName(towerName)
+                            
+                            if displayName ~= towerName then
+                                print("[Macro Recording] EZA unit detected: " .. displayName .. " (actual: " .. towerName .. ")")
+                            end
+                            
                             local cframe = newestTower:GetPivot()
                             local savedArgs = {towerName, {cframe:GetComponents()}}
                             
@@ -5694,7 +5866,7 @@ local function setupRecordingHook()
                                 Time = now - getgenv().MacroRecordingStartTime,
                                 IsInvoke = false,
                                 Cost = cost,
-                                TowerName = towerName,
+                                TowerName = displayName,
                                 ActionType = "Place",
                                 Wave = getgenv().MacroGameState.currentWave
                             })
@@ -5703,7 +5875,7 @@ local function setupRecordingHook()
                             getgenv().MacroCurrentStep = #getgenv().MacroDataV2
                             getgenv().MacroTotalSteps = #getgenv().MacroDataV2
                             getgenv().MacroActionText = "Place"
-                            getgenv().MacroUnitText = towerName
+                            getgenv().MacroUnitText = displayName
                             
                             if getgenv().UpdateMacroStatus then
                                 getgenv().UpdateMacroStatus()
@@ -5976,9 +6148,11 @@ local function executeAction(action, retryCount)
         local towers = {}
         local allTowers = {}
         
+        local towerNameToFind = getgenv()._GetActualTowerName(action.TowerName)
+        
         for _, t in pairs(workspace.Towers:GetChildren()) do
             local owner = t:FindFirstChild("Owner")
-            if t.Name == action.TowerName and owner and owner.Value == LocalPlayer then
+            if t.Name == towerNameToFind and owner and owner.Value == LocalPlayer then
                 table.insert(allTowers, t)
                 local upgrade = t:FindFirstChild("Upgrade")
                 local maxUpgrade = t:FindFirstChild("MaxUpgrade")
@@ -6059,7 +6233,12 @@ local function executeAction(action, retryCount)
         local tower = selectedTower.tower
         local oldLevel = selectedTower.level
         
-        print("[Macro] Upgrading " .. action.TowerName .. " from level " .. oldLevel .. " (method: " .. selectionMethod .. ")")
+        local ezaInfo = ""
+        if towerNameToFind ~= action.TowerName then
+            ezaInfo = " [EZA: " .. towerNameToFind .. "]"
+        end
+        
+        print("[Macro] Upgrading " .. action.TowerName .. ezaInfo .. " from level " .. oldLevel .. " (method: " .. selectionMethod .. ")")
         
         local callSuccess = pcall(function()
             if remote:IsA("RemoteFunction") then
@@ -6091,8 +6270,10 @@ local function executeAction(action, retryCount)
     elseif action.ActionType == "Sell" then
         local allTowers = {}
         
+        local towerNameToFind = getgenv()._GetActualTowerName(action.TowerName)
+        
         for _, t in pairs(workspace.Towers:GetChildren()) do
-            if t.Name == action.TowerName and t:FindFirstChild("Owner") and t.Owner.Value == LocalPlayer then
+            if t.Name == towerNameToFind and t:FindFirstChild("Owner") and t.Owner.Value == LocalPlayer then
                 table.insert(allTowers, t)
             end
         end
@@ -6175,7 +6356,17 @@ local function executeAction(action, retryCount)
         return true, "Sold"
         
     elseif action.ActionType == "Place" then
-        local args = {action.Args[1]}
+        local unitNameToPlace = action.Args[1]
+        
+        if action.TowerName and action.TowerName:match("EZA$") then
+            local actualName = getgenv()._GetActualTowerName(action.TowerName)
+            if actualName ~= action.TowerName then
+                unitNameToPlace = actualName
+                print("[Macro] EZA unit detected: " .. action.TowerName .. " → placing as " .. actualName)
+            end
+        end
+        
+        local args = {unitNameToPlace}
         if action.Args[2] and type(action.Args[2]) == "table" and #action.Args[2] >= 3 then
             local success, cframe = pcall(function()
                 return CFrame.new(unpack(action.Args[2]))
@@ -6267,6 +6458,15 @@ local function detectMacroProgress(macroData)
             
             towerStates[towerName].count = towerStates[towerName].count + 1
             towerStates[towerName].maxLevel = math.max(towerStates[towerName].maxLevel, level)
+            
+            local ezaDisplayName = getgenv()._GetEZADisplayName(towerName)
+            if ezaDisplayName ~= towerName then
+                if not towerStates[ezaDisplayName] then
+                    towerStates[ezaDisplayName] = {count = 0, maxLevel = 0}
+                end
+                towerStates[ezaDisplayName].count = towerStates[ezaDisplayName].count + 1
+                towerStates[ezaDisplayName].maxLevel = math.max(towerStates[ezaDisplayName].maxLevel, level)
+            end
         end
     end
     
@@ -6868,7 +7068,7 @@ end
 
 local autoJoinModeList = {"Story", "Infinite", "Challenge", "LegendaryStages", "Raids", "Dungeon", "Survival", "ElementalCaverns", "BossRush", "Siege"}
 
-local autoJoinMapDropdown = nil
+getgenv()._autoJoinMapDropdown = nil
 
 local modeDefault = 1
 if getgenv().AutoJoinConfig.mode then
@@ -6898,12 +7098,12 @@ local modeSuccess, modeErr = pcall(function()
             if #maps == 0 then
                 maps = {"No Maps Available"}
             end
-            if autoJoinMapDropdown then
+            if getgenv()._autoJoinMapDropdown then
                 pcall(function()
-                    autoJoinMapDropdown:ClearOptions()
-                    autoJoinMapDropdown:InsertOptions(maps)
+                    getgenv()._autoJoinMapDropdown:ClearOptions()
+                    getgenv()._autoJoinMapDropdown:InsertOptions(maps)
                     if #maps > 0 then
-                        autoJoinMapDropdown:UpdateSelection(1)
+                        getgenv()._autoJoinMapDropdown:UpdateSelection(1)
                         getgenv().AutoJoinConfig.map = maps[1]
                         getgenv().Config.autoJoin.map = maps[1]
                         saveConfig(getgenv().Config)
@@ -6945,7 +7145,7 @@ end
 
 
 local mapSuccess, mapErr = pcall(function()
-    autoJoinMapDropdown = createDropdown(
+    getgenv()._autoJoinMapDropdown = createDropdown(
         Sections.MainLeft,
         "Map",
         "AutoJoinMap",
@@ -10170,7 +10370,7 @@ end
 Sections.MacroLeft:Header({ Text = "📁 Macro Management" })
 Sections.MacroLeft:SubLabel({ Text = "Create, select, and manage your macros" })
 
-local macroDropdown = createDropdown(
+getgenv()._macroDropdown = createDropdown(
     Sections.MacroLeft,
     "Select Macro",
     "MacroSelect",
@@ -10193,7 +10393,7 @@ local macroDropdown = createDropdown(
     getgenv().CurrentMacro
 )
 
-local macroCreateInput = createInput(
+getgenv()._macroCreateInput = createInput(
     Sections.MacroLeft,
     "Create New Macro",
     "MacroCreateNew",
@@ -10222,11 +10422,11 @@ local macroCreateInput = createInput(
         if success then
             loadMacros()
             local macroNames = getMacroNames()
-            if macroDropdown then
+            if getgenv()._macroDropdown then
                 pcall(function()
-                    macroDropdown:ClearOptions()
-                    macroDropdown:InsertOptions(macroNames)
-                    macroDropdown:UpdateSelection(value)
+                    getgenv()._macroDropdown:ClearOptions()
+                    getgenv()._macroDropdown:InsertOptions(macroNames)
+                    getgenv()._macroDropdown:UpdateSelection(value)
                 end)
             end
             getgenv().CurrentMacro = value
@@ -10264,10 +10464,10 @@ Sections.MacroLeft:Button({
     Callback = function()
         loadMacros()
         local macroNames = getMacroNames()
-        if macroDropdown then
+        if getgenv()._macroDropdown then
             pcall(function()
-                macroDropdown:ClearOptions()
-                macroDropdown:InsertOptions(macroNames)
+                getgenv()._macroDropdown:ClearOptions()
+                getgenv()._macroDropdown:InsertOptions(macroNames)
             end)
         end
         Window:Notify({
@@ -10465,7 +10665,7 @@ Sections.MacroLeft:Divider()
 Sections.MacroLeft:Header({ Text = "📥 Macro Import" })
 Sections.MacroLeft:SubLabel({ Text = "Import macros from Discord links" })
 
-local macroImportInput = createInput(
+getgenv()._macroImportInput = createInput(
     Sections.MacroLeft,
     "Import Link",
     "MacroImportLink",
@@ -10539,11 +10739,11 @@ Sections.MacroLeft:Button({
         if saveSuccess then
             loadMacros()
             local macroNames = getMacroNames()
-            if macroDropdown then
+            if getgenv()._macroDropdown then
                 pcall(function()
-                    macroDropdown:ClearOptions()
-                    macroDropdown:InsertOptions(macroNames)
-                    macroDropdown:UpdateSelection(macroName)
+                    getgenv()._macroDropdown:ClearOptions()
+                    getgenv()._macroDropdown:InsertOptions(macroNames)
+                    getgenv()._macroDropdown:UpdateSelection(macroName)
                 end)
             end
             
@@ -10650,11 +10850,11 @@ getgenv().MacroRecordToggle = createToggleNoSave(
                 if success then
                     loadMacros()
                     local macroNames = getMacroNames()
-                    if macroDropdown then
+                    if getgenv()._macroDropdown then
                         pcall(function()
-                            macroDropdown:ClearOptions()
-                            macroDropdown:InsertOptions(macroNames)
-                            macroDropdown:UpdateSelection(getgenv().CurrentMacro)
+                            getgenv()._macroDropdown:ClearOptions()
+                            getgenv()._macroDropdown:InsertOptions(macroNames)
+                            getgenv()._macroDropdown:UpdateSelection(getgenv().CurrentMacro)
                         end)
                     end
                     
@@ -10857,7 +11057,7 @@ end
 local savedGamemode = getgenv().Config.dropdowns.MacroMapsGamemode or "Story"
 selectedGamemode = savedGamemode
 
-local gamemodeDropdown = createDropdown(
+getgenv()._gamemodeDropdown = createDropdown(
     Sections.MacroRight,
     "Select Gamemode",
     "MacroMapsGamemode",
@@ -10991,6 +11191,44 @@ createToggle(
     getgenv().PingOnSecretDrop
 )
 
+Sections.WebhookLeft:Divider()
+
+Sections.WebhookLeft:Header({ Text = "👥 Server Information" })
+Sections.WebhookLeft:SubLabel({ Text = "Include player information in webhooks" })
+
+getgenv().WebhookIncludePlayerCount = getgenv().Config.toggles.WebhookIncludePlayerCount or false
+getgenv().WebhookIncludePlayerNames = getgenv().Config.toggles.WebhookIncludePlayerNames or false
+
+createToggle(
+    Sections.WebhookLeft,
+    "Include Player Count",
+    "WebhookIncludePlayerCount",
+    function(value)
+        getgenv().WebhookIncludePlayerCount = value
+        Window:Notify({
+            Title = "Player Count",
+            Description = value and "Will show in webhooks" or "Hidden from webhooks",
+            Lifetime = 3
+        })
+    end,
+    getgenv().WebhookIncludePlayerCount
+)
+
+createToggle(
+    Sections.WebhookLeft,
+    "Display Player Names",
+    "WebhookIncludePlayerNames",
+    function(value)
+        getgenv().WebhookIncludePlayerNames = value
+        Window:Notify({
+            Title = "Player Names",
+            Description = value and "Will show in webhooks" or "Hidden from webhooks",
+            Lifetime = 3
+        })
+    end,
+    getgenv().WebhookIncludePlayerNames
+)
+
 
 Sections.MiscLeft:Header({ Text = "⚡ Performance" })
 Sections.MiscLeft:SubLabel({ Text = "Boost FPS and reduce lag" })
@@ -11104,7 +11342,7 @@ createToggle(
     function(value)
         getgenv().AutoExecuteEnabled = value
         
-        local queueteleport = queue_on_teleport or queueonteleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport)
+        local queueteleport = queue_on_teleport or queueonteleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport) or (Xeno and Xeno.queue_on_teleport)
         
         if value and queueteleport then
             local scriptToQueue = 'repeat task.wait() until game:IsLoaded() and game.Players.LocalPlayer; task.wait(2); loadstring(game:HttpGet("https://raw.githubusercontent.com/Byorl/ALS-Scripts/refs/heads/main/Maclib.lua"))()'
@@ -11782,7 +12020,7 @@ createToggle(
     getgenv().FinalExpAutoJoinEasyEnabled
 )
 
-local finalExpHardToggle = createToggle(
+getgenv()._finalExpHardToggle = createToggle(
     Sections.FinalExpeditionLeft,
     "Auto Join Hard",
     "FinalExpAutoJoinHardToggle",
@@ -11807,7 +12045,7 @@ local finalExpHardToggle = createToggle(
     getgenv().FinalExpAutoJoinHardEnabled
 )
 
-getgenv().FinalExpAutoJoinHardToggle = finalExpHardToggle
+getgenv().FinalExpAutoJoinHardToggle = getgenv()._finalExpHardToggle
 
 Sections.FinalExpeditionLeft:SubLabel({
     Text = "⚠️ Only enable ONE auto join option at a time"
@@ -12051,7 +12289,7 @@ Sections.SeamlessFixRight:SubLabel({
     Text = "Automatically reroll enchants on your units until you get the desired one"
 })
 
-local autoEnchantSuccess, autoEnchantErr = pcall(function()
+getgenv()._autoEnchantSuccess, getgenv()._autoEnchantErr = pcall(function()
     createToggle(
         Sections.SeamlessFixRight,
         "Auto Enchant",
@@ -12067,7 +12305,7 @@ local autoEnchantSuccess, autoEnchantErr = pcall(function()
         false
     )
     
-    local unitDropdown = createDropdown(
+    getgenv()._autoEnchantUnitDropdown = createDropdown(
         Sections.SeamlessFixRight,
         "Unit Selection",
         "AutoEnchantUnit",
@@ -12092,10 +12330,10 @@ local autoEnchantSuccess, autoEnchantErr = pcall(function()
             table.insert(unitOptions, "No units found")
         end
         
-        if unitDropdown and unitDropdown.ClearOptions and unitDropdown.InsertOptions then
+        if getgenv()._autoEnchantUnitDropdown and getgenv()._autoEnchantUnitDropdown.ClearOptions and getgenv()._autoEnchantUnitDropdown.InsertOptions then
             pcall(function()
-                unitDropdown:ClearOptions()
-                unitDropdown:InsertOptions(unitOptions)
+                getgenv()._autoEnchantUnitDropdown:ClearOptions()
+                getgenv()._autoEnchantUnitDropdown:InsertOptions(unitOptions)
             end)
         end
     end)
@@ -12124,8 +12362,8 @@ local autoEnchantSuccess, autoEnchantErr = pcall(function()
         getgenv().AutoEnchantDesiredEnchants
     )
 end)
-if not autoEnchantSuccess then
-    warn("[UI ERROR] Auto Enchant UI failed:", autoEnchantErr)
+if not getgenv()._autoEnchantSuccess then
+    warn("[UI ERROR] Auto Enchant UI failed:", getgenv()._autoEnchantErr)
 end
 
 
@@ -15732,7 +15970,6 @@ do
             end
             
             if not matchWave or matchWave == "0" or matchWave == "" then
-                warn("[Webhook] Invalid wave data, skipping send")
                 task.wait(0.5)
                 isProcessing = false
                 getgenv().WebhookProcessing = false
@@ -16021,16 +16258,37 @@ do
                 embedColor = 0xff0000
             end
             
+            local embedFields = {
+                { name = "Player Stats", value = (formatStats() ~= "" and formatStats() or "N/A"), inline = true },
+                { name = "Rewards", value = (rewardsText ~= "" and rewardsText or "No rewards found"), inline = true },
+                { name = "Units", value = (unitsText ~= "" and unitsText or "No units"), inline = false },
+                { name = "Match Result", value = (matchTime or "00:00:00") .. " - Wave " .. tostring(matchWave or "0") .. "\n" .. (mapName or "Unknown Map") .. ((mapDifficulty and mapDifficulty ~= "Unknown") and (" [" .. mapDifficulty .. "]") or "") .. " - " .. (matchResult or "Unknown"), inline = false }
+            }
+            
+            if getgenv().WebhookIncludePlayerCount or getgenv().WebhookIncludePlayerNames then
+                local playerInfo = ""
+                local playerCount = #Players:GetPlayers()
+                
+                if getgenv().WebhookIncludePlayerCount then
+                    playerInfo = "**Players in Server:** " .. playerCount .. "/12\n"
+                end
+                
+                if getgenv().WebhookIncludePlayerNames then
+                    local playerNames = {}
+                    for _, player in ipairs(Players:GetPlayers()) do
+                        table.insert(playerNames, player.DisplayName .. " (@" .. player.Name .. ")")
+                    end
+                    playerInfo = playerInfo .. "**Players:**\n" .. table.concat(playerNames, "\n")
+                end
+                
+                table.insert(embedFields, { name = "Server Info", value = playerInfo, inline = false })
+            end
+            
             local embed = {
                 title = "Anime Last Stand",
                 description = description or "N/A",
                 color = embedColor,
-                fields = {
-                    { name = "Player Stats", value = (formatStats() ~= "" and formatStats() or "N/A"), inline = true },
-                    { name = "Rewards", value = (rewardsText ~= "" and rewardsText or "No rewards found"), inline = true },
-                    { name = "Units", value = (unitsText ~= "" and unitsText or "No units"), inline = false },
-                    { name = "Match Result", value = (matchTime or "00:00:00") .. " - Wave " .. tostring(matchWave or "0") .. "\n" .. (mapName or "Unknown Map") .. ((mapDifficulty and mapDifficulty ~= "Unknown") and (" [" .. mapDifficulty .. "]") or "") .. " - " .. (matchResult or "Unknown"), inline = false }
-                },
+                fields = embedFields,
                 footer = { text = "Byorl Last Stand | https://discord.gg/V3WcdHpd3J" }
             }
             
@@ -16354,7 +16612,6 @@ do
             if child.Name == "EndGameUI" then
                 task.wait(1)
                 if getgenv().WebhookProcessing then
-                warn("[Webhook] Force clearing WebhookProcessing flag due to UI removal")
                 getgenv().WebhookProcessing = false
             end
             
@@ -17134,14 +17391,39 @@ do
             end
             
             GuiService.SelectedObject = nil
-            task.wait(0.1)
+            task.wait(0.15)
             
             GuiService.SelectedObject = button
-            task.wait(0.2)
             
-            VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
-            task.wait(0.05)
-            VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
+            local lockConnection
+            lockConnection = RunService.Heartbeat:Connect(function()
+                pcall(function()
+                    if button and button.Parent and GuiService.SelectedObject ~= button then
+                        GuiService.SelectedObject = button
+                    end
+                end)
+            end)
+            
+            task.wait(0.35)
+            
+            local cardSelected = false
+            if GuiService.SelectedObject == button then
+                VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
+                task.wait(0.05)
+                VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
+                cardSelected = true
+                
+                if lockConnection then
+                    lockConnection:Disconnect()
+                end
+                
+                GuiService.SelectedObject = nil
+            else
+                if lockConnection then
+                    lockConnection:Disconnect()
+                end
+                return false
+            end
             
             task.wait(0.3)
             
@@ -18128,7 +18410,6 @@ if not isInLobby then
                                     local elapsed = RS:FindFirstChild("ElapsedTime")
                                     if elapsed and elapsed.Value then
                                         getgenv()._RoundStartTime = elapsed.Value
-                                        warn(string.format("[SeamlessRestartManager] Round start time set (EndGameUI): %.1f", elapsed.Value))
                                     end
                                 end)
                             end)
