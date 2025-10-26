@@ -17539,20 +17539,40 @@ if isInLobby then
                 continue
             end
             
-            if true then
+            if getgenv().Capsule2Enabled then
                 local clientData = getClientData()
                 if clientData then
                     local candyBasket = clientData.CandyBasket or 0
                     
-                    if candyBasket >= 100000 then
-                        pcall(function() Purchase:InvokeServer(1, 100) end)
-                    elseif candyBasket >= 10000 then
-                        pcall(function() Purchase:InvokeServer(1, 10) end)
-                    elseif candyBasket >= 1000 then
-                        pcall(function() Purchase:InvokeServer(1, 1) end)
+                    local eventsFolder = RS:FindFirstChild("Events")
+                    local halloweenFolder = eventsFolder and eventsFolder:FindFirstChild("Hallowen2025")
+                    local purchaseEvent = halloweenFolder and halloweenFolder:FindFirstChild("PurchaseEvent")
+                    
+                    if purchaseEvent then
+                        if candyBasket >= 750000 then
+                            pcall(function() 
+                                purchaseEvent:InvokeServer(1, 1000, "Hallowen2025_P2")
+                                print("[Auto Capsule 2] Purchased 1000 capsules")
+                            end)
+                        elseif candyBasket >= 75000 then
+                            pcall(function() 
+                                purchaseEvent:InvokeServer(1, 100, "Hallowen2025_P2")
+                                print("[Auto Capsule 2] Purchased 100 capsules")
+                            end)
+                        elseif candyBasket >= 7500 then
+                            pcall(function() 
+                                purchaseEvent:InvokeServer(1, 10, "Hallowen2025_P2")
+                                print("[Auto Capsule 2] Purchased 10 capsules")
+                            end)
+                        elseif candyBasket >= 750 then
+                            pcall(function() 
+                                purchaseEvent:InvokeServer(1, 1, "Hallowen2025_P2")
+                                print("[Auto Capsule 2] Purchased 1 capsule")
+                            end)
+                        end
                     end
                     
-                    if candyBasket < 1000 then
+                    if candyBasket < 750 then
                         clientData = getClientData()
                         local capsuleAmount = 0
                         if clientData and clientData.ItemData and clientData.ItemData.HalloweenCapsule2025 then
@@ -17560,11 +17580,15 @@ if isInLobby then
                         end
                         
                         if capsuleAmount > 0 then
-                            pcall(function()
-                                OpenCapsule:FireServer("HalloweenCapsule2025", capsuleAmount)
-                            end)
-                            task.wait(0.5)
-                            clickAllPromptButtons()
+                            local openCapsuleEvent = halloweenFolder and halloweenFolder:FindFirstChild("OpenCapsule")
+                            if openCapsuleEvent then
+                                pcall(function()
+                                    openCapsuleEvent:FireServer("HalloweenCapsule2025", capsuleAmount)
+                                    print("[Auto Capsule 2] Opened " .. capsuleAmount .. " capsules")
+                                end)
+                                task.wait(0.5)
+                                clickAllPromptButtons()
+                            end
                         end
                     end
                 end
