@@ -2862,9 +2862,9 @@ if not getgenv()._AutoRejoinSetup then
         
         pcall(function()
             if queueteleport then
-                queueteleport('loadstring(game:HttpGet("https://raw.githubusercontent.com/Byorl/ALS-Scripts/refs/heads/main/Maclib.lua"))()')
+                queueteleport('loadstring(game:HttpGet("https://raw.githubusercontent.com/Byorl/ALS-Scripts/refs/heads/main/ALS%20Halloween%20UI.lua"))()')
             elseif queue_on_teleport then
-                queue_on_teleport('loadstring(game:HttpGet("https://raw.githubusercontent.com/Byorl/ALS-Scripts/refs/heads/main/Maclib.lua"))()')
+                queue_on_teleport('loadstring(game:HttpGet("https://raw.githubusercontent.com/Byorl/ALS-Scripts/refs/heads/main/ALS%20Halloween%20UI.lua"))()')
             end
         end)
         
@@ -4958,7 +4958,7 @@ getgenv().AutoExecuteEnabled = getgenv().Config.toggles.AutoExecuteToggle or fal
 local queueteleport = queue_on_teleport or queueonteleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport) or (Xeno and Xeno.queue_on_teleport)
 
 if queueteleport then
-    local scriptToQueue = 'repeat task.wait() until game:IsLoaded() and game.Players.LocalPlayer; task.wait(2); loadstring(game:HttpGet("https://raw.githubusercontent.com/Byorl/ALS-Scripts/refs/heads/main/Maclib.lua"))()'
+    local scriptToQueue = 'repeat task.wait() until game:IsLoaded() and game.Players.LocalPlayer; task.wait(2); loadstring(game:HttpGet("https://raw.githubusercontent.com/Byorl/ALS-Scripts/refs/heads/main/ALS%20Halloween%20UI.lua"))()'
     
     LocalPlayer.OnTeleport:Connect(function(State)
         if getgenv().AutoExecuteEnabled then
