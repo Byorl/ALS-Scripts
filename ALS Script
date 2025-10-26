@@ -3097,7 +3097,8 @@ local ConfigManager = {
                 ["Speedy"] = 3,
                 ["No Hit"] = 4,
                 ["Flight"] = 5,
-                ["Short Range"] = 6
+                ["Short Range"] = 6,
+                ["High Cost"] = 7
             }
         },
         loadingScreenMonitor = {
@@ -3155,7 +3156,8 @@ function ConfigManager:migrateConfig(data)
             ["Speedy"] = 3,
             ["No Hit"] = 4,
             ["Flight"] = 5,
-            ["Short Range"] = 6
+            ["Short Range"] = 6,
+            ["High Cost"] = 7
         }
         ErrorHandler:log("INFO", "Migrated config from version 1 to 2")
     end
@@ -4781,6 +4783,28 @@ local function getClientData()
         return nil
     end)
     return ok and data or nil
+end
+
+local function getUnitEnchantDiscount(unitName)
+    local clientData = getClientData()
+    if not clientData or not clientData.Slots or not clientData.UnitData then 
+        return 1.0
+    end
+    
+    for slotName, slotData in pairs(clientData.Slots) do
+        if slotData and slotData.Value == unitName and slotData.UnitID then
+            local unitData = clientData.UnitData[slotData.UnitID]
+            if unitData and unitData.Enchant then
+                local enchant = unitData.Enchant
+                if enchant == "Midas" or enchant == "Efficiency" then
+                    return 0.8
+                end
+            end
+            break
+        end
+    end
+    
+    return 1.0
 end
 
 local function getEZATowerName(baseTowerName)
@@ -6787,6 +6811,28 @@ local function playMacroV2()
             local cash = tonumber(getgenv().MacroCurrentCash) or 0
             local cost = tonumber(action.Cost) or 0
             
+            if cost > 0 and action.TowerName and (action.ActionType == "Place" or action.ActionType == "Upgrade") then
+                local enchantDiscount = getUnitEnchantDiscount(action.TowerName)
+                if enchantDiscount < 1.0 then
+                    local baseCost = 0
+                    
+                    if action.ActionType == "Place" then
+                        baseCost = getgenv().GetPlaceCost(action.TowerName)
+                    elseif action.ActionType == "Upgrade" then
+                        local currentLevel = action.CurrentLevel or 0
+                        baseCost = getgenv().GetUpgradeCost(action.TowerName, currentLevel)
+                    end
+                    
+                    if baseCost > 0 then
+                        local expectedDiscountedCost = math.floor(baseCost * enchantDiscount)
+                        
+                        if math.abs(cost - baseCost) < baseCost * 0.05 then
+                            cost = expectedDiscountedCost
+                        end
+                    end
+                end
+            end
+            
             local shouldSkipStep = false
             
             if cost > 0 and cash < cost then
@@ -7910,7 +7956,8 @@ getgenv().PortalConfig = {
         ["Speedy"] = 0,
         ["No Hit"] = 0,
         ["Flight"] = 0,
-        ["Short Range"] = 0
+        ["Short Range"] = 0,
+        ["High Cost"] = 0
     }
 }
 getgenv().Config.portals = getgenv().PortalConfig
@@ -8071,13 +8118,13 @@ Sections.PortalsRight:SubLabel({
 Sections.PortalsRight:Divider()
 
 Sections.PortalsLeft:Header({ Text = "🎯 Challenge Priority" })
-Sections.PortalsLeft:SubLabel({ Text = "Assign priority (1-6) to each challenge. 1 = highest priority, 0 = ignore" })
+Sections.PortalsLeft:SubLabel({ Text = "Assign priority (1-7) to each challenge. 1 = highest priority, 0 = ignore" })
 
 createInput(
     Sections.PortalsLeft,
     "Tower Limit",
     "PortalPriority_TowerLimit",
-    "1-6 or 0 to ignore",
+    "1-7 or 0 to ignore",
     "Numeric",
     function(value)
         local num = tonumber(value) or 0
@@ -8092,7 +8139,7 @@ createInput(
     Sections.PortalsLeft,
     "Immunity",
     "PortalPriority_Immunity",
-    "1-6 or 0 to ignore",
+    "1-7 or 0 to ignore",
     "Numeric",
     function(value)
         local num = tonumber(value) or 0
@@ -8107,7 +8154,7 @@ createInput(
     Sections.PortalsLeft,
     "Speedy",
     "PortalPriority_Speedy",
-    "1-6 or 0 to ignore",
+    "1-7 or 0 to ignore",
     "Numeric",
     function(value)
         local num = tonumber(value) or 0
@@ -8122,7 +8169,7 @@ createInput(
     Sections.PortalsLeft,
     "No Hit",
     "PortalPriority_NoHit",
-    "1-6 or 0 to ignore",
+    "1-7 or 0 to ignore",
     "Numeric",
     function(value)
         local num = tonumber(value) or 0
@@ -8137,7 +8184,7 @@ createInput(
     Sections.PortalsLeft,
     "Flight",
     "PortalPriority_Flight",
-    "1-6 or 0 to ignore",
+    "1-7 or 0 to ignore",
     "Numeric",
     function(value)
         local num = tonumber(value) or 0
@@ -8152,7 +8199,7 @@ createInput(
     Sections.PortalsLeft,
     "Short Range",
     "PortalPriority_ShortRange",
-    "1-6 or 0 to ignore",
+    "1-7 or 0 to ignore",
     "Numeric",
     function(value)
         local num = tonumber(value) or 0
@@ -8161,6 +8208,21 @@ createInput(
         saveConfig(getgenv().Config)
     end,
     tostring(getgenv().PortalConfig.priorities["Short Range"])
+)
+
+createInput(
+    Sections.PortalsLeft,
+    "High Cost",
+    "PortalPriority_HighCost",
+    "1-7 or 0 to ignore",
+    "Numeric",
+    function(value)
+        local num = tonumber(value) or 0
+        getgenv().PortalConfig.priorities["High Cost"] = num
+        getgenv().Config.portals.priorities["High Cost"] = num
+        saveConfig(getgenv().Config)
+    end,
+    tostring(getgenv().PortalConfig.priorities["High Cost"])
 )
 
 
@@ -12788,8 +12850,7 @@ if not isInLobby then
                                                     end
                                                 end
                                             end
-                                            
-                                            warn("[Wave Restart] Updated initial data for next round")
+
                                         end
                                     end)
                                 end)
