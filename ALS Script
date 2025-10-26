@@ -8332,6 +8332,101 @@ if isInLobby then
     )
     
     Sections.EventLeft:Divider()
+    
+    Sections.EventLeft:Header({ Text = "💰 Auto Sell Capsule Units" })
+    Sections.EventLeft:SubLabel({ Text = "Automatically sell specific units from Event 1 capsules" })
+    
+    getgenv().AutoSellEvent1CapsuleEnabled = getgenv().Config.toggles.AutoSellEvent1CapsuleEnabled or false
+    getgenv().AutoSellEvent1CapsuleUnits = getgenv().Config.dropdowns.AutoSellEvent1CapsuleUnits or {}
+    
+    if not getgenv()._Event1CapsuleUnitCache then
+        getgenv()._Event1CapsuleUnitCache = {}
+    end
+    
+    local function initializeEvent1CapsuleCache()
+        local clientData = getgenv().GetClientData and getgenv().GetClientData()
+        if clientData and clientData.UnitData then
+            getgenv()._Event1CapsuleUnitCache = {}
+            for unitID, unitData in pairs(clientData.UnitData) do
+                if unitData.UnitName then
+                    getgenv()._Event1CapsuleUnitCache[unitID] = {
+                        UnitName = unitData.UnitName,
+                        ObtainTime = unitData.ObtainTime or 0
+                    }
+                end
+            end
+            print("[Auto Sell Event1 Capsule] Cached " .. #getgenv()._Event1CapsuleUnitCache .. " existing units")
+        end
+    end
+    
+    task.spawn(function()
+        task.wait(3)
+        initializeEvent1CapsuleCache()
+    end)
+    
+    local event1CapsuleUnitList = {
+        "MobUnevo",
+        "LightUnevo",
+        "LelouchUnevo",
+        "LelouchUnevoShiny"
+    }
+    
+    local function getEvent1UnitDisplayNames()
+        local displayNames = {}
+        local unitNameModule = getgenv().GetAllAbilities and getgenv().GetAllAbilities()
+        
+        for _, unitName in ipairs(event1CapsuleUnitList) do
+            local displayName = unitName
+            if unitNameModule and unitNameModule[unitName] then
+                displayName = unitNameModule[unitName].displayName or unitName
+            end
+            table.insert(displayNames, displayName)
+        end
+        
+        return displayNames
+    end
+    
+    createToggle(
+        Sections.EventLeft,
+        "Auto Sell Capsule Units",
+        "AutoSellEvent1CapsuleEnabled",
+        function(value)
+            getgenv().AutoSellEvent1CapsuleEnabled = value
+            Window:Notify({
+                Title = "Auto Sell Event1 Capsule",
+                Description = value and "Enabled - Will sell selected units" or "Disabled",
+                Lifetime = 3
+            })
+            
+            if value then
+                initializeEvent1CapsuleCache()
+            end
+        end,
+        getgenv().AutoSellEvent1CapsuleEnabled
+    )
+    
+    createDropdown(
+        Sections.EventLeft,
+        "Units to Sell",
+        "AutoSellEvent1CapsuleUnits",
+        getEvent1UnitDisplayNames(),
+        true,
+        function(value)
+            getgenv().AutoSellEvent1CapsuleUnits = value
+            local selectedCount = 0
+            for _, selected in pairs(value) do
+                if selected then selectedCount = selectedCount + 1 end
+            end
+            Window:Notify({
+                Title = "Auto Sell Units",
+                Description = selectedCount .. " units selected for auto-sell",
+                Lifetime = 3
+            })
+        end,
+        getgenv().AutoSellEvent1CapsuleUnits
+    )
+    
+    Sections.EventLeft:Divider()
 end
 
 local eventHeaderSuccess, eventHeaderErr = pcall(function()
@@ -8581,6 +8676,102 @@ createInput(
         })
     end,
     tostring(getgenv().InfiniteRestartWave or 50)
+)
+
+Sections.Event2Right:Divider()
+Sections.Event2Right:Header({ Text = "💰 Auto Sell Capsule Units" })
+Sections.Event2Right:SubLabel({ Text = "Automatically sell specific units from capsules" })
+
+getgenv().AutoSellCapsuleEnabled = getgenv().Config.toggles.AutoSellCapsuleEnabled or false
+getgenv().AutoSellCapsuleUnits = getgenv().Config.dropdowns.AutoSellCapsuleUnits or {}
+
+if not getgenv()._CapsuleUnitCache then
+    getgenv()._CapsuleUnitCache = {}
+end
+
+local function initializeCapsuleCache()
+    local clientData = getgenv().GetClientData and getgenv().GetClientData()
+    if clientData and clientData.UnitData then
+        getgenv()._CapsuleUnitCache = {}
+        for unitID, unitData in pairs(clientData.UnitData) do
+            if unitData.UnitName then
+                getgenv()._CapsuleUnitCache[unitID] = {
+                    UnitName = unitData.UnitName,
+                    ObtainTime = unitData.ObtainTime or 0
+                }
+            end
+        end
+        print("[Auto Sell Capsule] Cached " .. #getgenv()._CapsuleUnitCache .. " existing units")
+    end
+end
+
+task.spawn(function()
+    task.wait(3)
+    initializeCapsuleCache()
+end)
+
+local capsuleUnitList = {
+    "ZamasuBlackGokuRoseUnevo",
+    "AinzAlbedoUnevo",
+    "SimonUnevo",
+    "GokuVegitaSSJ4Unevo",
+    "RimuruGodlyUnevo",
+    "RimuruGodlyUnevoShiny"
+}
+
+local function getUnitDisplayNames()
+    local displayNames = {}
+    local unitNameModule = getgenv().GetAllAbilities and getgenv().GetAllAbilities()
+    
+    for _, unitName in ipairs(capsuleUnitList) do
+        local displayName = unitName
+        if unitNameModule and unitNameModule[unitName] then
+            displayName = unitNameModule[unitName].displayName or unitName
+        end
+        table.insert(displayNames, displayName)
+    end
+    
+    return displayNames
+end
+
+createToggle(
+    Sections.Event2Right,
+    "Auto Sell Capsule Units",
+    "AutoSellCapsuleEnabled",
+    function(value)
+        getgenv().AutoSellCapsuleEnabled = value
+        Window:Notify({
+            Title = "Auto Sell Capsule",
+            Description = value and "Enabled - Will sell selected units" or "Disabled",
+            Lifetime = 3
+        })
+        
+        if value then
+            initializeCapsuleCache()
+        end
+    end,
+    getgenv().AutoSellCapsuleEnabled
+)
+
+createDropdown(
+    Sections.Event2Right,
+    "Units to Sell",
+    "AutoSellCapsuleUnits",
+    getUnitDisplayNames(),
+    true,
+    function(value)
+        getgenv().AutoSellCapsuleUnits = value
+        local selectedCount = 0
+        for _, selected in pairs(value) do
+            if selected then selectedCount = selectedCount + 1 end
+        end
+        Window:Notify({
+            Title = "Auto Sell Units",
+            Description = selectedCount .. " units selected for auto-sell",
+            Lifetime = 3
+        })
+    end,
+    getgenv().AutoSellCapsuleUnits
 )
 
 
@@ -13694,6 +13885,172 @@ task.spawn(function()
     end
 end)
 
+end
+
+
+do
+    task.spawn(function()
+        local lastCheckTime = 0
+        
+        while true do
+            task.wait(2)
+            
+            if getgenv().AutoSellCapsuleEnabled then
+                pcall(function()
+                    local now = tick()
+                    if now - lastCheckTime < 5 then return end
+                    lastCheckTime = now
+                    
+                    local clientData = getgenv().GetClientData and getgenv().GetClientData()
+                    if not clientData or not clientData.UnitData then return end
+                    
+                    local unitsToSell = {}
+                    
+                    for unitID, unitData in pairs(clientData.UnitData) do
+                        if unitData.UnitName and not getgenv()._CapsuleUnitCache[unitID] then
+                            local shouldSell = false
+                            
+                            for unitName, selected in pairs(getgenv().AutoSellCapsuleUnits or {}) do
+                                if selected then
+                                    local actualUnitName = unitName
+                                    for _, capsuleUnit in ipairs({"ZamasuBlackGokuRoseUnevo", "AinzAlbedoUnevo", "SimonUnevo", "RimuruGodlyUnevo", "RimuruGodlyUnevoShiny"}) do
+                                        local unitNameModule = getgenv().GetAllAbilities and getgenv().GetAllAbilities()
+                                        if unitNameModule and unitNameModule[capsuleUnit] then
+                                            local displayName = unitNameModule[capsuleUnit].displayName or capsuleUnit
+                                            if displayName == unitName then
+                                                actualUnitName = capsuleUnit
+                                                break
+                                            end
+                                        end
+                                    end
+                                    
+                                    if unitData.UnitName == actualUnitName then
+                                        shouldSell = true
+                                        break
+                                    end
+                                end
+                            end
+                            
+                            if shouldSell then
+                                unitsToSell[unitID] = true
+                                print("[Auto Sell Capsule] Marking new unit for sale: " .. unitData.UnitName .. " (ID: " .. unitID .. ")")
+                            else
+                                getgenv()._CapsuleUnitCache[unitID] = {
+                                    UnitName = unitData.UnitName,
+                                    ObtainTime = unitData.ObtainTime or 0
+                                }
+                            end
+                        end
+                    end
+                    
+                    if next(unitsToSell) then
+                        local sellCount = 0
+                        for _ in pairs(unitsToSell) do
+                            sellCount = sellCount + 1
+                        end
+                        
+                        print("[Auto Sell Capsule] Selling " .. sellCount .. " units...")
+                        
+                        local sellRemote = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("SellUnits")
+                        if sellRemote then
+                            local success = pcall(function()
+                                sellRemote:InvokeServer(unitsToSell)
+                            end)
+                            
+                            if success then
+                                print("[Auto Sell Capsule] ✅ Successfully sold " .. sellCount .. " units")
+                                
+                                for unitID in pairs(unitsToSell) do
+                                    getgenv()._CapsuleUnitCache[unitID] = nil
+                                end
+                            else
+                                print("[Auto Sell Capsule] ❌ Failed to sell units")
+                            end
+                        else
+                            warn("[Auto Sell Capsule] SellUnitsEvent remote not found")
+                        end
+                    end
+                end)
+            end
+            
+            if getgenv().AutoSellEvent1CapsuleEnabled then
+                pcall(function()
+                    local now = tick()
+                    if now - lastCheckTime < 5 then return end
+                    
+                    local clientData = getgenv().GetClientData and getgenv().GetClientData()
+                    if not clientData or not clientData.UnitData then return end
+                    
+                    local unitsToSell = {}
+                    
+                    for unitID, unitData in pairs(clientData.UnitData) do
+                        if unitData.UnitName and not getgenv()._Event1CapsuleUnitCache[unitID] then
+                            local shouldSell = false
+                            
+                            for unitName, selected in pairs(getgenv().AutoSellEvent1CapsuleUnits or {}) do
+                                if selected then
+                                    local actualUnitName = unitName
+                                    for _, capsuleUnit in ipairs({"MobUnevo", "LightUnevo", "LelouchUnevo", "LelouchUnevoShiny"}) do
+                                        local unitNameModule = getgenv().GetAllAbilities and getgenv().GetAllAbilities()
+                                        if unitNameModule and unitNameModule[capsuleUnit] then
+                                            local displayName = unitNameModule[capsuleUnit].displayName or capsuleUnit
+                                            if displayName == unitName then
+                                                actualUnitName = capsuleUnit
+                                                break
+                                            end
+                                        end
+                                    end
+                                    
+                                    if unitData.UnitName == actualUnitName then
+                                        shouldSell = true
+                                        break
+                                    end
+                                end
+                            end
+                            
+                            if shouldSell then
+                                unitsToSell[unitID] = true
+                                print("[Auto Sell Event1 Capsule] Marking new unit for sale: " .. unitData.UnitName .. " (ID: " .. unitID .. ")")
+                            else
+                                getgenv()._Event1CapsuleUnitCache[unitID] = {
+                                    UnitName = unitData.UnitName,
+                                    ObtainTime = unitData.ObtainTime or 0
+                                }
+                            end
+                        end
+                    end
+                    
+                    if next(unitsToSell) then
+                        local sellCount = 0
+                        for _ in pairs(unitsToSell) do
+                            sellCount = sellCount + 1
+                        end
+                        
+                        print("[Auto Sell Event1 Capsule] Selling " .. sellCount .. " units...")
+                        
+                        local sellRemote = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("SellUnits")
+                        if sellRemote then
+                            local success = pcall(function()
+                                sellRemote:InvokeServer(unitsToSell)
+                            end)
+                            
+                            if success then
+                                print("[Auto Sell Event1 Capsule] ✅ Successfully sold " .. sellCount .. " units")
+                                
+                                for unitID in pairs(unitsToSell) do
+                                    getgenv()._Event1CapsuleUnitCache[unitID] = nil
+                                end
+                            else
+                                print("[Auto Sell Event1 Capsule] ❌ Failed to sell units")
+                            end
+                        else
+                            warn("[Auto Sell Event1 Capsule] SellUnitsEvent remote not found")
+                        end
+                    end
+                end)
+            end
+        end
+    end)
 end
 
 
