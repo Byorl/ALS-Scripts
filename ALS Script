@@ -8225,6 +8225,52 @@ task.spawn(function()
                 local enterEvent = infinityCastleRemotes and infinityCastleRemotes:FindFirstChild("Enter")
                 
                 if enterEvent then
+                    if getgenv().WaitForPlayerEnabled then
+                        local entryUI = nil
+                        for _, gui in ipairs(LocalPlayer.PlayerGui:GetChildren()) do
+                            if gui.Name:find("Entry") then
+                                entryUI = gui
+                                break
+                            end
+                        end
+                        
+                        if entryUI then
+                            local function findTextLabel(parent)
+                                for _, child in ipairs(parent:GetDescendants()) do
+                                    if child:IsA("TextLabel") and child.Text:find("Players") then
+                                        return child
+                                    end
+                                end
+                                return nil
+                            end
+                            
+                            local textLabel = findTextLabel(entryUI)
+                            if textLabel then
+                                local waitStartTime = tick()
+                                local maxWaitTime = 300
+                                
+                                while tick() - waitStartTime < maxWaitTime do
+                                    local text = textLabel.Text
+                                    local current, max = text:match("%((%d+)/(%d+)%)")
+                                    
+                                    if current and max then
+                                        local currentPlayers = tonumber(current)
+                                        local targetCount = getgenv().WaitForPlayerCount or 1
+                                        
+                                        if currentPlayers >= targetCount then
+                                            print("[Infinity Castle] ✅ " .. currentPlayers .. "/" .. targetCount .. " players ready, joining...")
+                                            break
+                                        else
+                                            print("[Infinity Castle] ⏳ Waiting for players... " .. currentPlayers .. "/" .. targetCount)
+                                        end
+                                    end
+                                    
+                                    task.wait(1)
+                                end
+                            end
+                        end
+                    end
+                    
                     local isHardMode = getgenv().InfinityCastleDifficulty == "Hard"
                     enterEvent:FireServer(isHardMode)
                     
@@ -14101,6 +14147,64 @@ do
             
             if getgenv().JoinPlayerEnabled and getgenv().JoinPlayerTarget and getgenv().JoinPlayerTarget ~= "" and getgenv().JoinPlayerTarget ~= "No other players" then
                 pcall(function()
+                    local currentGamemode = nil
+                    pcall(function()
+                        local gamemode = RS:FindFirstChild("Gamemode")
+                        if gamemode then
+                            currentGamemode = gamemode.Value
+                        end
+                    end)
+                    
+                    if currentGamemode == "Portals" then
+                        return
+                    end
+                    
+                    if getgenv().WaitForPlayerEnabled then
+                        local entryUI = nil
+                        for _, gui in ipairs(LocalPlayer.PlayerGui:GetChildren()) do
+                            if gui.Name:find("Entry") then
+                                entryUI = gui
+                                break
+                            end
+                        end
+                        
+                        if entryUI then
+                            local function findTextLabel(parent)
+                                for _, child in ipairs(parent:GetDescendants()) do
+                                    if child:IsA("TextLabel") and child.Text:find("Players") then
+                                        return child
+                                    end
+                                end
+                                return nil
+                            end
+                            
+                            local textLabel = findTextLabel(entryUI)
+                            if textLabel then
+                                local waitStartTime = tick()
+                                local maxWaitTime = 300
+                                
+                                while tick() - waitStartTime < maxWaitTime do
+                                    local text = textLabel.Text
+                                    local current, max = text:match("%((%d+)/(%d+)%)")
+                                    
+                                    if current and max then
+                                        local currentPlayers = tonumber(current)
+                                        local targetCount = getgenv().WaitForPlayerCount or 1
+                                        
+                                        if currentPlayers >= targetCount then
+                                            print("[Join Player] ✅ " .. currentPlayers .. "/" .. targetCount .. " players ready, joining portal...")
+                                            break
+                                        else
+                                            print("[Join Player] ⏳ Waiting for players... " .. currentPlayers .. "/" .. targetCount)
+                                        end
+                                    end
+                                    
+                                    task.wait(1)
+                                end
+                            end
+                        end
+                    end
+                    
                     local targetDisplayName = getgenv().JoinPlayerTarget:match("^(.-)%s*%(")
                     if not targetDisplayName then
                         targetDisplayName = getgenv().JoinPlayerTarget
@@ -14121,7 +14225,7 @@ do
                                     task.wait(0.5)
                                     
                                     VIM:SendKeyEvent(true, Enum.KeyCode.E, false, game)
-                                    task.wait(5)
+                                    task.wait(3)
                                     VIM:SendKeyEvent(false, Enum.KeyCode.E, false, game)
                                     
                                     print("[Join Player] ✅ Joined " .. targetDisplayName .. "'s portal")
@@ -17240,6 +17344,52 @@ do
         
         if enterEvent and startEvent then
             pcall(function()
+                if getgenv().WaitForPlayerEnabled then
+                    local entryUI = nil
+                    for _, gui in ipairs(LocalPlayer.PlayerGui:GetChildren()) do
+                        if gui.Name:find("Entry") then
+                            entryUI = gui
+                            break
+                        end
+                    end
+                    
+                    if entryUI then
+                        local function findTextLabel(parent)
+                            for _, child in ipairs(parent:GetDescendants()) do
+                                if child:IsA("TextLabel") and child.Text:find("Players") then
+                                    return child
+                                end
+                            end
+                            return nil
+                        end
+                        
+                        local textLabel = findTextLabel(entryUI)
+                        if textLabel then
+                            local waitStartTime = tick()
+                            local maxWaitTime = 300
+                            
+                            while tick() - waitStartTime < maxWaitTime do
+                                local text = textLabel.Text
+                                local current, max = text:match("%((%d+)/(%d+)%)")
+                                
+                                if current and max then
+                                    local currentPlayers = tonumber(current)
+                                    local targetCount = getgenv().WaitForPlayerCount or 1
+                                    
+                                    if currentPlayers >= targetCount then
+                                        print("[Auto Event] ✅ " .. currentPlayers .. "/" .. targetCount .. " players ready, joining...")
+                                        break
+                                    else
+                                        print("[Auto Event] ⏳ Waiting for players... " .. currentPlayers .. "/" .. targetCount)
+                                    end
+                                end
+                                
+                                task.wait(1)
+                            end
+                        end
+                    end
+                end
+                
                 local delay = getgenv().EventJoinDelay or 0
                 if delay > 0 then
                     task.wait(delay)
@@ -17442,6 +17592,52 @@ task.spawn(function()
             local startEvent = halloweenFolder and halloweenFolder:FindFirstChild("Start")
             
             if enterEvent and startEvent then
+                if getgenv().WaitForPlayerEnabled then
+                    local entryUI = nil
+                    for _, gui in ipairs(LocalPlayer.PlayerGui:GetChildren()) do
+                        if gui.Name:find("Entry") then
+                            entryUI = gui
+                            break
+                        end
+                    end
+                    
+                    if entryUI then
+                        local function findTextLabel(parent)
+                            for _, child in ipairs(parent:GetDescendants()) do
+                                if child:IsA("TextLabel") and child.Text:find("Players") then
+                                    return child
+                                end
+                            end
+                            return nil
+                        end
+                        
+                        local textLabel = findTextLabel(entryUI)
+                        if textLabel then
+                            local waitStartTime = tick()
+                            local maxWaitTime = 300
+                            
+                            while tick() - waitStartTime < maxWaitTime do
+                                local text = textLabel.Text
+                                local current, max = text:match("%((%d+)/(%d+)%)")
+                                
+                                if current and max then
+                                    local currentPlayers = tonumber(current)
+                                    local targetCount = getgenv().WaitForPlayerCount or 1
+                                    
+                                    if currentPlayers >= targetCount then
+                                        print("[Auto Event2] ✅ " .. currentPlayers .. "/" .. targetCount .. " players ready, joining...")
+                                        break
+                                    else
+                                        print("[Auto Event2] ⏳ Waiting for players... " .. currentPlayers .. "/" .. targetCount)
+                                    end
+                                end
+                                
+                                task.wait(1)
+                            end
+                        end
+                    end
+                end
+                
                 enterEvent:FireServer("Hallowen2025_P2")
                 
                 task.wait(0.5)
