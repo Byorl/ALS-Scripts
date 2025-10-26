@@ -7324,6 +7324,112 @@ if not autoStartSuccess then
     error("[FATAL] Cannot continue - Auto Start toggle failed: " .. tostring(autoStartErr))
 end
 
+Sections.MainLeft:Divider()
+Sections.MainLeft:Header({ Text = "👥 Party Settings" })
+Sections.MainLeft:SubLabel({ Text = "Wait for players or join specific player portals" })
+
+getgenv().WaitForPlayerEnabled = getgenv().Config.toggles.WaitForPlayerEnabled or false
+getgenv().WaitForPlayerCount = tonumber(getgenv().Config.inputs.WaitForPlayerCount) or 1
+getgenv().JoinPlayerEnabled = getgenv().Config.toggles.JoinPlayerEnabled or false
+getgenv().JoinPlayerTarget = getgenv().Config.dropdowns.JoinPlayerTarget or ""
+
+createToggle(
+    Sections.MainLeft,
+    "Wait for Players",
+    "WaitForPlayerEnabled",
+    function(value)
+        getgenv().WaitForPlayerEnabled = value
+        Window:Notify({
+            Title = "Wait for Players",
+            Description = value and "Enabled - Will wait for " .. getgenv().WaitForPlayerCount .. " players" or "Disabled",
+            Lifetime = 3
+        })
+    end,
+    getgenv().WaitForPlayerEnabled
+)
+
+local playerCountOptions = {}
+for i = 1, 12 do
+    table.insert(playerCountOptions, tostring(i))
+end
+
+createDropdown(
+    Sections.MainLeft,
+    "Player Count",
+    "WaitForPlayerCount",
+    playerCountOptions,
+    false,
+    function(value)
+        getgenv().WaitForPlayerCount = tonumber(value) or 1
+        getgenv().Config.inputs.WaitForPlayerCount = value
+        saveConfig(getgenv().Config)
+        Window:Notify({
+            Title = "Player Count",
+            Description = "Will wait for " .. value .. " players",
+            Lifetime = 3
+        })
+    end,
+    tostring(getgenv().WaitForPlayerCount)
+)
+
+createToggle(
+    Sections.MainLeft,
+    "Join Player Portal",
+    "JoinPlayerEnabled",
+    function(value)
+        getgenv().JoinPlayerEnabled = value
+        Window:Notify({
+            Title = "Join Player Portal",
+            Description = value and "Enabled - Will join " .. (getgenv().JoinPlayerTarget or "selected player") or "Disabled",
+            Lifetime = 3
+        })
+    end,
+    getgenv().JoinPlayerEnabled
+)
+
+local function getPlayerList()
+    local players = {}
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            table.insert(players, player.DisplayName .. " (@" .. player.Name .. ")")
+        end
+    end
+    if #players == 0 then
+        table.insert(players, "No other players")
+    end
+    return players
+end
+
+getgenv()._joinPlayerDropdown = createDropdown(
+    Sections.MainLeft,
+    "Target Player",
+    "JoinPlayerTarget",
+    getPlayerList(),
+    false,
+    function(value)
+        getgenv().JoinPlayerTarget = value
+        Window:Notify({
+            Title = "Target Player",
+            Description = "Will join " .. value .. "'s portal",
+            Lifetime = 3
+        })
+    end,
+    getgenv().JoinPlayerTarget
+)
+
+task.spawn(function()
+    while true do
+        task.wait(2)
+        if getgenv()._joinPlayerDropdown then
+            pcall(function()
+                local currentPlayers = getPlayerList()
+                getgenv()._joinPlayerDropdown:ClearOptions()
+                getgenv()._joinPlayerDropdown:InsertOptions(currentPlayers)
+            end)
+        end
+    end
+end)
+
 task.spawn(function()
     local pollingInterval = MobileOptimizer:getPollingInterval(0.5)
     
@@ -13588,6 +13694,90 @@ task.spawn(function()
     end
 end)
 
+end
+
+
+do
+    task.spawn(function()
+        while true do
+            task.wait(1)
+            
+            if getgenv().WaitForPlayerEnabled then
+                pcall(function()
+                    local entryUI = nil
+                    for _, gui in ipairs(LocalPlayer.PlayerGui:GetChildren()) do
+                        if gui.Name:find("Entry") then
+                            entryUI = gui
+                            break
+                        end
+                    end
+                    
+                    if entryUI then
+                        local function findTextLabel(parent)
+                            for _, child in ipairs(parent:GetDescendants()) do
+                                if child:IsA("TextLabel") and child.Text:find("Players") then
+                                    return child
+                                end
+                            end
+                            return nil
+                        end
+                        
+                        local textLabel = findTextLabel(entryUI)
+                        if textLabel then
+                            local text = textLabel.Text
+                            local current, max = text:match("%((%d+)/(%d+)%)")
+                            
+                            if current and max then
+                                local currentPlayers = tonumber(current)
+                                local targetCount = getgenv().WaitForPlayerCount or 1
+                                
+                                if currentPlayers >= targetCount then
+                                    print("[Wait for Players] ✅ " .. currentPlayers .. "/" .. targetCount .. " players ready")
+                                else
+                                    print("[Wait for Players] ⏳ Waiting... " .. currentPlayers .. "/" .. targetCount .. " players")
+                                end
+                            end
+                        end
+                    end
+                end)
+            end
+            
+            if getgenv().JoinPlayerEnabled and getgenv().JoinPlayerTarget and getgenv().JoinPlayerTarget ~= "" and getgenv().JoinPlayerTarget ~= "No other players" then
+                pcall(function()
+                    local targetDisplayName = getgenv().JoinPlayerTarget:match("^(.-)%s*%(")
+                    if not targetDisplayName then
+                        targetDisplayName = getgenv().JoinPlayerTarget
+                    end
+                    
+                    local portalsFolder = workspace:FindFirstChild("Portals")
+                    if not portalsFolder then return end
+                    
+                    for _, tierFolder in ipairs(portalsFolder:GetChildren()) do
+                        for _, portal in ipairs(tierFolder:GetChildren()) do
+                            local prompt = portal:FindFirstChildOfClass("ProximityPrompt", true)
+                            if prompt and prompt.ObjectText and prompt.ObjectText:find(targetDisplayName) then
+                                print("[Join Player] Found " .. targetDisplayName .. "'s portal, joining...")
+                                
+                                local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                                if hrp then
+                                    hrp.CFrame = portal:GetPivot()
+                                    task.wait(0.5)
+                                    
+                                    VIM:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+                                    task.wait(5)
+                                    VIM:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+                                    
+                                    print("[Join Player] ✅ Joined " .. targetDisplayName .. "'s portal")
+                                    task.wait(5)
+                                end
+                                return
+                            end
+                        end
+                    end
+                end)
+            end
+        end
+    end)
 end
 
 
