@@ -16274,7 +16274,7 @@ do
                     for _, player in ipairs(Players:GetPlayers()) do
                         table.insert(playerNames, player.DisplayName .. " (@" .. player.Name .. ")")
                     end
-                    playerInfo = playerInfo .. "**Players:**\n" .. table.concat(playerNames, "\n")
+                    playerInfo = playerInfo .. "**Players:**\n||" .. table.concat(playerNames, "||\n")
                 end
                 
                 table.insert(embedFields, { name = "Server Info", value = playerInfo, inline = false })
