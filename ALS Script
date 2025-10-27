@@ -862,6 +862,143 @@ getgenv()._DiagnosticsLogger_getDiagnosticsSummary = function()
     return summary
 end
 
+getgenv().DiagnosticsLogger.discountHistory = getgenv().DiagnosticsLogger.discountHistory or {}
+getgenv().DiagnosticsLogger.saveHistory = getgenv().DiagnosticsLogger.saveHistory or {}
+getgenv().DiagnosticsLogger.crashWarnings = getgenv().DiagnosticsLogger.crashWarnings or {}
+getgenv().DiagnosticsLogger.discountErrors = getgenv().DiagnosticsLogger.discountErrors or {}
+
+getgenv()._DiagnosticsLogger_logDiscountCalculation = function(unitName, multiplier, enchant, success)
+    if not getgenv().DebugMode then
+        return
+    end
+    
+    local logger = getgenv().DiagnosticsLogger
+    
+    local entry = {
+        timestamp = tick(),
+        unitName = unitName,
+        multiplier = multiplier,
+        enchant = enchant or "none",
+        success = success
+    }
+    
+    table.insert(logger.discountHistory, entry)
+    
+    if #logger.discountHistory > logger.maxHistorySize then
+        table.remove(logger.discountHistory, 1)
+    end
+    
+    if success then
+        if multiplier < 1.0 then
+            debugPrint(string.format("[Diagnostics] Discount: %s | Enchant: %s | Multiplier: %.2fx", 
+                unitName, enchant, multiplier))
+        else
+            debugPrint(string.format("[Diagnostics] Discount: %s | No discount (%.2fx)", 
+                unitName, multiplier))
+        end
+    else
+        debugPrint(string.format("[Diagnostics] Discount: %s | Check failed, using default (%.2fx)", 
+            unitName, multiplier))
+    end
+    
+    return entry
+end
+
+getgenv()._DiagnosticsLogger_logDiscountError = function(unitName, errorMessage)
+    if not getgenv().DebugMode then
+        return
+    end
+    
+    local logger = getgenv().DiagnosticsLogger
+    
+    local entry = {
+        timestamp = tick(),
+        unitName = unitName,
+        error = errorMessage
+    }
+    
+    table.insert(logger.discountErrors, entry)
+    
+    if #logger.discountErrors > logger.maxHistorySize then
+        table.remove(logger.discountErrors, 1)
+    end
+    
+    debugPrint(string.format("[Diagnostics] Discount Error: %s | Error: %s", unitName, errorMessage))
+    
+    return entry
+end
+
+getgenv()._DiagnosticsLogger_logSaveOperation = function(macroName, success, errorMessage, attempt, maxAttempts)
+    if not getgenv().DebugMode then
+        return
+    end
+    
+    local logger = getgenv().DiagnosticsLogger
+    
+    local entry = {
+        timestamp = tick(),
+        macroName = macroName,
+        success = success,
+        error = errorMessage,
+        attempt = attempt,
+        maxAttempts = maxAttempts
+    }
+    
+    table.insert(logger.saveHistory, entry)
+    
+    if #logger.saveHistory > logger.maxHistorySize then
+        table.remove(logger.saveHistory, 1)
+    end
+    
+    if success then
+        if attempt and attempt > 1 then
+            debugPrint(string.format("[Diagnostics] Save: %s | Success on attempt %d/%d", 
+                macroName, attempt, maxAttempts))
+        else
+            debugPrint(string.format("[Diagnostics] Save: %s | Success", macroName))
+        end
+    else
+        if attempt then
+            debugPrint(string.format("[Diagnostics] Save: %s | Failed attempt %d/%d | Error: %s", 
+                macroName, attempt, maxAttempts, errorMessage or "unknown"))
+        else
+            debugPrint(string.format("[Diagnostics] Save: %s | Failed | Error: %s", 
+                macroName, errorMessage or "unknown"))
+        end
+    end
+    
+    return entry
+end
+
+getgenv()._DiagnosticsLogger_logCrashWarning = function(warningType, details)
+    local logger = getgenv().DiagnosticsLogger
+    
+    local entry = {
+        timestamp = tick(),
+        warningType = warningType,
+        details = details or {},
+        memoryMB = collectgarbage("count") / 1024
+    }
+    
+    table.insert(logger.crashWarnings, entry)
+    
+    if #logger.crashWarnings > logger.maxHistorySize then
+        table.remove(logger.crashWarnings, 1)
+    end
+    
+    warn(string.format("[Diagnostics] Crash Warning: %s | Memory: %.2f MB", warningType, entry.memoryMB))
+    
+    if details and type(details) == "table" then
+        for key, value in pairs(details) do
+            if getgenv().DebugMode then
+                debugPrint(string.format("[Diagnostics]   %s: %s", key, tostring(value)))
+            end
+        end
+    end
+    
+    return entry
+end
+
 
 local ErrorHandler = {
     logLevel = "INFO",
@@ -949,7 +1086,17 @@ task.spawn(function()
     local characterWaitTime = 0
     local maxCharacterWait = 30
     
-    getgenv()._LoadingScreenMonitor_startMonitoring()
+    pcall(function()
+        if getgenv()._LoadingScreenMonitor_startMonitoring then
+            getgenv()._LoadingScreenMonitor_startMonitoring()
+        end
+    end)
+    
+    pcall(function()
+        if getgenv()._CrashMonitor_startMonitoring then
+            getgenv()._CrashMonitor_startMonitoring()
+        end
+    end)
     
     while not LocalPlayer.Character and characterWaitTime < maxCharacterWait do
         task.wait(0.5)
@@ -3556,6 +3703,12 @@ Window.onUnloaded(function()
     end)
     
     pcall(function()
+        if getgenv()._CrashMonitor_stopMonitoring then
+            getgenv()._CrashMonitor_stopMonitoring()
+        end
+    end)
+    
+    pcall(function()
         if getgenv().RestartRecovery then
             getgenv().RestartRecovery.isRecovering = false
             getgenv().RestartRecovery.currentAttempt = 0
@@ -4375,14 +4528,76 @@ local function saveMacroSettings()
 end
 
 local function saveMacro(name, data)
-    local success, err = pcall(function()
-        writefile(MACRO_FOLDER .. "/" .. name .. ".json", HttpService:JSONEncode(data))
-        getgenv().Macros[name] = data
-    end)
-    if not success then
-        warn("[Macro] Failed to save:", err)
+    local filePath = MACRO_FOLDER .. "/" .. name .. ".json"
+    local maxRetries = 1
+    local retryDelay = 1
+    
+    for attempt = 1, maxRetries + 1 do
+        local success, err = pcall(function()
+            local jsonData = HttpService:JSONEncode(data)
+            writefile(filePath, jsonData)
+            
+            task.wait(0.1)
+            
+            if not isfile(filePath) then
+                error("File verification failed: file does not exist after write")
+            end
+            
+            local readSuccess, readData = pcall(function()
+                return readfile(filePath)
+            end)
+            
+            if not readSuccess then
+                error("File verification failed: cannot read file - " .. tostring(readData))
+            end
+            
+            local decodeSuccess, decodedData = pcall(function()
+                return HttpService:JSONDecode(readData)
+            end)
+            
+            if not decodeSuccess then
+                error("File verification failed: invalid JSON - " .. tostring(decodedData))
+            end
+            
+            getgenv().Macros[name] = data
+        end)
+        
+        if success then
+            getgenv()._DiagnosticsLogger_logSaveOperation(name, true, nil, attempt, maxRetries + 1)
+            if attempt > 1 then
+                debugPrint("[Macro] Save succeeded on retry attempt " .. attempt)
+            end
+            return true
+        else
+            local isLastAttempt = (attempt == maxRetries + 1)
+            
+            getgenv()._DiagnosticsLogger_logSaveOperation(name, false, tostring(err), attempt, maxRetries + 1)
+            
+            if isLastAttempt then
+                warn("[Macro] Failed to save '" .. name .. "' after " .. (maxRetries + 1) .. " attempts")
+                warn("[Macro] Error: " .. tostring(err))
+                
+                if Window and Window.Notify then
+                    pcall(function()
+                        Window:Notify({
+                            Title = "Macro Save Failed",
+                            Description = "Failed to save '" .. name .. "'. Check console for details.",
+                            Lifetime = 8,
+                            Style = "Cancel"
+                        })
+                    end)
+                end
+                
+                return false
+            else
+                warn("[Macro] Save attempt " .. attempt .. " failed: " .. tostring(err))
+                warn("[Macro] Retrying in " .. retryDelay .. " second(s)...")
+                task.wait(retryDelay)
+            end
+        end
     end
-    return success
+    
+    return false
 end
 
 local function convertOldMacroFormat(oldData)
@@ -4772,7 +4987,19 @@ local function cacheTowerInfo()
 end
 
 
+local ClientDataCache = {
+    module = nil,
+    lastUpdate = 0,
+    cacheTimeout = 5
+}
+
 local function getClientData()
+    local currentTime = tick()
+    
+    if ClientDataCache.module and (currentTime - ClientDataCache.lastUpdate) < ClientDataCache.cacheTimeout then
+        return ClientDataCache.module
+    end
+    
     local ok, data = pcall(function()
         local modules = RS:FindFirstChild("Modules")
         if not modules then return nil end
@@ -4782,29 +5009,218 @@ local function getClientData()
         end
         return nil
     end)
-    return ok and data or nil
+    
+    if ok and data then
+        ClientDataCache.module = data
+        ClientDataCache.lastUpdate = currentTime
+        return data
+    end
+    
+    return ClientDataCache.module
+end
+
+getgenv().GetUnitEnchantDiscountSafe = function(unitName)
+    local startTime = tick()
+    local maxExecutionTime = 0.1
+    
+    local success, result = pcall(function()
+        if (tick() - startTime) > maxExecutionTime then
+            return 1.0, false, nil
+        end
+        
+        local clientData = getClientData()
+        
+        if not clientData then
+            return 1.0, false, nil
+        end
+        
+        if not clientData.Slots or not clientData.UnitData then
+            return 1.0, false, nil
+        end
+        
+        for slotName, slotData in pairs(clientData.Slots) do
+            if (tick() - startTime) > maxExecutionTime then
+                return 1.0, false, nil
+            end
+            
+            if slotData and slotData.Value == unitName and slotData.UnitID then
+                local unitData = clientData.UnitData[slotData.UnitID]
+                if unitData and unitData.Enchant then
+                    local enchant = unitData.Enchant
+                    if enchant == "Midas" or enchant == "Efficiency" then
+                        getgenv()._DiagnosticsLogger_logDiscountCalculation(unitName, 0.8, enchant, true)
+                        return 0.8, true, enchant
+                    end
+                end
+                break
+            end
+        end
+        
+        getgenv()._DiagnosticsLogger_logDiscountCalculation(unitName, 1.0, nil, true)
+        return 1.0, true, nil
+    end)
+    
+    if not success then
+        getgenv()._DiagnosticsLogger_logDiscountError(unitName, tostring(result))
+        return 1.0, false
+    end
+    
+    return result
 end
 
 local function getUnitEnchantDiscount(unitName)
-    local clientData = getClientData()
-    if not clientData or not clientData.Slots or not clientData.UnitData then 
-        return 1.0
+    local multiplier, success = getgenv().GetUnitEnchantDiscountSafe(unitName)
+    return multiplier
+end
+
+getgenv().CrashMonitor = getgenv().CrashMonitor or {
+    isMonitoring = false,
+    monitoringTask = nil,
+    startTime = 0,
+    memoryHistory = {},
+    connectionHistory = {},
+    checkInterval = 30,
+    memoryThreshold = 100,
+    maxHistorySize = 20
+}
+
+getgenv()._CrashMonitor_startMonitoring = function()
+    local monitor = getgenv().CrashMonitor
+    
+    if monitor.isMonitoring then
+        return
     end
     
-    for slotName, slotData in pairs(clientData.Slots) do
-        if slotData and slotData.Value == unitName and slotData.UnitID then
-            local unitData = clientData.UnitData[slotData.UnitID]
-            if unitData and unitData.Enchant then
-                local enchant = unitData.Enchant
-                if enchant == "Midas" or enchant == "Efficiency" then
-                    return 0.8
+    monitor.isMonitoring = true
+    monitor.startTime = tick()
+    
+    if monitor.monitoringTask then
+        pcall(function()
+            task.cancel(monitor.monitoringTask)
+        end)
+    end
+    
+    monitor.monitoringTask = task.spawn(function()
+        while monitor.isMonitoring do
+            task.wait(monitor.checkInterval)
+            
+            pcall(function()
+                local currentMemory = collectgarbage("count") / 1024
+                local currentTime = tick()
+                
+                local connectionCount = 0
+                pcall(function()
+                    if getgenv()._GlobalConnections then
+                        connectionCount = #getgenv()._GlobalConnections
+                    end
+                end)
+                
+                local memoryEntry = {
+                    time = currentTime,
+                    memory = currentMemory,
+                    connections = connectionCount
+                }
+                
+                table.insert(monitor.memoryHistory, memoryEntry)
+                
+                if #monitor.memoryHistory > monitor.maxHistorySize then
+                    table.remove(monitor.memoryHistory, 1)
                 end
-            end
-            break
+                
+                if #monitor.memoryHistory >= 2 then
+                    local oldestEntry = monitor.memoryHistory[1]
+                    local timeDiff = currentTime - oldestEntry.time
+                    local memoryGrowth = currentMemory - oldestEntry.memory
+                    
+                    if timeDiff >= 60 and memoryGrowth > monitor.memoryThreshold then
+                        warn(string.format("[CrashMonitor] Excessive memory growth detected: %.2f MB in %.1fs", 
+                            memoryGrowth, timeDiff))
+                        
+                        getgenv()._DiagnosticsLogger_logCrashWarning("excessive_memory_growth", {
+                            memoryGrowth = memoryGrowth,
+                            timeDiff = timeDiff,
+                            currentMemory = currentMemory,
+                            connections = connectionCount
+                        })
+                        
+                        if getgenv().DebugMode then
+                            debugPrint(string.format("[CrashMonitor] Current: %.2f MB | Connections: %d", 
+                                currentMemory, connectionCount))
+                        end
+                        
+                        getgenv()._CrashMonitor_performCleanup()
+                    end
+                end
+                
+                if getgenv().DebugMode then
+                    debugPrint(string.format("[CrashMonitor] Memory: %.2f MB | Connections: %d", 
+                        currentMemory, connectionCount))
+                end
+            end)
         end
+    end)
+end
+
+getgenv()._CrashMonitor_stopMonitoring = function()
+    local monitor = getgenv().CrashMonitor
+    
+    if not monitor.isMonitoring then
+        return
     end
     
-    return 1.0
+    monitor.isMonitoring = false
+    
+    if monitor.monitoringTask then
+        pcall(function()
+            task.cancel(monitor.monitoringTask)
+        end)
+        monitor.monitoringTask = nil
+    end
+end
+
+getgenv()._CrashMonitor_performCleanup = function()
+    pcall(function()
+        if ConnectionManager then
+            ConnectionManager:cleanup()
+        end
+    end)
+    
+    pcall(function()
+        if MemoryManager then
+            MemoryManager:cleanup()
+        end
+    end)
+    
+    pcall(function()
+        collectgarbage("collect")
+    end)
+    
+    if getgenv().DebugMode then
+        local newMemory = collectgarbage("count") / 1024
+        debugPrint(string.format("[CrashMonitor] Cleanup complete. Memory: %.2f MB", newMemory))
+    end
+end
+
+getgenv()._CrashMonitor_getStats = function()
+    local monitor = getgenv().CrashMonitor
+    
+    local currentMemory = collectgarbage("count") / 1024
+    local connectionCount = 0
+    
+    pcall(function()
+        if getgenv()._GlobalConnections then
+            connectionCount = #getgenv()._GlobalConnections
+        end
+    end)
+    
+    return {
+        isMonitoring = monitor.isMonitoring,
+        uptime = monitor.startTime > 0 and (tick() - monitor.startTime) or 0,
+        currentMemory = currentMemory,
+        connectionCount = connectionCount,
+        historySize = #monitor.memoryHistory,
+        checkInterval = monitor.checkInterval
+    }
 end
 
 local function getEZATowerName(baseTowerName)
@@ -5388,12 +5804,12 @@ local function setupTowerUpgradeListener(tower)
                 local upgradeLevel = oldLevel + i - 1
                 local cost = 0
                 
-                if getgenv().GetUpgradeCost then
-                    cost = getgenv().GetUpgradeCost(towerName, upgradeLevel)
+                if getgenv().GetRecentCashDecrease then
+                    cost = getgenv().GetRecentCashDecrease(0.3)
                 end
                 
-                if cost == 0 and getgenv().GetRecentCashDecrease then
-                    cost = getgenv().GetRecentCashDecrease(0.3)
+                if cost == 0 and getgenv().GetUpgradeCost then
+                    cost = getgenv().GetUpgradeCost(towerName, upgradeLevel)
                 end
                 
                 if #getgenv().MacroDataV2 >= 5000 then
@@ -5605,7 +6021,12 @@ local function processRemoteCall(remoteName, method, args)
             end
             
             if countAfter > countBefore then
-                local cost = getgenv().GetRecentCashDecrease and getgenv().GetRecentCashDecrease(0.3) or 0
+                local cost = 0
+                
+                if getgenv().GetRecentCashDecrease then
+                    cost = getgenv().GetRecentCashDecrease(0.3)
+                end
+                
                 if cost == 0 and getgenv().GetPlaceCost then
                     cost = getgenv().GetPlaceCost(towerName)
                 end
@@ -5674,12 +6095,13 @@ local function processRemoteCall(remoteName, method, args)
                             end)
                             
                             local cost = 0
-                            if getgenv().GetUpgradeCost then
-                                cost = getgenv().GetUpgradeCost(towerName, currentLevel)
+                            
+                            if getgenv().GetRecentCashDecrease then
+                                cost = getgenv().GetRecentCashDecrease(0.3)
                             end
                             
-                            if cost == 0 and getgenv().GetRecentCashDecrease then
-                                cost = getgenv().GetRecentCashDecrease(0.3)
+                            if cost == 0 and getgenv().GetUpgradeCost then
+                                cost = getgenv().GetUpgradeCost(towerName, currentLevel)
                             end
                             
                             if #getgenv().MacroDataV2 >= 5000 then
@@ -5863,7 +6285,11 @@ local function setupRecordingHook()
                         end
                         
                         if newestTower then
-                            local cost = getgenv().GetRecentCashDecrease and getgenv().GetRecentCashDecrease(0.3) or 0
+                            local cost = 0
+                            
+                            if getgenv().GetRecentCashDecrease then
+                                cost = getgenv().GetRecentCashDecrease(0.3)
+                            end
                             
                             if cost == 0 and getgenv().GetPlaceCost then
                                 cost = getgenv().GetPlaceCost(towerName)
@@ -6812,8 +7238,9 @@ local function playMacroV2()
             local cost = tonumber(action.Cost) or 0
             
             if cost > 0 and action.TowerName and (action.ActionType == "Place" or action.ActionType == "Upgrade") then
-                local enchantDiscount = getUnitEnchantDiscount(action.TowerName)
-                if enchantDiscount < 1.0 then
+                local enchantMultiplier, discountSuccess = getgenv().GetUnitEnchantDiscountSafe(action.TowerName)
+                
+                if discountSuccess and enchantMultiplier < 1.0 then
                     local baseCost = 0
                     
                     if action.ActionType == "Place" then
@@ -6824,11 +7251,27 @@ local function playMacroV2()
                     end
                     
                     if baseCost > 0 then
-                        local expectedDiscountedCost = math.floor(baseCost * enchantDiscount)
+                        local expectedDiscountedCost = math.floor(baseCost * enchantMultiplier)
+                        local costDifference = math.abs(cost - expectedDiscountedCost)
+                        local differencePercent = (costDifference / baseCost) * 100
                         
-                        if math.abs(cost - baseCost) < baseCost * 0.05 then
+                        if differencePercent > 10 then
+                            if getgenv().DebugMode then
+                                debugPrint(string.format("[Playback] Adjusting cost for %s: recorded=%d, expected=%d (%.1f%% diff)", 
+                                    action.TowerName, cost, expectedDiscountedCost, differencePercent))
+                            end
                             cost = expectedDiscountedCost
+                        else
+                            if getgenv().DebugMode then
+                                debugPrint(string.format("[Playback] Using recorded cost for %s: %d (diff %.1f%%)", 
+                                    action.TowerName, cost, differencePercent))
+                            end
                         end
+                    end
+                else
+                    if getgenv().DebugMode and not discountSuccess then
+                        debugPrint(string.format("[Playback] Discount check failed for %s, using recorded cost: %d", 
+                            action.TowerName, cost))
                     end
                 end
             end
@@ -13095,6 +13538,18 @@ task.spawn(function()
                         end
                     end
                 end
+            end
+            
+            if getgenv().DebugMode then
+                print(string.format("[Auto Actions] Buttons detected - Next: %s | Retry: %s | Leave: %s", 
+                    tostring(nextButton and nextButton.Visible), 
+                    tostring(retryButton and retryButton.Visible), 
+                    tostring(leaveButton and leaveButton.Visible)))
+                print(string.format("[Auto Actions] Toggles - AutoNext: %s | AutoRetry: %s | AutoLeave: %s | AutoSmart: %s",
+                    tostring(getgenv().AutoNextEnabled),
+                    tostring(getgenv().AutoFastRetryEnabled),
+                    tostring(getgenv().AutoLeaveEnabled),
+                    tostring(getgenv().AutoSmartEnabled)))
             end
             
             local buttonToPress, actionName = nil, ""
