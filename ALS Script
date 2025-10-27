@@ -1082,6 +1082,117 @@ function ErrorHandler:notifyCritical(window, title, message)
     self:log("ERROR", "CRITICAL: " .. (title or "Error") .. " - " .. (message or "Unknown"))
 end
 
+getgenv().ConnectionStability = getgenv().ConnectionStability or {
+    lastRemoteCallTime = 0,
+    minCallDelay = 0.15,
+    callQueue = {},
+    isProcessing = false,
+    errorDialogActive = false,
+    pausedUntil = 0,
+    version = "1.0.0"
+}
+
+print("[ALS] ✅ Connection Stability System v" .. getgenv().ConnectionStability.version .. " loaded")
+
+getgenv()._ConnectionStability_safeRemoteCall = function(remote, method, ...)
+    local stability = getgenv().ConnectionStability
+    local args = {...}
+    
+    if tick() < stability.pausedUntil then
+        warn("[Connection] Calls paused due to connection error, waiting...")
+        task.wait(stability.pausedUntil - tick())
+    end
+    
+    local timeSinceLastCall = tick() - stability.lastRemoteCallTime
+    if timeSinceLastCall < stability.minCallDelay then
+        task.wait(stability.minCallDelay - timeSinceLastCall)
+    end
+    
+    stability.lastRemoteCallTime = tick()
+    
+    local success, result
+    if method == "InvokeServer" then
+        success, result = pcall(function()
+            return remote:InvokeServer(unpack(args))
+        end)
+    else
+        success, result = pcall(function()
+            remote:FireServer(unpack(args))
+            return true
+        end)
+    end
+    
+    if not success then
+        warn("[Connection] Remote call failed: " .. tostring(result))
+    end
+    
+    return success, result
+end
+
+task.spawn(function()
+    while task.wait(0.5) do
+        pcall(function()
+            if not LocalPlayer or not LocalPlayer.PlayerGui then return end
+            
+            local errorDialog = LocalPlayer.PlayerGui:FindFirstChild("ErrorPrompt") or
+                               LocalPlayer.PlayerGui:FindFirstChild("ErrorDialog")
+            
+            if errorDialog and errorDialog.Enabled then
+                local textFound = false
+                
+                for _, descendant in pairs(errorDialog:GetDescendants()) do
+                    if descendant:IsA("TextLabel") or descendant:IsA("TextButton") then
+                        local text = descendant.Text:lower()
+                        if text:find("internet") or text:find("connection") or text:find("network") then
+                            textFound = true
+                            warn("[Connection] Connection error dialog detected! Auto-dismissing...")
+                            
+                            getgenv().ConnectionStability.errorDialogActive = true
+                            getgenv().ConnectionStability.pausedUntil = tick() + 5
+                            
+                            for _, button in pairs(errorDialog:GetDescendants()) do
+                                if button:IsA("TextButton") then
+                                    local btnText = button.Text:lower()
+                                    if btnText:find("ok") or btnText:find("dismiss") or btnText:find("close") then
+                                        task.spawn(function()
+                                            pcall(function()
+                                                for i = 1, 3 do
+                                                    if button and button.Parent then
+                                                        local VIM = game:GetService("VirtualInputManager")
+                                                        local GuiService = game:GetService("GuiService")
+                                                        
+                                                        GuiService.SelectedObject = button
+                                                        task.wait(0.1)
+                                                        VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
+                                                        task.wait(0.05)
+                                                        VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
+                                                        task.wait(0.2)
+                                                    end
+                                                end
+                                            end)
+                                        end)
+                                        break
+                                    end
+                                end
+                            end
+                            break
+                        end
+                    end
+                end
+                
+                if textFound then
+                    task.wait(2)
+                    if errorDialog and errorDialog.Enabled then
+                        pcall(function()
+                            errorDialog.Enabled = false
+                        end)
+                    end
+                end
+            end
+        end)
+    end
+end)
+
 task.spawn(function()
     local characterWaitTime = 0
     local maxCharacterWait = 30
@@ -6690,16 +6801,11 @@ local function executeAction(action, retryCount)
         
         print("[Macro] Upgrading " .. action.TowerName .. ezaInfo .. " from level " .. oldLevel .. " (method: " .. selectionMethod .. ")")
         
-        local callSuccess = pcall(function()
-            if remote:IsA("RemoteFunction") then
-                remote:InvokeServer(tower)
-            else
-                remote:FireServer(tower)
-            end
-        end)
+        local method = remote:IsA("RemoteFunction") and "InvokeServer" or "FireServer"
+        local callSuccess, callResult = getgenv()._ConnectionStability_safeRemoteCall(remote, method, tower)
         
         if not callSuccess then
-            return false, "Failed to call upgrade remote"
+            return false, "Failed to call upgrade remote: " .. tostring(callResult)
         end
         
         task.wait(0.5)
@@ -6790,16 +6896,11 @@ local function executeAction(action, retryCount)
         
         debugPrint("[Macro] Selling: " .. action.TowerName)
         
-        local sellSuccess = pcall(function()
-            if remote:IsA("RemoteFunction") then
-                remote:InvokeServer(tower)
-            else
-                remote:FireServer(tower)
-            end
-        end)
+        local method = remote:IsA("RemoteFunction") and "InvokeServer" or "FireServer"
+        local sellSuccess, sellResult = getgenv()._ConnectionStability_safeRemoteCall(remote, method, tower)
         
         if not sellSuccess then
-            return false, "Failed to invoke sell remote"
+            return false, "Failed to invoke sell remote: " .. tostring(sellResult)
         end
         
         task.wait(0.3)
@@ -6832,43 +6933,50 @@ local function executeAction(action, retryCount)
         
         print("[Macro] Placing " .. (action.TowerName or "?") .. " at position")
         
+        local actualTowerName = getgenv()._GetActualTowerName(action.TowerName or unitNameToPlace)
+        local specificTowerCountBefore = 0
         local towerCountBefore = 0
+        
         for _, t in pairs(workspace.Towers:GetChildren()) do
             local owner = t:FindFirstChild("Owner")
             if owner and owner.Value == LocalPlayer then
                 towerCountBefore = towerCountBefore + 1
+                if t.Name == actualTowerName then
+                    specificTowerCountBefore = specificTowerCountBefore + 1
+                end
             end
         end
         
-        local callSuccess = pcall(function()
-            if remote:IsA("RemoteFunction") then
-                remote:InvokeServer(unpack(args))
-            else
-                remote:FireServer(unpack(args))
-            end
-        end)
+        local method = remote:IsA("RemoteFunction") and "InvokeServer" or "FireServer"
+        local callSuccess, callResult = getgenv()._ConnectionStability_safeRemoteCall(remote, method, unpack(args))
         
         if not callSuccess then
-            return false, "Failed to call placement remote"
+            return false, "Failed to call placement remote: " .. tostring(callResult)
         end
         
-        task.wait(0.5)
+        task.wait(0.8)
         
+        local specificTowerCountAfter = 0
         local towerCountAfter = 0
+        
         for _, t in pairs(workspace.Towers:GetChildren()) do
             local owner = t:FindFirstChild("Owner")
             if owner and owner.Value == LocalPlayer then
                 towerCountAfter = towerCountAfter + 1
+                if t.Name == actualTowerName then
+                    specificTowerCountAfter = specificTowerCountAfter + 1
+                end
             end
         end
         
-        if towerCountAfter > towerCountBefore then
-            print("[Macro] ✅ Placement successful (" .. towerCountBefore .. " → " .. towerCountAfter .. " towers)")
+        if specificTowerCountAfter > specificTowerCountBefore then
+            print("[Macro] ✅ Placement successful - " .. actualTowerName .. " (" .. specificTowerCountBefore .. " → " .. specificTowerCountAfter .. ") | Total: " .. towerCountBefore .. " → " .. towerCountAfter)
             return true, "Placed"
         else
-            print("[Macro] ❌ Placement failed (tower count unchanged: " .. towerCountBefore .. ")")
+            print("[Macro] ❌ Placement failed - " .. actualTowerName .. " count unchanged: " .. specificTowerCountBefore .. " | Total towers: " .. towerCountAfter)
             if retryCount < 1 then
-                task.wait(0.3)
+                warn("[Macro] Retrying placement...")
+                task.wait(0.5)
                 return executeAction(action, retryCount + 1)
             end
             return false, "Placement failed after retry"
@@ -19340,6 +19448,13 @@ getgenv()._SeamlessRestartManager_cleanupBeforeRestart = function()
         cleanupCount = cleanupCount + 1
         warn("[SeamlessRestartManager] Stopped macro playback")
     end
+    
+    getgenv().MacroCurrentStep = 1
+    getgenv().MacroActionText = ""
+    getgenv().MacroUnitText = ""
+    getgenv().MacroWaitingText = ""
+    getgenv().MacroStatusText = "Ready for restart"
+    warn("[SeamlessRestartManager] Reset macro state to step 1")
     
     pcall(function()
         collectgarbage("collect")
