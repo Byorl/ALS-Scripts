@@ -1089,10 +1089,11 @@ getgenv().ConnectionStability = getgenv().ConnectionStability or {
     isProcessing = false,
     errorDialogActive = false,
     pausedUntil = 0,
-    version = "1.0.0"
+    version = "1.1.0"
 }
 
 print("[ALS] ✅ Connection Stability System v" .. getgenv().ConnectionStability.version .. " loaded")
+print("[ALS] ✅ Macro fixes v1.1.0 - Improved restart detection and duplicate prevention")
 
 getgenv()._ConnectionStability_safeRemoteCall = function(remote, method, ...)
     local stability = getgenv().ConnectionStability
@@ -1110,6 +1111,8 @@ getgenv()._ConnectionStability_safeRemoteCall = function(remote, method, ...)
     
     stability.lastRemoteCallTime = tick()
     
+    getgenv()._SkipRecordingNextCall = true
+    
     local success, result
     if method == "InvokeServer" then
         success, result = pcall(function()
@@ -1121,6 +1124,8 @@ getgenv()._ConnectionStability_safeRemoteCall = function(remote, method, ...)
             return true
         end)
     end
+    
+    getgenv()._SkipRecordingNextCall = false
     
     if not success then
         warn("[Connection] Remote call failed: " .. tostring(result))
@@ -5479,7 +5484,7 @@ getgenv().EZAUnitMapping = getgenv().EZAUnitMapping or {}
 getgenv().AutoReadyEnabled = getgenv().Config.toggles.AutoReady or false
 getgenv().AutoNextEnabled = getgenv().Config.toggles.AutoNext or false
 getgenv().AutoLeaveEnabled = getgenv().Config.toggles.AutoLeave or false
-getgenv().AutoEnchantEnabled = getgenv().Config.toggles.AutoEnchant or false
+getgenv().AutoEnchantEnabled = false
 getgenv().AutoEnchantUnit = getgenv().Config.inputs.AutoEnchantUnit or ""
 getgenv().AutoEnchantMaterial = getgenv().Config.inputs.AutoEnchantMaterial or "Pearl"
 getgenv().AutoEnchantDesiredEnchants = getgenv().Config.inputs.AutoEnchantDesiredEnchants or {}
@@ -6334,7 +6339,7 @@ local function setupRecordingHook()
         
         local result = {oldNamecall(self, ...)}
         
-        if getgenv().MacroRecordingV2 and (method == "InvokeServer" or method == "FireServer") then
+        if getgenv().MacroRecordingV2 and not getgenv()._SkipRecordingNextCall and (method == "InvokeServer" or method == "FireServer") then
             local args = {...}
             task.spawn(function()
                 pcall(function()
@@ -7524,7 +7529,7 @@ task.spawn(function()
             debugPrint("[Macro] EndGameUI removed, preparing restart...")
             restartCooldown = true
             
-            task.wait(1.5)
+            task.wait(2)
             
             if getgenv().MacroPlaybackActive then
                 debugPrint("[Macro] Already playing, skipping restart")
@@ -7532,6 +7537,54 @@ task.spawn(function()
                 lastEndGameUIState = currentEndGameUIState
                 task.wait(3)
                 continue
+            end
+            
+            print("[Macro] Waiting for game to fully restart...")
+            local maxWait = 20
+            local waited = 0
+            local gameReady = false
+            
+            while waited < maxWait do
+                local towerCount = 0
+                pcall(function()
+                    for _, tower in pairs(workspace.Towers:GetChildren()) do
+                        local owner = tower:FindFirstChild("Owner")
+                        if owner and owner.Value == LocalPlayer then
+                            towerCount = towerCount + 1
+                        end
+                    end
+                end)
+                
+                local wave = 0
+                local gameStarted = false
+                pcall(function()
+                    local waveValue = RS:FindFirstChild("Wave")
+                    if waveValue then
+                        wave = waveValue.Value
+                    end
+                    
+                    local gameStartedValue = RS:FindFirstChild("GameStarted")
+                    if gameStartedValue and gameStartedValue.Value ~= nil then
+                        gameStarted = gameStartedValue.Value
+                    end
+                end)
+                
+                if towerCount == 0 and wave <= 1 and not gameStarted then
+                    gameReady = true
+                    print("[Macro] Game ready - no towers, wave " .. wave .. ", game not started")
+                    break
+                end
+                
+                if getgenv().DebugMode then
+                    print(string.format("[Macro] Waiting... Towers: %d, Wave: %d, GameStarted: %s", towerCount, wave, tostring(gameStarted)))
+                end
+                
+                task.wait(0.5)
+                waited = waited + 0.5
+            end
+            
+            if not gameReady then
+                warn("[Macro] Timeout waiting for game restart, starting anyway...")
             end
             
             getgenv().MacroPlaybackActive = false
@@ -7547,13 +7600,13 @@ task.spawn(function()
             
             getgenv().UpdateMacroStatus()
             
-            task.wait(0.5)
+            task.wait(1)
             
             debugPrint("[Macro] Starting playback...")
             playMacroV2()
             lastRestartAttempt = tick()
             
-            task.delay(3, function()
+            task.delay(5, function()
                 restartCooldown = false
             end)
         end
@@ -13314,6 +13367,9 @@ getgenv()._autoEnchantSuccess, getgenv()._autoEnchantErr = pcall(function()
         true,
         function(value)
             getgenv().AutoEnchantDesiredEnchants = value
+            getgenv().Config.inputs = getgenv().Config.inputs or {}
+            getgenv().Config.inputs.AutoEnchantDesiredEnchants = value
+            saveConfig(getgenv().Config)
         end,
         getgenv().AutoEnchantDesiredEnchants
     )
@@ -13768,23 +13824,11 @@ task.spawn(function()
                     return
                 end
                 
-                if getgenv().WebhookEnabled then
-                    print("[Auto " .. actionName .. "] Waiting for webhook to start and complete...")
-                    
-                    local startWait = 0
-                    while not getgenv().WebhookProcessing and startWait < 5 do
-                        task.wait(0.5)
-                        startWait = startWait + 0.5
-                    end
-                    
-                    if getgenv().WebhookProcessing then
-                        print("[Auto " .. actionName .. "] Webhook started, waiting for completion...")
-                    else
-                        print("[Auto " .. actionName .. "] Webhook didn't start, continuing anyway...")
-                    end
+                if getgenv().WebhookEnabled and getgenv().WebhookProcessing then
+                    print("[Auto " .. actionName .. "] Waiting for webhook to complete...")
                     
                     local maxWait = 0
-                    local maxWaitTime = 35
+                    local maxWaitTime = 15
                     
                     while getgenv().WebhookProcessing and maxWait < maxWaitTime do
                         task.wait(0.5)
