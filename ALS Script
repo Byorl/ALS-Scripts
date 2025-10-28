@@ -14001,11 +14001,17 @@ task.spawn(function()
         end
         
         if not getgenv().AutoEnchantUnit or getgenv().AutoEnchantUnit == "" or getgenv().AutoEnchantUnit == "No units found" or getgenv().AutoEnchantUnit == "Loading units..." then
+            if getgenv().DebugMode then
+                print("[AutoEnchant] Waiting for valid unit selection: " .. tostring(getgenv().AutoEnchantUnit))
+            end
             task.wait(0.5)
             continue
         end
         
         if not getgenv().AutoEnchantDesiredEnchants or type(getgenv().AutoEnchantDesiredEnchants) ~= "table" then
+            if getgenv().DebugMode then
+                print("[AutoEnchant] Waiting for desired enchants to be set")
+            end
             task.wait(0.5)
             continue
         end
@@ -14019,8 +14025,15 @@ task.spawn(function()
         end
         
         if not hasDesiredEnchant then
+            if getgenv().DebugMode then
+                print("[AutoEnchant] No desired enchants selected")
+            end
             task.wait(0.5)
             continue
+        end
+        
+        if getgenv().DebugMode then
+            print("[AutoEnchant] Starting enchant attempt for: " .. getgenv().AutoEnchantUnit)
         end
         
         local success, err = pcall(function()
@@ -14054,6 +14067,9 @@ task.spawn(function()
                 warn("[AutoEnchant] RollEnchant remote not found")
                 return
             end
+            
+            print("[AutoEnchant] Attempting to roll enchant for " .. unit.unitName .. " (ID: " .. unit.unitID .. ") using " .. getgenv().AutoEnchantMaterial)
+            print("[AutoEnchant] Current enchant: " .. tostring(currentEnchant))
             
             local rollSuccess, rollResult = pcall(function()
                 return rollEnchant:InvokeServer(unit.unitID, getgenv().AutoEnchantMaterial, currentEnchant)
