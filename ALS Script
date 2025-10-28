@@ -16933,13 +16933,17 @@ local function formatNumber(num)
     return s
 end
 
+getgenv()._FormatNumber = formatNumber
+
 local function SendMessageEMBED(url, embed, content)
+    print("[SendMessageEMBED] Starting webhook send...")
     if not url or url == "" then
         warn("[Webhook] Invalid URL provided")
         return false
     end
     
     local success, result = pcall(function()
+        print("[SendMessageEMBED] Inside pcall...")
         local headers = { ["Content-Type"] = "application/json" }
         local data = { 
             embeds = { { 
@@ -16956,19 +16960,31 @@ local function SendMessageEMBED(url, embed, content)
             data.content = content
         end
         
-        local body = HttpService:JSONEncode(data)
+        print("[SendMessageEMBED] Encoding JSON...")
+        local httpSvc = game:GetService("HttpService")
+        if not httpSvc then
+            warn("[Webhook] HttpService not available")
+            return false
+        end
         
+        local body = httpSvc:JSONEncode(data)
+        print("[SendMessageEMBED] JSON encoded successfully")
+        
+        print("[SendMessageEMBED] Finding request function...")
         local requestFunc = syn and syn.request or http_request or request
         if not requestFunc then
             warn("[Webhook] No request function available")
             return false
         end
+        print("[SendMessageEMBED] Request function found: " .. tostring(requestFunc))
         
         local maxRetries = 3
         local retryDelay = 1
         local response = nil
         
+        print("[SendMessageEMBED] Starting request attempts...")
         for attempt = 1, maxRetries do
+            print("[SendMessageEMBED] Attempt " .. attempt .. "/" .. maxRetries)
             local requestSuccess, requestResult = pcall(function()
                 return requestFunc({
                     Url = url,
@@ -16979,6 +16995,7 @@ local function SendMessageEMBED(url, embed, content)
             end)
             
             if requestSuccess and requestResult then
+                print("[SendMessageEMBED] Request successful!")
                 response = requestResult
                 break
             else
@@ -16995,8 +17012,11 @@ local function SendMessageEMBED(url, embed, content)
             return false
         end
         
+        print("[SendMessageEMBED] Checking response status...")
         if response and response.StatusCode then
+            print("[SendMessageEMBED] Status code: " .. response.StatusCode)
             if response.StatusCode == 204 or response.StatusCode == 200 then
+                print("[SendMessageEMBED] Success!")
                 return true
             else
                 warn("[Webhook] Failed with status: " .. response.StatusCode)
@@ -17007,6 +17027,7 @@ local function SendMessageEMBED(url, embed, content)
             end
         end
         
+        print("[SendMessageEMBED] Returning true (no status code)")
         return true
     end)
     
@@ -17015,7 +17036,131 @@ local function SendMessageEMBED(url, embed, content)
         return false
     end
     
+    print("[SendMessageEMBED] Final result: " .. tostring(result))
     return result
+end
+
+getgenv()._CompareCapsuleRewards = function(beforeData, afterData)
+    if not beforeData or not afterData then return "" end
+    
+    local rewards = {}
+    
+    if afterData.UnitData and beforeData.UnitData then
+        local unitCounts = {}
+        for unitID, unitInfo in pairs(afterData.UnitData) do
+            if not beforeData.UnitData[unitID] and unitInfo.UnitName then
+                local unitName = unitInfo.UnitName
+                unitCounts[unitName] = (unitCounts[unitName] or 0) + 1
+            end
+        end
+        
+        for unitName, count in pairs(unitCounts) do
+            table.insert(rewards, count .. "x " .. unitName)
+        end
+    end
+    
+    if afterData.ItemData and beforeData.ItemData then
+        for itemName, itemInfo in pairs(afterData.ItemData) do
+            local beforeAmount = (beforeData.ItemData[itemName] and beforeData.ItemData[itemName].Amount) or 0
+            local afterAmount = itemInfo.Amount or 0
+            local gained = afterAmount - beforeAmount
+            
+            if gained > 0 then
+                local displayName = itemName:gsub("([A-Z])", " %1"):gsub("^%s+", "")
+                table.insert(rewards, "+" .. formatNumber(gained) .. " " .. displayName)
+            end
+        end
+    elseif afterData.ItemData then
+        for itemName, itemInfo in pairs(afterData.ItemData) do
+            local amount = itemInfo.Amount or 0
+            if amount > 0 then
+                local displayName = itemName:gsub("([A-Z])", " %1"):gsub("^%s+", "")
+                table.insert(rewards, "+" .. formatNumber(amount) .. " " .. displayName)
+            end
+        end
+    end
+    
+    if #rewards == 0 then
+        return "No new items"
+    end
+    
+    return table.concat(rewards, "\n")
+end
+
+getgenv()._SendCapsuleWebhook = function(eventName, capsuleCount, rewardsText, clientData)
+    print("[Capsule Webhook] Function called - Event: " .. tostring(eventName))
+    print("[Capsule Webhook] WebhookEnabled: " .. tostring(getgenv().WebhookEnabled))
+    print("[Capsule Webhook] WebhookURL exists: " .. tostring(getgenv().WebhookURL ~= nil and getgenv().WebhookURL ~= ""))
+    
+    if not getgenv().WebhookEnabled or not getgenv().WebhookURL or getgenv().WebhookURL == "" then
+        warn("[Capsule Webhook] Webhook not enabled or URL not set")
+        return
+    end
+    
+    if not clientData then 
+        warn("[Capsule Webhook] No client data provided")
+        return 
+    end
+    
+    print("[Capsule Webhook] Preparing to send webhook...")
+    
+    local username = LocalPlayer.Name
+    local level = clientData.Level or 0
+    local exp = clientData.EXP or 0
+    local expNeeded = clientData.EXPNeeded or 0
+    
+    local function formatStats()
+        local stats = "<:gold:1265957290251522089> " .. formatNumber(clientData.Jewels or 0)
+        stats = stats .. "\n<:jewel:1217525743408648253> " .. formatNumber(clientData.Gold or 0)
+        stats = stats .. "\n<:emerald:1389165843966984192> " .. formatNumber(clientData.Emeralds or 0)
+        stats = stats .. "\n<:rerollshard:1426315987019501598> " .. formatNumber(clientData.Rerolls or 0)
+        stats = stats .. "\n<:candybasket:1426304615284084827> " .. formatNumber(clientData.CandyBasket or 0)
+        
+        local bingoStamps = 0
+        if clientData.ItemData and clientData.ItemData.HallowenBingoStamp then
+            bingoStamps = clientData.ItemData.HallowenBingoStamp.Amount or 0
+        end
+        stats = stats .. "\n<:bingostamp:1426362482141954068> " .. formatNumber(bingoStamps)
+        
+        stats = stats .. "\n<:halloweencookies:1430910916534210580> " .. formatNumber(clientData.HalloweenCookies or 0)
+        
+        stats = stats .. "\n<:slimecoins:1430922724230037684> " .. formatNumber(clientData.MagicCoins or 0)
+        
+        return stats
+    end
+    
+    local embedFields = {
+        { name = "Player Stats", value = formatStats(), inline = true },
+        { name = "Capsule Rewards", value = rewardsText ~= "" and rewardsText or "No rewards", inline = true }
+    }
+    
+    local embed = {
+        title = eventName,
+        description = string.format("**Username:** ||%s||\n**Level:** %d [%s/%s]", 
+            username, 
+            level, 
+            formatNumber(exp), 
+            formatNumber(expNeeded)
+        ),
+        color = 0x9B59B6,
+        fields = embedFields,
+        footer = { text = "Capsules Opened: " .. formatNumber(capsuleCount) }
+    }
+    
+    local pingContent = ""
+    if getgenv().PingOnSecretDrop and getgenv().DiscordUserID and getgenv().DiscordUserID ~= "" then
+        pingContent = "<@" .. getgenv().DiscordUserID .. ">"
+    end
+    
+    print("[Capsule Webhook] Sending webhook to Discord...")
+    task.spawn(function()
+        local success = SendMessageEMBED(getgenv().WebhookURL, embed, pingContent)
+        if success then
+            print("[Capsule Webhook] ✅ Successfully sent webhook")
+        else
+            warn("[Capsule Webhook] ❌ Failed to send webhook")
+        end
+    end)
 end
 
 local function getRewards()
@@ -18240,22 +18385,22 @@ if isInLobby then
                     local purchaseEvent = halloweenFolder and halloweenFolder:FindFirstChild("PurchaseEvent")
                     
                     if purchaseEvent then
-                        if candyBasket >= 750000 then
+                        if candyBasket >= 1000000 then
                             pcall(function() 
                                 purchaseEvent:InvokeServer(1, 1000, "Hallowen2025_P2")
                                 print("[Auto Capsule 2] Purchased 1000 capsules")
                             end)
-                        elseif candyBasket >= 75000 then
+                        elseif candyBasket >= 100000 then
                             pcall(function() 
                                 purchaseEvent:InvokeServer(1, 100, "Hallowen2025_P2")
                                 print("[Auto Capsule 2] Purchased 100 capsules")
                             end)
-                        elseif candyBasket >= 7500 then
+                        elseif candyBasket >= 10000 then
                             pcall(function() 
                                 purchaseEvent:InvokeServer(1, 10, "Hallowen2025_P2")
                                 print("[Auto Capsule 2] Purchased 10 capsules")
                             end)
-                        elseif candyBasket >= 750 then
+                        elseif candyBasket >= 1000 then
                             pcall(function() 
                                 purchaseEvent:InvokeServer(1, 1, "Hallowen2025_P2")
                                 print("[Auto Capsule 2] Purchased 1 capsule")
@@ -18263,7 +18408,9 @@ if isInLobby then
                         end
                     end
                     
-                    if candyBasket < 750 then
+                    if candyBasket < 1000 then
+                        ClientDataCache.module = nil
+                        ClientDataCache.lastUpdate = 0
                         clientData = getClientData()
                         local capsuleAmount = 0
                         if clientData and clientData.ItemData and clientData.ItemData.HalloweenCapsule2025 then
@@ -18271,14 +18418,46 @@ if isInLobby then
                         end
                         
                         if capsuleAmount > 0 then
+                            local beforeData = {}
+                            if clientData.UnitData then
+                                beforeData.UnitData = {}
+                                for k, v in pairs(clientData.UnitData) do
+                                    beforeData.UnitData[k] = v
+                                end
+                            end
+                            if clientData.ItemData then
+                                beforeData.ItemData = {}
+                                for k, v in pairs(clientData.ItemData) do
+                                    beforeData.ItemData[k] = {Amount = v.Amount or 0}
+                                end
+                            end
+                            
                             local openCapsuleEvent = halloweenFolder and halloweenFolder:FindFirstChild("OpenCapsule")
                             if openCapsuleEvent then
                                 pcall(function()
                                     openCapsuleEvent:FireServer("HalloweenCapsule2025", capsuleAmount)
-                                    print("[Auto Capsule 2] Opened " .. capsuleAmount .. " capsules")
+                                    print("[Auto Capsule Event 1] Opened " .. capsuleAmount .. " capsules")
                                 end)
                                 task.wait(0.5)
                                 clickAllPromptButtons()
+                                
+                                task.wait(1)
+                                ClientDataCache.module = nil
+                                ClientDataCache.lastUpdate = 0
+                                local afterData = getClientData()
+                                
+                                if afterData and getgenv()._CompareCapsuleRewards then
+                                    local rewardsText = getgenv()._CompareCapsuleRewards(beforeData, afterData)
+                                    print("[Auto Capsule Event 1] Rewards:\n" .. rewardsText)
+                                    
+                                    print("[Auto Capsule Event 1] Checking webhook function...")
+                                    if getgenv()._SendCapsuleWebhook then
+                                        print("[Auto Capsule Event 1] Calling webhook with " .. capsuleAmount .. " capsules")
+                                        getgenv()._SendCapsuleWebhook("Halloween Event 1 Capsules", capsuleAmount, rewardsText, afterData)
+                                    else
+                                        warn("[Auto Capsule Event 1] Webhook function not found!")
+                                    end
+                                end
                             end
                         end
                     end
@@ -18461,15 +18640,19 @@ if isInLobby then
             
             local halloweenCookies = clientData.HalloweenCookies or 0
             
-            if halloweenCookies >= 100000 then
+            if halloweenCookies >= 750000 then
+                Purchase:InvokeServer(1, 1000, "Hallowen2025_P2")
+            elseif halloweenCookies >= 75000 then
                 Purchase:InvokeServer(1, 100, "Hallowen2025_P2")
-            elseif halloweenCookies >= 10000 then
+            elseif halloweenCookies >= 7500 then
                 Purchase:InvokeServer(1, 10, "Hallowen2025_P2")
-            elseif halloweenCookies >= 1000 then
+            elseif halloweenCookies >= 750 then
                 Purchase:InvokeServer(1, 1, "Hallowen2025_P2")
             end
             
             if halloweenCookies < 1000 then
+                ClientDataCache.module = nil
+                ClientDataCache.lastUpdate = 0
                 clientData = getClientData()
                 local capsuleAmount = 0
                 if clientData and clientData.ItemData and clientData.ItemData.HalloweenCapsule2025_P2 then
@@ -18477,9 +18660,42 @@ if isInLobby then
                 end
                 
                 if capsuleAmount > 0 then
+                    local beforeData = {}
+                    if clientData.UnitData then
+                        beforeData.UnitData = {}
+                        for k, v in pairs(clientData.UnitData) do
+                            beforeData.UnitData[k] = v
+                        end
+                    end
+                    if clientData.ItemData then
+                        beforeData.ItemData = {}
+                        for k, v in pairs(clientData.ItemData) do
+                            beforeData.ItemData[k] = {Amount = v.Amount or 0}
+                        end
+                    end
+                    
                     OpenCapsule:FireServer("HalloweenCapsule2025_P2", capsuleAmount)
+                    print("[Auto Capsule Event 2] Opened " .. capsuleAmount .. " capsules")
                     task.wait(0.5)
                     clickAllPromptButtons()
+                    
+                    task.wait(1)
+                    ClientDataCache.module = nil
+                    ClientDataCache.lastUpdate = 0
+                    local afterData = getClientData()
+                    
+                    if afterData and getgenv()._CompareCapsuleRewards then
+                        local rewardsText = getgenv()._CompareCapsuleRewards(beforeData, afterData)
+                        print("[Auto Capsule Event 2] Rewards:\n" .. rewardsText)
+                        
+                        print("[Auto Capsule Event 2] Checking webhook function...")
+                        if getgenv()._SendCapsuleWebhook then
+                            print("[Auto Capsule Event 2] Calling webhook with " .. capsuleAmount .. " capsules")
+                            getgenv()._SendCapsuleWebhook("Halloween Event 2 Capsules", capsuleAmount, rewardsText, afterData)
+                        else
+                            warn("[Auto Capsule Event 2] Webhook function not found!")
+                        end
+                    end
                 end
             end
         end)
