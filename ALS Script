@@ -17258,6 +17258,10 @@ do
             local rewards = getRewards()
             local matchTime, matchWave, matchResult = getgenv()._GetMatchResult()
             local mapName, mapDifficulty = getgenv()._GetMapInfo()
+            
+            ClientDataCache.module = nil
+            ClientDataCache.lastUpdate = 0
+            
             local clientData = getClientData()
             
             if not clientData then
@@ -17327,6 +17331,9 @@ do
             
             
             local function formatStats()
+                print("[Webhook Debug] Rerolls raw value:", clientData.Rerolls)
+                print("[Webhook Debug] Rerolls type:", type(clientData.Rerolls))
+                
                 local stats = "<:gold:1265957290251522089> " .. formatNumber(clientData.Jewels or 0)
                 stats = stats .. "\n<:jewel:1217525743408648253> " .. formatNumber(clientData.Gold or 0)
                 stats = stats .. "\n<:emerald:1389165843966984192> " .. formatNumber(clientData.Emeralds or 0)
