@@ -33,7 +33,6 @@ for _, placeId in ipairs(SUPPORTED_PLACE_IDS) do
                 break
             end
             
-            warn(string.format("[ALS Loader] UI not found, retrying in %d seconds...", retryDelay))
             task.wait(retryDelay)
         end
         
