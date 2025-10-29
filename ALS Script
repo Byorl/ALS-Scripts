@@ -9043,6 +9043,21 @@ if isInLobby then
         getgenv().Config.toggles.CapsuleToggle or false
     )
     
+    createToggle(
+        Sections.EventLeft,
+        "Auto Buy Capsule",
+        "AutoBuyCapsuleToggle",
+        function(value)
+            getgenv().AutoBuyCapsuleEnabled = value
+            Window:Notify({
+                Title = "Auto Buy Capsule",
+                Description = value and "Enabled - Will only purchase, not open" or "Disabled",
+                Lifetime = 3
+            })
+        end,
+        getgenv().Config.toggles.AutoBuyCapsuleToggle or false
+    )
+    
     Sections.EventLeft:Divider()
     
     Sections.EventLeft:Header({ Text = "💰 Auto Sell Capsule Units" })
@@ -9349,6 +9364,21 @@ createToggle(
         })
     end,
     getgenv().Config.toggles.Capsule2Toggle or false
+)
+
+createToggle(
+    Sections.Event2Left,
+    "Auto Buy Capsule",
+    "AutoBuyCapsule2Toggle",
+    function(value)
+        getgenv().AutoBuyCapsule2Enabled = value
+        Window:Notify({
+            Title = "Auto Buy Capsule 2",
+            Description = value and "Enabled - Will only purchase, not open" or "Disabled",
+            Lifetime = 3
+        })
+    end,
+    getgenv().Config.toggles.AutoBuyCapsule2Toggle or false
 )
 
 Sections.Event2Left:Divider()
@@ -18468,7 +18498,57 @@ if isInLobby then
     end
 end
 
-
+task.spawn(function()
+    task.wait(1)
+    
+    while true do
+        task.wait(0.5)
+        
+        if not getgenv().AutoBuyCapsuleEnabled then
+            task.wait(3)
+            continue
+        end
+        
+        pcall(function()
+            local clientData = getClientData()
+            if not clientData then return end
+            
+            local candyBasket = clientData.CandyBasket or 0
+            
+            local eventsFolder = RS:FindFirstChild("Events")
+            local halloweenFolder = eventsFolder and eventsFolder:FindFirstChild("Hallowen2025")
+            local purchaseEvent = halloweenFolder and halloweenFolder:FindFirstChild("PurchaseEvent")
+            
+            if purchaseEvent then
+                if candyBasket >= 1000000 then
+                    pcall(function() 
+                        purchaseEvent:InvokeServer(1, 1000, "Hallowen2025_P2")
+                        print("[Auto Buy Capsule 1] Purchased 1000 capsules")
+                    end)
+                    task.wait(1)
+                elseif candyBasket >= 100000 then
+                    pcall(function() 
+                        purchaseEvent:InvokeServer(1, 100, "Hallowen2025_P2")
+                        print("[Auto Buy Capsule 1] Purchased 100 capsules")
+                    end)
+                    task.wait(1)
+                elseif candyBasket >= 10000 then
+                    pcall(function() 
+                        purchaseEvent:InvokeServer(1, 10, "Hallowen2025_P2")
+                        print("[Auto Buy Capsule 1] Purchased 10 capsules")
+                    end)
+                    task.wait(1)
+                elseif candyBasket >= 1000 then
+                    pcall(function() 
+                        purchaseEvent:InvokeServer(1, 1, "Hallowen2025_P2")
+                        print("[Auto Buy Capsule 1] Purchased 1 capsule")
+                    end)
+                    task.wait(1)
+                end
+            end
+        end)
+    end
+end)
 
 task.spawn(function()
     while true do
@@ -18703,6 +18783,44 @@ if isInLobby then
     end)
 end
 
+task.spawn(function()
+    task.wait(1)
+    local Purchase = RS:WaitForChild("Events"):WaitForChild("Hallowen2025"):WaitForChild("Purchase")
+    
+    while true do
+        task.wait(0.5)
+        
+        if not getgenv().AutoBuyCapsule2Enabled then
+            task.wait(3)
+            continue
+        end
+        
+        pcall(function()
+            local clientData = getClientData()
+            if not clientData then return end
+            
+            local halloweenCookies = clientData.HalloweenCookies or 0
+            
+            if halloweenCookies >= 750000 then
+                Purchase:InvokeServer(1, 1000, "Hallowen2025_P2")
+                print("[Auto Buy Capsule 2] Purchased 1000 capsules")
+                task.wait(1)
+            elseif halloweenCookies >= 75000 then
+                Purchase:InvokeServer(1, 100, "Hallowen2025_P2")
+                print("[Auto Buy Capsule 2] Purchased 100 capsules")
+                task.wait(1)
+            elseif halloweenCookies >= 7500 then
+                Purchase:InvokeServer(1, 10, "Hallowen2025_P2")
+                print("[Auto Buy Capsule 2] Purchased 10 capsules")
+                task.wait(1)
+            elseif halloweenCookies >= 750 then
+                Purchase:InvokeServer(1, 1, "Hallowen2025_P2")
+                print("[Auto Buy Capsule 2] Purchased 1 capsule")
+                task.wait(1)
+            end
+        end)
+    end
+end)
 
 do
     if isInLobby then
