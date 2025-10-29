@@ -1156,6 +1156,14 @@ getgenv()._SafeClickButton = function(button, callback)
 end
 
 task.spawn(function()
+    while task.wait(1) do
+        if getgenv()._SkipRecordingNextCall then
+            getgenv()._SkipRecordingNextCall = false
+        end
+    end
+end)
+
+task.spawn(function()
     while task.wait(0.5) do
         pcall(function()
             if not LocalPlayer or not LocalPlayer.PlayerGui then return end
@@ -6360,7 +6368,12 @@ local function setupRecordingHook()
         
         local result = {oldNamecall(self, ...)}
         
-        if getgenv().MacroRecordingV2 and not getgenv()._SkipRecordingNextCall and (method == "InvokeServer" or method == "FireServer") then
+        local shouldRecord = getgenv().MacroRecordingV2 and 
+                            not getgenv()._SkipRecordingNextCall and 
+                            (method == "InvokeServer" or method == "FireServer") and
+                            not GameStateDetector:isLobby()
+        
+        if shouldRecord then
             local args = {...}
             task.spawn(function()
                 pcall(function()
