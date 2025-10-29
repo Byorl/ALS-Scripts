@@ -1134,6 +1134,27 @@ getgenv()._ConnectionStability_safeRemoteCall = function(remote, method, ...)
     return success, result
 end
 
+getgenv()._SafeClickButton = function(button, callback)
+    getgenv()._SkipRecordingNextCall = true
+    local success, result = pcall(callback or function()
+        if getconnections then
+            local events = {"Activated", "MouseButton1Click", "MouseButton1Down", "MouseButton1Up"}
+            for _, eventName in ipairs(events) do
+                local connections = getconnections(button[eventName])
+                if connections then
+                    for _, conn in ipairs(connections) do
+                        if conn and conn.Fire then
+                            conn:Fire()
+                        end
+                    end
+                end
+            end
+        end
+    end)
+    getgenv()._SkipRecordingNextCall = false
+    return success, result
+end
+
 task.spawn(function()
     while task.wait(0.5) do
         pcall(function()
@@ -13986,6 +14007,7 @@ task.spawn(function()
                             return
                         end
                         
+                        getgenv()._SkipRecordingNextCall = true
                         for _, signal in pairs({"MouseButton1Click", "Activated"}) do
                             pcall(function()
                                 for _, connection in pairs(getconnections(buttonToPress[signal])) do
@@ -13993,6 +14015,7 @@ task.spawn(function()
                                 end
                             end)
                         end
+                        getgenv()._SkipRecordingNextCall = false
                         
                         task.wait(0.2)
                         pressSuccess = true
@@ -15771,6 +15794,7 @@ do
         local function clickButton(button)
             if not button then return false end
             
+            getgenv()._SkipRecordingNextCall = true
             local success = false
             
             if getconnections then
@@ -15806,6 +15830,7 @@ do
                 end)
             end
             
+            getgenv()._SkipRecordingNextCall = false
             return success
         end
         
@@ -16052,6 +16077,7 @@ do
                 end)
             end
             
+            getgenv()._SkipRecordingNextCall = false
             return success
         end
         
@@ -16273,6 +16299,7 @@ task.spawn(function()
                 
                 local function clickOptionButton(button)
                     if not button then return false end
+                    getgenv()._SkipRecordingNextCall = true
                     local events = {"Activated", "MouseButton1Click", "MouseButton1Down", "MouseButton1Up"}
                     for _, ev in ipairs(events) do
                         pcall(function()
@@ -16282,6 +16309,7 @@ task.spawn(function()
                         end)
                         task.wait(0.05)
                     end
+                    getgenv()._SkipRecordingNextCall = false
                     return true
                 end
                 
@@ -16901,9 +16929,11 @@ task.spawn(function()
                             if nextButton and nextButton:FindFirstChild("Styling") then
                                 local label = nextButton.Styling:FindFirstChild("Label")
                                 if label and label.Text == "View Portals" then
+                                    getgenv()._SkipRecordingNextCall = true
                                     for i, v in pairs(getconnections(nextButton.MouseButton1Click)) do
                                         v:Fire()
                                     end
+                                    getgenv()._SkipRecordingNextCall = false
                                     
                                     task.wait(1)
                                     
@@ -16918,16 +16948,20 @@ task.spawn(function()
                                                         if child:IsA("Frame") or child:IsA("GuiObject") then
                                                             local textButton = child:FindFirstChildOfClass("TextButton", true)
                                                             if textButton then
+                                                                getgenv()._SkipRecordingNextCall = true
                                                                 for i, v in pairs(getconnections(textButton.MouseButton1Click)) do
                                                                     v:Fire()
                                                                 end
+                                                                getgenv()._SkipRecordingNextCall = false
                                                                 task.wait(0.2)
                                                                 
                                                                 local confirmButton = promptUI:FindFirstChild("Confirm", true)
                                                                 if confirmButton and confirmButton:IsA("TextButton") then
+                                                                    getgenv()._SkipRecordingNextCall = true
                                                                     for i, v in pairs(getconnections(confirmButton.MouseButton1Click)) do
                                                                         v:Fire()
                                                                     end
+                                                                    getgenv()._SkipRecordingNextCall = false
                                                                 end
                                                                 break
                                                             end
@@ -18359,6 +18393,7 @@ if isInLobby then
         
         local function clickButton(button)
             if not button then return false end
+            getgenv()._SkipRecordingNextCall = true
             local events = {"Activated", "MouseButton1Click", "MouseButton1Down", "MouseButton1Up"}
             for _, ev in ipairs(events) do
                 pcall(function()
@@ -18367,6 +18402,7 @@ if isInLobby then
                     end
                 end)
             end
+            getgenv()._SkipRecordingNextCall = false
             return true
         end
         
@@ -18471,21 +18507,37 @@ if isInLobby then
                                 task.wait(0.5)
                                 clickAllPromptButtons()
                                 
-                                task.wait(1)
-                                ClientDataCache.module = nil
-                                ClientDataCache.lastUpdate = 0
-                                local afterData = getClientData()
+                                local waitTime = math.min(3 + (capsuleAmount / 10000), 10)
+                                task.wait(waitTime)
+                                
+                                local afterData = nil
+                                local attempts = 0
+                                local maxAttempts = 5
+                                
+                                while attempts < maxAttempts do
+                                    ClientDataCache.module = nil
+                                    ClientDataCache.lastUpdate = 0
+                                    afterData = getClientData()
+                                    
+                                    if afterData and afterData.ItemData then
+                                        local currentCapsules = (afterData.ItemData.HalloweenCapsule2025 and afterData.ItemData.HalloweenCapsule2025.Amount) or 0
+                                        local beforeCapsules = (beforeData.ItemData and beforeData.ItemData.HalloweenCapsule2025 and beforeData.ItemData.HalloweenCapsule2025.Amount) or 0
+                                        
+                                        if currentCapsules ~= beforeCapsules or attempts >= 3 then
+                                            break
+                                        end
+                                    end
+                                    
+                                    attempts = attempts + 1
+                                    task.wait(1)
+                                end
                                 
                                 if afterData and getgenv()._CompareCapsuleRewards then
                                     local rewardsText = getgenv()._CompareCapsuleRewards(beforeData, afterData)
                                     print("[Auto Capsule Event 1] Rewards:\n" .. rewardsText)
                                     
-                                    print("[Auto Capsule Event 1] Checking webhook function...")
                                     if getgenv()._SendCapsuleWebhook then
-                                        print("[Auto Capsule Event 1] Calling webhook with " .. capsuleAmount .. " capsules")
                                         getgenv()._SendCapsuleWebhook("Halloween Event 1 Capsules", capsuleAmount, rewardsText, afterData)
-                                    else
-                                        warn("[Auto Capsule Event 1] Webhook function not found!")
                                     end
                                 end
                             end
@@ -18668,6 +18720,7 @@ if isInLobby then
     
     local function clickButton(button)
         if not button then return false end
+        getgenv()._SkipRecordingNextCall = true
         local events = {"Activated", "MouseButton1Click", "MouseButton1Down", "MouseButton1Up"}
         for _, ev in ipairs(events) do
             pcall(function()
@@ -18676,6 +18729,7 @@ if isInLobby then
                 end
             end)
         end
+        getgenv()._SkipRecordingNextCall = false
         return true
     end
     
@@ -18759,21 +18813,37 @@ if isInLobby then
                     task.wait(0.5)
                     clickAllPromptButtons()
                     
-                    task.wait(1)
-                    ClientDataCache.module = nil
-                    ClientDataCache.lastUpdate = 0
-                    local afterData = getClientData()
+                    local waitTime = math.min(3 + (capsuleAmount / 10000), 10)
+                    task.wait(waitTime)
+                    
+                    local afterData = nil
+                    local attempts = 0
+                    local maxAttempts = 5
+                    
+                    while attempts < maxAttempts do
+                        ClientDataCache.module = nil
+                        ClientDataCache.lastUpdate = 0
+                        afterData = getClientData()
+                        
+                        if afterData and afterData.ItemData then
+                            local currentCapsules = (afterData.ItemData.HalloweenCapsule2025_P2 and afterData.ItemData.HalloweenCapsule2025_P2.Amount) or 0
+                            local beforeCapsules = (beforeData.ItemData and beforeData.ItemData.HalloweenCapsule2025_P2 and beforeData.ItemData.HalloweenCapsule2025_P2.Amount) or 0
+                            
+                            if currentCapsules ~= beforeCapsules or attempts >= 3 then
+                                break
+                            end
+                        end
+                        
+                        attempts = attempts + 1
+                        task.wait(1)
+                    end
                     
                     if afterData and getgenv()._CompareCapsuleRewards then
                         local rewardsText = getgenv()._CompareCapsuleRewards(beforeData, afterData)
                         print("[Auto Capsule Event 2] Rewards:\n" .. rewardsText)
                         
-                        print("[Auto Capsule Event 2] Checking webhook function...")
                         if getgenv()._SendCapsuleWebhook then
-                            print("[Auto Capsule Event 2] Calling webhook with " .. capsuleAmount .. " capsules")
                             getgenv()._SendCapsuleWebhook("Halloween Event 2 Capsules", capsuleAmount, rewardsText, afterData)
-                        else
-                            warn("[Auto Capsule Event 2] Webhook function not found!")
                         end
                     end
                 end
