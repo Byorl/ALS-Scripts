@@ -3320,6 +3320,23 @@ local RunService = game:GetService("RunService")
 local TeleportService = game:GetService("TeleportService")
 local VIM = game:GetService("VirtualInputManager")
 
+task.spawn(function()
+    pcall(function()
+        local afkFolder = RS:WaitForChild("Remotes", 5):FindFirstChild("AFK")
+        if afkFolder then
+            local changeState = afkFolder:FindFirstChild("ChangeState")
+            local teleport = afkFolder:FindFirstChild("Teleport")
+            
+            if changeState then
+                changeState:Destroy()
+            end
+            if teleport then
+                teleport:Destroy()
+            end
+        end
+    end)
+end)
+
 local isMobile = UserInputService.TouchEnabled
 local MOBILE_DELAY_MULTIPLIER = isMobile and 1.5 or 1.0
 
