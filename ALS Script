@@ -9160,6 +9160,7 @@ if isInLobby then
     local event1CapsuleUnitList = {
         "MobUnevo",
         "LightUnevo",
+        "AsuraUnevo",
         "LelouchUnevo",
         "LelouchUnevoShiny"
     }
