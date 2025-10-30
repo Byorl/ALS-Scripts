@@ -6077,6 +6077,10 @@ getgenv().recordAbilityUsage = function(tower, abilityName)
         
         local now = tick()
         local towerName = tower.Name
+        if getgenv().MacroRecordAbilities == false then
+            return
+        end
+        
         local elapsedTime = now - getgenv().MacroRecordingStartTime
         local currentWave = getgenv().MacroGameState.currentWave
         
@@ -6380,6 +6384,9 @@ local function setupRecordingHook()
     local oldNamecall = mt.__namecall
     setreadonly(mt, false)
     
+    local lastRecordedCall = {}
+    local DEBOUNCE_TIME = 0.1
+    
     mt.__namecall = newcclosure(function(self, ...)
         local method = getnamecallmethod()
         
@@ -6396,6 +6403,14 @@ local function setupRecordingHook()
                 pcall(function()
                     if typeof(self) == "Instance" and (self:IsA("RemoteEvent") or self:IsA("RemoteFunction")) then
                         local remoteName = self.Name
+                        local callKey = remoteName .. "_" .. method .. "_" .. tostring(args[1])
+                        local now = tick()
+                        
+                        if lastRecordedCall[callKey] and (now - lastRecordedCall[callKey]) < DEBOUNCE_TIME then
+                            return
+                        end
+                        
+                        lastRecordedCall[callKey] = now
                         processRemoteCall(remoteName, method, args)
                     end
                 end)
@@ -12046,6 +12061,22 @@ createInput(
     tostring(getgenv().MacroStepDelay or 0)
 )
 
+createToggle(
+    Sections.MacroLeft,
+    "Record Abilities",
+    "MacroRecordAbilities",
+    function(value)
+        getgenv().MacroRecordAbilities = value
+        saveMacroSettings()
+        Window:Notify({
+            Title = "Macro Recording",
+            Description = value and "Abilities will be recorded" or "Abilities will NOT be recorded",
+            Lifetime = 3
+        })
+    end,
+    getgenv().MacroRecordAbilities ~= false
+)
+
 Sections.MacroLeft:Divider()
 
 Sections.MacroLeft:Header({ Text = "📊 Macro Status" })
@@ -13905,7 +13936,18 @@ task.spawn(function()
                     return
                 end
                 
-                if getgenv().WebhookEnabled and getgenv().WebhookProcessing then
+                if getgenv().WebhookEnabled then
+                    if not getgenv().WebhookProcessing then
+                        print("[Auto " .. actionName .. "] Triggering webhook...")
+                        task.spawn(function()
+                            pcall(function()
+                                if getgenv()._SendMatchWebhook then
+                                    getgenv()._SendMatchWebhook()
+                                end
+                            end)
+                        end)
+                    end
+                    
                     print("[Auto " .. actionName .. "] Waiting for webhook to complete...")
                     
                     local maxWait = 0
@@ -17181,22 +17223,26 @@ getgenv()._CompareCapsuleRewards = function(beforeData, afterData)
     return table.concat(rewards, "\n")
 end
 
+getgenv()._CapsuleWebhookDebounce = getgenv()._CapsuleWebhookDebounce or {}
+
 getgenv()._SendCapsuleWebhook = function(eventName, capsuleCount, rewardsText, clientData)
-    print("[Capsule Webhook] Function called - Event: " .. tostring(eventName))
-    print("[Capsule Webhook] WebhookEnabled: " .. tostring(getgenv().WebhookEnabled))
-    print("[Capsule Webhook] WebhookURL exists: " .. tostring(getgenv().WebhookURL ~= nil and getgenv().WebhookURL ~= ""))
-    
     if not getgenv().WebhookEnabled or not getgenv().WebhookURL or getgenv().WebhookURL == "" then
-        warn("[Capsule Webhook] Webhook not enabled or URL not set")
         return
     end
     
     if not clientData then 
-        warn("[Capsule Webhook] No client data provided")
         return 
     end
     
-    print("[Capsule Webhook] Preparing to send webhook...")
+    local debounceKey = eventName .. "_" .. capsuleCount .. "_" .. tick()
+    local lastSendTime = getgenv()._CapsuleWebhookDebounce[eventName] or 0
+    local currentTime = tick()
+    
+    if currentTime - lastSendTime < 5 then
+        return
+    end
+    
+    getgenv()._CapsuleWebhookDebounce[eventName] = currentTime
     
     local username = LocalPlayer.Name
     local level = clientData.Level or 0
@@ -17246,14 +17292,8 @@ getgenv()._SendCapsuleWebhook = function(eventName, capsuleCount, rewardsText, c
         pingContent = "<@" .. getgenv().DiscordUserID .. ">"
     end
     
-    print("[Capsule Webhook] Sending webhook to Discord...")
     task.spawn(function()
-        local success = SendMessageEMBED(getgenv().WebhookURL, embed, pingContent)
-        if success then
-            print("[Capsule Webhook] ✅ Successfully sent webhook")
-        else
-            warn("[Capsule Webhook] ❌ Failed to send webhook")
-        end
+        SendMessageEMBED(getgenv().WebhookURL, embed, pingContent)
     end)
 end
 
