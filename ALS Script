@@ -3085,7 +3085,6 @@ task.spawn(function()
                 end
                 
                 if heartbeatConns > 30 then
-                    print("[Memory] WARNING: " .. heartbeatConns .. " Heartbeat connections detected!")
                     local disconnected = 0
                     for _, conn in pairs(getconnections(game:GetService("RunService").Heartbeat)) do
                         if disconnected >= 15 then break end
@@ -3099,9 +3098,7 @@ task.spawn(function()
                 end
             end
             
-            if cleaned > 0 then
-                debugPrint("[Memory] Cleaned up " .. cleaned .. " dead connections")
-            end
+
             
             local workspace = game:GetService("Workspace")
             local debrisFolder = workspace:FindFirstChild("Debris")
@@ -3131,7 +3128,6 @@ task.spawn(function()
             
             pcall(function() collectgarbage("collect") end)
             
-            debugPrint("[Memory] Cleanup complete - Heartbeat: " .. heartbeatConns .. " | Connections: " .. #getgenv()._GlobalConnections)
             
             if tick() - getgenv()._MemoryProfiler.lastCheck > 60 then
                 getgenv()._MemoryProfiler.lastCheck = tick()
@@ -3751,7 +3747,7 @@ local globalSettings = {}
 ErrorHandler:wrap(function()
     globalSettings.UIBlurToggle = Window:GlobalSetting({
         Name = "UI Blur",
-        Default = Window:GetAcrylicBlurState(),
+        Default = false,
         Callback = function(bool)
             Window:SetAcrylicBlurState(bool)
             Window:Notify({
@@ -4333,16 +4329,68 @@ ErrorHandler:wrap(function()
     ToggleGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     ToggleGui.Parent = game:GetService("CoreGui")
     
-    ToggleButton = Instance.new("ImageButton")
+    ToggleButton = Instance.new("TextButton")
     ToggleButton.Name = "ToggleButton"
-    ToggleButton.Size = UDim2.new(0, 75, 0, 75)
-    ToggleButton.Position = UDim2.new(0, 24, 0, 24)
-    ToggleButton.AnchorPoint = Vector2.new(0, 0)
-    ToggleButton.BackgroundTransparency = 1
-    ToggleButton.Image = "rbxassetid://72399447876912"
+    ToggleButton.Size = UDim2.new(0, 100, 0, 100)
+    ToggleButton.Position = UDim2.new(1, -10, 0.5, 0)
+    ToggleButton.AnchorPoint = Vector2.new(1, 0.5)
+    ToggleButton.BackgroundColor3 = Color3.fromRGB(85, 85, 100)
+    ToggleButton.BorderSizePixel = 0
+    ToggleButton.Text = "Byorl\nLast\nStand"
+    ToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    ToggleButton.TextSize = 16
+    ToggleButton.Font = Enum.Font.GothamBold
     ToggleButton.Active = true
     ToggleButton.Draggable = true
     ToggleButton.Parent = ToggleGui
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 12)
+    corner.Parent = ToggleButton
+    
+    local gradient = Instance.new("UIGradient")
+    gradient.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(100, 100, 120)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(75, 75, 90))
+    })
+    gradient.Rotation = 90
+    gradient.Parent = ToggleButton
+    
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(130, 130, 160)
+    stroke.Thickness = 2
+    stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    stroke.Parent = ToggleButton
+    
+    local shadow = Instance.new("ImageLabel")
+    shadow.Name = "Shadow"
+    shadow.BackgroundTransparency = 1
+    shadow.Position = UDim2.new(0.5, 0, 0.5, 0)
+    shadow.Size = UDim2.new(1, 20, 1, 20)
+    shadow.AnchorPoint = Vector2.new(0.5, 0.5)
+    shadow.Image = "rbxassetid://5554236805"
+    shadow.ImageColor3 = Color3.fromRGB(0, 0, 0)
+    shadow.ImageTransparency = 0.5
+    shadow.ZIndex = -1
+    shadow.Parent = ToggleButton
+    
+    ToggleButton.MouseEnter:Connect(function()
+        game:GetService("TweenService"):Create(ToggleButton, TweenInfo.new(0.2), {
+            BackgroundColor3 = Color3.fromRGB(105, 105, 125)
+        }):Play()
+        game:GetService("TweenService"):Create(stroke, TweenInfo.new(0.2), {
+            Color = Color3.fromRGB(150, 150, 190)
+        }):Play()
+    end)
+    
+    ToggleButton.MouseLeave:Connect(function()
+        game:GetService("TweenService"):Create(ToggleButton, TweenInfo.new(0.2), {
+            BackgroundColor3 = Color3.fromRGB(85, 85, 100)
+        }):Play()
+        game:GetService("TweenService"):Create(stroke, TweenInfo.new(0.2), {
+            Color = Color3.fromRGB(130, 130, 160)
+        }):Play()
+    end)
     
 end, "Create toggle button GUI")()
 
@@ -6189,12 +6237,12 @@ local function processRemoteCall(remoteName, method, args)
             if countAfter > countBefore then
                 local cost = 0
                 
-                if getgenv().GetRecentCashDecrease then
-                    cost = getgenv().GetRecentCashDecrease(0.3)
+                if getgenv().GetPlaceCost then
+                    cost = getgenv().GetPlaceCost(towerName)
                 end
                 
-                if cost == 0 and getgenv().GetPlaceCost then
-                    cost = getgenv().GetPlaceCost(towerName)
+                if cost == 0 and getgenv().GetRecentCashDecrease then
+                    cost = getgenv().GetRecentCashDecrease(0.3)
                 end
                 
                 local savedArgs = {args[1]}
@@ -6262,12 +6310,12 @@ local function processRemoteCall(remoteName, method, args)
                             
                             local cost = 0
                             
-                            if getgenv().GetRecentCashDecrease then
-                                cost = getgenv().GetRecentCashDecrease(0.3)
+                            if getgenv().GetUpgradeCost then
+                                cost = getgenv().GetUpgradeCost(towerName, currentLevel)
                             end
                             
-                            if cost == 0 and getgenv().GetUpgradeCost then
-                                cost = getgenv().GetUpgradeCost(towerName, currentLevel)
+                            if cost == 0 and getgenv().GetRecentCashDecrease then
+                                cost = getgenv().GetRecentCashDecrease(0.3)
                             end
                             
                             if #getgenv().MacroDataV2 >= 5000 then
@@ -6469,12 +6517,12 @@ local function setupRecordingHook()
                         if newestTower then
                             local cost = 0
                             
-                            if getgenv().GetRecentCashDecrease then
-                                cost = getgenv().GetRecentCashDecrease(0.3)
+                            if getgenv().GetPlaceCost then
+                                cost = getgenv().GetPlaceCost(towerName)
                             end
                             
-                            if cost == 0 and getgenv().GetPlaceCost then
-                                cost = getgenv().GetPlaceCost(towerName)
+                            if cost == 0 and getgenv().GetRecentCashDecrease then
+                                cost = getgenv().GetRecentCashDecrease(0.3)
                             end
                             
                             if #getgenv().MacroDataV2 >= 5000 then
@@ -7349,19 +7397,6 @@ local function playMacroV2()
                 end
             end)
             
-            if lastGameStartedState and not gameStarted and getgenv().SeamlessFixEnabled then
-                print("[Macro] 🔄 Seamless restart detected (GameStarted = false), stopping playback")
-                
-                getgenv().MacroPlaybackActive = false
-                getgenv().MacroCurrentStep = 0
-                getgenv().MacroActionText = ""
-                getgenv().MacroUnitText = ""
-                getgenv().MacroWaitingText = "Waiting for new round..."
-                getgenv().MacroStatusText = "Seamless Restart"
-                getgenv().UpdateMacroStatus()
-
-                return
-            end
             lastGameStartedState = gameStarted
             
             if getgenv().MacroGameState.gameEnded or getgenv().MacroGameState.hasEndGameUI then
@@ -7411,6 +7446,13 @@ local function playMacroV2()
             getgenv().MacroTotalSteps = #macroData
             getgenv().MacroActionText = action.ActionType or "Action"
             getgenv().MacroUnitText = action.TowerName or "?"
+            
+            if action.ActionType == "Ability" or action.ActionType == "AbilitySelection" then
+                getgenv().MacroWaitingText = "Using ability..."
+            else
+                getgenv().MacroWaitingText = ""
+            end
+            
             getgenv().UpdateMacroStatus()
             
             local cash = tonumber(getgenv().MacroCurrentCash) or 0
@@ -7533,6 +7575,23 @@ local function playMacroV2()
                 getgenv().MacroWaitingText = actionMessage
                 getgenv().UpdateMacroStatus()
                 task.wait(0.5)
+            else
+                local nextStep = step + 1
+                if nextStep <= #macroData then
+                    local nextAction = macroData[nextStep]
+                    if nextAction then
+                        if nextAction.ActionType == "Upgrade" then
+                            getgenv().MacroWaitingText = "Next: Upgrade"
+                        elseif nextAction.ActionType == "Place" then
+                            getgenv().MacroWaitingText = "Next: Place"
+                        elseif nextAction.ActionType == "Ability" then
+                            getgenv().MacroWaitingText = "Next: Ability"
+                        else
+                            getgenv().MacroWaitingText = ""
+                        end
+                        getgenv().UpdateMacroStatus()
+                    end
+                end
             end
             
             step = step + 1
@@ -7559,6 +7618,32 @@ local function playMacroV2()
             print("[Macro] ✅ Macro completed all steps, waiting for seamless restart")
             
             getgenv().MacroPlaybackActive = false
+            
+            if getgenv().SeamlessFixEnabled then
+                print("[Macro] Monitoring for seamless restart...")
+                local monitorStartTime = tick()
+                local lastGameStartedCheck = true
+                
+                while getgenv().MacroPlayEnabled and (tick() - monitorStartTime) < 300 do
+                    task.wait(0.5)
+                    
+                    local currentGameStarted = true
+                    pcall(function()
+                        local gs = RS:FindFirstChild("GameStarted")
+                        if gs and gs.Value ~= nil then
+                            currentGameStarted = gs.Value
+                        end
+                    end)
+                    
+                    if lastGameStartedCheck and not currentGameStarted then
+                        print("[Macro] 🔄 Seamless restart detected (GameStarted changed to false)")
+                        return
+                    end
+                    
+                    lastGameStartedCheck = currentGameStarted
+                end
+            end
+            
             return
         else
             getgenv().MacroStatusText = "Idle"
@@ -7595,13 +7680,13 @@ task.spawn(function()
             debugPrint("[Macro] EndGameUI removed, preparing restart...")
             restartCooldown = true
             
-            task.wait(2)
+            task.wait(3)
             
             if getgenv().MacroPlaybackActive then
                 debugPrint("[Macro] Already playing, skipping restart")
                 restartCooldown = false
                 lastEndGameUIState = currentEndGameUIState
-                task.wait(3)
+                task.wait(5)
                 continue
             end
             
@@ -7623,6 +7708,7 @@ task.spawn(function()
                 
                 local wave = 0
                 local gameStarted = false
+                local state = -1
                 pcall(function()
                     local waveValue = RS:FindFirstChild("Wave")
                     if waveValue then
@@ -7633,17 +7719,20 @@ task.spawn(function()
                     if gameStartedValue and gameStartedValue.Value ~= nil then
                         gameStarted = gameStartedValue.Value
                     end
+                    
+                    local stateValue = RS:FindFirstChild("State")
+                    if stateValue then
+                        state = stateValue.Value
+                    end
                 end)
                 
-                if towerCount == 0 and wave <= 1 and not gameStarted then
+                if towerCount == 0 and wave == 0 and not gameStarted and state == 0 then
                     gameReady = true
-                    print("[Macro] Game ready - no towers, wave " .. wave .. ", game not started")
+                    print("[Macro] ✅ Game ready - State: 0, Wave: 0, No towers")
                     break
                 end
                 
-                if getgenv().DebugMode then
-                    print(string.format("[Macro] Waiting... Towers: %d, Wave: %d, GameStarted: %s", towerCount, wave, tostring(gameStarted)))
-                end
+                print(string.format("[Macro] Waiting... State: %d, Wave: %d, Towers: %d, GameStarted: %s", state, wave, towerCount, tostring(gameStarted)))
                 
                 task.wait(0.5)
                 waited = waited + 0.5
@@ -13900,21 +13989,7 @@ task.spawn(function()
                 end
             end
             
-            if getgenv().AutoNextEnabled and nextButton and nextButton.Visible then
-                buttonToPress = nextButton
-                actionName = "Next"
-            elseif getgenv().AutoFastRetryEnabled and retryButton and retryButton.Visible then
-                buttonToPress = retryButton
-                actionName = "Retry"
-            elseif getgenv().AutoLeaveEnabled and leaveButton and leaveButton.Visible then
-                if isFinalExpedition and nextButton and nextButton.Visible then
-                    buttonToPress = nextButton
-                    actionName = "Next"
-                else
-                    buttonToPress = leaveButton
-                    actionName = "Leave"
-                end
-            elseif getgenv().AutoSmartEnabled then
+            if getgenv().AutoSmartEnabled then
                 if nextButton and nextButton.Visible then
                     buttonToPress = nextButton
                     actionName = "Next"
@@ -13929,6 +14004,20 @@ task.spawn(function()
                         buttonToPress = leaveButton
                         actionName = "Leave"
                     end
+                end
+            elseif getgenv().AutoNextEnabled and nextButton and nextButton.Visible then
+                buttonToPress = nextButton
+                actionName = "Next"
+            elseif getgenv().AutoFastRetryEnabled and retryButton and retryButton.Visible then
+                buttonToPress = retryButton
+                actionName = "Retry"
+            elseif getgenv().AutoLeaveEnabled and leaveButton and leaveButton.Visible then
+                if isFinalExpedition and nextButton and nextButton.Visible then
+                    buttonToPress = nextButton
+                    actionName = "Next"
+                else
+                    buttonToPress = leaveButton
+                    actionName = "Leave"
                 end
             end
             
@@ -14822,8 +14911,6 @@ do
                             else
                                 print("[Auto Sell Capsule] ❌ Failed to sell units")
                             end
-                        else
-                            warn("[Auto Sell Capsule] SellUnitsEvent remote not found")
                         end
                     end
                 end)
@@ -15083,60 +15170,58 @@ do
             lastWave = currentWave
             
             if getgenv().BulmaEnabled then
-            local success, err = pcall(function()
-                local towers = workspace:FindFirstChild("Towers")
-                if not towers then return end
-                
-                local bulma = nil
-                for _, tower in pairs(towers:GetChildren()) do
-                    local owner = tower:FindFirstChild("Owner")
-                    if tower.Name == "Bulma" and owner and owner.Value == LocalPlayer then
-                        bulma = tower
-                        break
+                local success, err = pcall(function()
+                    local towers = workspace:FindFirstChild("Towers")
+                    if not towers then return end
+                    
+                    local bulma = nil
+                    for _, tower in pairs(towers:GetChildren()) do
+                        local owner = tower:FindFirstChild("Owner")
+                        if tower.Name == "Bulma" and owner and owner.Value == LocalPlayer then
+                            bulma = tower
+                            break
+                        end
                     end
-                end
-                
-                if not bulma then return end
-                
-                local meters = bulma:FindFirstChild("Meters")
-                if not meters then return end
-                
-                local wishBalls = meters:FindFirstChild("Wish Balls")
-                if not wishBalls then return end
-                
-                local attributes = wishBalls:GetAttributes()
-                local ballCount = 0
-                
-                if attributes.Value then
-                    ballCount = attributes.Value
-                end
-                
-                if ballCount == 7 and not getgenv().BulmaWishUsedThisRound then
-                    getgenv().BulmaWishUsedThisRound = true
                     
-                    ErrorHandler:wrapAsync(function()
-                        RS.Remotes.Ability:InvokeServer(bulma, "Summon Wish Dragon")
-                    end, "Summon Wish Dragon")
-                    task.wait(0.5)
+                    if not bulma then return end
                     
-                    local wishType = getgenv().BulmaWishType or "Power"
-                    ErrorHandler:wrapAsync(function()
-                        RS.Remotes.Ability:InvokeServer(bulma, "Wish: " .. wishType)
-                    end, "Use Bulma wish")
+                    local meters = bulma:FindFirstChild("Meters")
+                    if not meters then return end
                     
-                    Window:Notify({
-                        Title = "Bulma Auto-Wish",
-                        Description = "Used Wish: " .. wishType .. " (1x per round)",
-                        Lifetime = 3
-                    })
+                    local wishBalls = meters:FindFirstChild("Wish Balls")
+                    if not wishBalls then return end
+                    
+                    local ballCount = 0
+                    pcall(function()
+                        ballCount = wishBalls:GetAttribute("Value") or 0
+                    end)
+                    
+                    if ballCount == 7 and not getgenv().BulmaWishUsedThisRound then
+                        getgenv().BulmaWishUsedThisRound = true
+                        
+                        ErrorHandler:wrapAsync(function()
+                            RS.Remotes.Ability:InvokeServer(bulma, "Summon Wish Dragon")
+                        end, "Summon Wish Dragon")
+                        task.wait(0.5)
+                        
+                        local wishType = getgenv().BulmaWishType or "Power"
+                        ErrorHandler:wrapAsync(function()
+                            RS.Remotes.Ability:InvokeServer(bulma, "Wish: " .. wishType)
+                        end, "Use Bulma wish")
+                        
+                        Window:Notify({
+                            Title = "Bulma Auto-Wish",
+                            Description = "Used Wish: " .. wishType .. " (1x per round)",
+                            Lifetime = 3
+                        })
+                    end
+                end)
+                
+                if not success then
+                    warn("[Bulma] Error: " .. tostring(err))
                 end
-            end)
-            
-            if not success then
-                warn("[Bulma] Error: " .. tostring(err))
             end
         end
-    end
     end)
 end
 
@@ -15965,15 +16050,10 @@ do
                 
                 local buttons = getCardButtons()
                 
-                if buttons then
+                if buttons and #buttons > 0 then
                     if isWaitingForPrompt and tick() - promptWaitStart > 5 then
+                        print("[One Eye Devil] Timeout waiting for prompt, resetting")
                         isWaitingForPrompt = false
-                        return
-                    end
-                    
-                    if not isWaitingForPrompt then
-                        isWaitingForPrompt = true
-                        promptWaitStart = tick()
                     end
                     
                     local targetCard = SIGIL_ORDER[getgenv().OneEyeDevilCurrentIndex]
@@ -15983,7 +16063,7 @@ do
                         local cardName = getCardName(button)
                         if cardName then
                             if cardName == targetCard then
-                                print("[One Eye Devil] Clicking: " .. cardName)
+                                print("[One Eye Devil] Found target card: " .. cardName)
                                 
                                 if clickButton(button) then
                                     foundCard = true
@@ -16003,7 +16083,7 @@ do
                                         cdText = cdText .. " (x" .. timeScale .. " speed)"
                                     end
                                     
-                                    print("[One Eye Devil] Next card: " .. nextCard .. " (CD: " .. cdText .. ")")
+                                    print("[One Eye Devil] Selected: " .. cardName .. " | Next: " .. nextCard .. " (CD: " .. cdText .. ")")
                                     
                                     Window:Notify({
                                         Title = "One Eye Devil",
@@ -16016,18 +16096,24 @@ do
                             end
                         end
                     end
-
-                    return
+                    
+                    if foundCard then
+                        return
+                    end
                 end
                 
                 if not isWaitingForPrompt and not isOnCooldown(infoName, "Detachment", "EtoEvo") then
+                    print("[One Eye Devil] Using Detachment ability")
                     local abilityUsed, abilityResult = pcall(function()
                         return RS.Remotes.Ability:InvokeServer(tower, "Detachment")
                     end)
                     
                     if abilityUsed and abilityResult then
+                        print("[One Eye Devil] Detachment used successfully, waiting for prompt")
                         isWaitingForPrompt = true
                         promptWaitStart = tick()
+                    else
+                        print("[One Eye Devil] Detachment failed or returned false")
                     end
                 end
             end)
@@ -17512,7 +17598,10 @@ do
     
     local function sendWebhook()
         local success, err = pcall(function()
+            print("[Webhook] sendWebhook called")
+            
             if not getgenv().WebhookEnabled then 
+                print("[Webhook] Webhook disabled, exiting")
                 getgenv().WebhookProcessing = false
                 return 
             end
@@ -17521,6 +17610,8 @@ do
                 print("[Webhook] ⚠️ Already processing, skipping duplicate call")
                 return
             end
+            
+            print("[Webhook] Proceeding with webhook send...")
             
             if not getgenv()._ForceWebhookSend then
                 local currentTime = tick()
@@ -17532,22 +17623,32 @@ do
             
             getgenv()._lastWebhookTime = tick()
             getgenv().WebhookProcessing = true
+            print("[Webhook] WebhookProcessing set to true")
             
             local isSeamlessRestart = getgenv()._WebhookSeamlessRestart or false
             
+            print("[Webhook] Getting rewards...")
             local rewards = getRewards()
+            print("[Webhook] Getting match result...")
             local matchTime, matchWave, matchResult = getgenv()._GetMatchResult()
+            print("[Webhook] Match: " .. tostring(matchResult) .. " | Wave: " .. tostring(matchWave) .. " | Time: " .. tostring(matchTime))
+            print("[Webhook] Getting map info...")
             local mapName, mapDifficulty = getgenv()._GetMapInfo()
+            print("[Webhook] Map: " .. tostring(mapName) .. " | Difficulty: " .. tostring(mapDifficulty))
             
             ClientDataCache.module = nil
             ClientDataCache.lastUpdate = 0
             
+            print("[Webhook] Getting client data...")
             local clientData = getClientData()
             
             if not clientData then
+                print("[Webhook] ❌ Failed to get client data")
                 getgenv().WebhookProcessing = false
                 return
             end
+            
+            print("[Webhook] ✅ Client data retrieved")
             
             if isSeamlessRestart then
                 pcall(function()
@@ -17591,21 +17692,24 @@ do
             end
             
             if not matchWave or matchWave == "0" or matchWave == "" then
+                print("[Webhook] ❌ Invalid wave: " .. tostring(matchWave))
                 getgenv().WebhookProcessing = false
                 return
             end
             
             if not matchResult or matchResult == "Unknown" or matchResult == "" then
-                warn("[Webhook] Invalid match result, skipping send")
+                print("[Webhook] ❌ Invalid match result: " .. tostring(matchResult))
                 getgenv().WebhookProcessing = false
                 return
             end
             
             if not matchTime or matchTime == "00:00:00" or matchTime == "" then
-                warn("[Webhook] Invalid match time, skipping send")
+                print("[Webhook] ❌ Invalid match time: " .. tostring(matchTime))
                 getgenv().WebhookProcessing = false
                 return
             end
+            
+            print("[Webhook] ✅ All validation passed")
             
             print("[Webhook] Data validated - Wave: " .. matchWave .. ", Result: " .. matchResult .. ", Time: " .. matchTime)
             
@@ -17644,7 +17748,8 @@ do
                     {key = "HeroTokens", name = "Hero Coins"},
                     {key = "EXP", name = "Player EXP"},
                     {key = "CandyBasket", name = "Candy Basket"},
-
+                    {key = "HalloweenCookies", name = "Halloween Cookies"},
+                    {key = "MagicCoins", name = "Slime Coins"},
                 }
                 
                 for _, currency in ipairs(currencyKeys) do
@@ -17660,6 +17765,19 @@ do
                 if clientData.ItemData then
                     for itemName, itemInfo in pairs(clientData.ItemData) do
                         local initial = (getgenv()._WebhookInitialData and getgenv()._WebhookInitialData.ItemData and getgenv()._WebhookInitialData.ItemData[itemName]) or 0
+                        local current = itemInfo.Amount or 0
+                        local gained = current - initial
+                        
+                        if gained > 0 then
+                            local displayName = itemName:gsub("([A-Z])", " %1"):gsub("^%s+", "")
+                            rewardsText = rewardsText .. "+" .. formatNumber(gained) .. " " .. displayName .. " [ Total: " .. formatNumber(current) .. " ]\n"
+                        end
+                    end
+                end
+                
+                if clientData.ExperienceItemsData then
+                    for itemName, itemInfo in pairs(clientData.ExperienceItemsData) do
+                        local initial = (getgenv()._WebhookInitialData and getgenv()._WebhookInitialData.ExperienceItemsData and getgenv()._WebhookInitialData.ExperienceItemsData[itemName]) or 0
                         local current = itemInfo.Amount or 0
                         local gained = current - initial
                         
@@ -19902,26 +20020,20 @@ do
             continue
         end
         
-        local isBossRush = false
-        local isSlimeRush = false
-        local isMidnightHunt = false
-        
+        local gamemodeValue = "Unknown"
         pcall(function()
             local gamemode = RS:FindFirstChild("Gamemode")
             if gamemode then
-                local gamemodeValue = tostring(gamemode.Value)
-                print("[Card Selection] Gamemode detected:", gamemodeValue)
-                
-                if gamemodeValue == "BossRush" then
-                    isBossRush = true
-                elseif gamemodeValue:find("Slime") or gamemodeValue == "SlimeRush" then
-                    isSlimeRush = true
-                    print("[Card Selection] Slime Rush mode detected")
-                elseif gamemodeValue == "MidnightHunt" then
-                    isMidnightHunt = true
-                end
+                gamemodeValue = tostring(gamemode.Value)
             end
         end)
+        
+        print("[Card Selection] Gamemode detected:", gamemodeValue)
+        
+        local isBossRush = gamemodeValue == "BossRush"
+        local isSlimeRush = gamemodeValue:find("Slime") or gamemodeValue == "SlimeRush"
+        local isMidnightHunt = gamemodeValue == "MidnightHunt"
+        local isInfinite = gamemodeValue == "Infinite"
         
         if isBossRush and getgenv().BossRushEnabled then
             selectCard()
@@ -19944,12 +20056,15 @@ do
                     selectCardSmart()
                 end
             end
-        elseif isMidnightHunt then
+        elseif isMidnightHunt or isInfinite then
             if getgenv().CardSelectionEnabled then
+                print("[Card Selection] Using Fast Mode for " .. gamemodeValue)
                 selectCard()
             elseif getgenv().SlowerCardSelectionEnabled then
+                print("[Card Selection] Using Slower Mode for " .. gamemodeValue)
                 selectCardSlower()
             elseif getgenv().SmartCardSelectionEnabled then
+                print("[Card Selection] Using Smart Mode for " .. gamemodeValue)
                 selectCardSmart()
             end
         end
@@ -20226,6 +20341,9 @@ if not isInLobby then
             end)
         end
         
+        local lastSeamlessState = nil
+        local lastEndgameCount = 0
+        
         local function enableSeamlessIfNeeded()
             if not getgenv().SeamlessFixEnabled then return end
             local maxRounds = getgenv().SeamlessRounds or 4
@@ -20235,15 +20353,21 @@ if not isInLobby then
                 manager.endgameCount = getgenv()._SeamlessEndgameCount
             end
             
+            local currentSeamlessValue = getSeamlessValue()
+            
             if manager.endgameCount < maxRounds then
-                if not getSeamlessValue() then
+                if not currentSeamlessValue and (lastSeamlessState ~= false or lastEndgameCount ~= manager.endgameCount) then
                     warn(string.format("[SeamlessRestartManager] Enabling seamless retry (%d/%d)", manager.endgameCount, maxRounds))
                     getgenv()._SeamlessRestartManager_enableSeamless()
+                    lastSeamlessState = false
+                    lastEndgameCount = manager.endgameCount
                 end
             elseif manager.endgameCount >= maxRounds then
-                if getSeamlessValue() then
+                if currentSeamlessValue and (lastSeamlessState ~= true or lastEndgameCount ~= manager.endgameCount) then
                     warn(string.format("[SeamlessRestartManager] Disabling seamless retry - Max rounds reached (%d/%d)", manager.endgameCount, maxRounds))
                     getgenv()._SeamlessRestartManager_disableSeamless()
+                    lastSeamlessState = true
+                    lastEndgameCount = manager.endgameCount
                 end
             end
         end
@@ -20470,11 +20594,40 @@ end
 do
     task.spawn(function()
         local vu = game:GetService("VirtualUser")
+        
         Players.LocalPlayer.Idled:Connect(function()
             if getgenv().AntiAFKEnabled then
-                vu:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
-                task.wait(1)
-                vu:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+                vu:CaptureController()
+                vu:ClickButton2(Vector2.new())
+            end
+        end)
+        
+        task.spawn(function()
+            while true do
+                task.wait(60)
+                if getgenv().AntiAFKEnabled then
+                    pcall(function()
+                        vu:CaptureController()
+                        vu:ClickButton2(Vector2.new())
+                    end)
+                end
+            end
+        end)
+        
+        task.spawn(function()
+            while true do
+                task.wait(120)
+                if getgenv().AntiAFKEnabled then
+                    pcall(function()
+                        local char = LocalPlayer.Character
+                        if char and char:FindFirstChild("HumanoidRootPart") then
+                            local hrp = char.HumanoidRootPart
+                            hrp.CFrame = hrp.CFrame * CFrame.new(0, 0.1, 0)
+                            task.wait(0.1)
+                            hrp.CFrame = hrp.CFrame * CFrame.new(0, -0.1, 0)
+                        end
+                    end)
+                end
             end
         end)
     end)
