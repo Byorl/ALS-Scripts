@@ -7458,43 +7458,9 @@ local function playMacroV2()
             local cash = tonumber(getgenv().MacroCurrentCash) or 0
             local cost = tonumber(action.Cost) or 0
             
-            if cost > 0 and action.TowerName and (action.ActionType == "Place" or action.ActionType == "Upgrade") then
-                local enchantMultiplier, discountSuccess = getgenv().GetUnitEnchantDiscountSafe(action.TowerName)
-                
-                if discountSuccess and enchantMultiplier < 1.0 then
-                    local baseCost = 0
-                    
-                    if action.ActionType == "Place" then
-                        baseCost = getgenv().GetPlaceCost(action.TowerName)
-                    elseif action.ActionType == "Upgrade" then
-                        local currentLevel = action.CurrentLevel or 0
-                        baseCost = getgenv().GetUpgradeCost(action.TowerName, currentLevel)
-                    end
-                    
-                    if baseCost > 0 then
-                        local expectedDiscountedCost = math.floor(baseCost * enchantMultiplier)
-                        local costDifference = math.abs(cost - expectedDiscountedCost)
-                        local differencePercent = (costDifference / baseCost) * 100
-                        
-                        if differencePercent > 10 then
-                            if getgenv().DebugMode then
-                                debugPrint(string.format("[Playback] Adjusting cost for %s: recorded=%d, expected=%d (%.1f%% diff)", 
-                                    action.TowerName, cost, expectedDiscountedCost, differencePercent))
-                            end
-                            cost = expectedDiscountedCost
-                        else
-                            if getgenv().DebugMode then
-                                debugPrint(string.format("[Playback] Using recorded cost for %s: %d (diff %.1f%%)", 
-                                    action.TowerName, cost, differencePercent))
-                            end
-                        end
-                    end
-                else
-                    if getgenv().DebugMode and not discountSuccess then
-                        debugPrint(string.format("[Playback] Discount check failed for %s, using recorded cost: %d", 
-                            action.TowerName, cost))
-                    end
-                end
+            if getgenv().DebugMode then
+                print(string.format("[Playback Debug] Step %d/%d: Action=%s, Tower=%s, Cost=%d, Cash=%d", 
+                    step, #macroData, action.ActionType or "?", action.TowerName or "?", cost, cash))
             end
             
             local shouldSkipStep = false
@@ -9972,15 +9938,22 @@ if not getgenv()._AbilityUIElements then
 end
 
 local function clearAbilityUI()
+    if not getgenv()._AbilityUIElements then
+        getgenv()._AbilityUIElements = {Left = {}, Right = {}}
+        return
+    end
+    
     for side, elements in pairs(getgenv()._AbilityUIElements) do
-        for _, element in ipairs(elements) do
-            pcall(function()
-                if element and element.Remove then
-                    element:Remove()
-                elseif element and element.SetVisibility then
-                    element:SetVisibility(false)
-                end
-            end)
+        if elements then
+            for _, element in ipairs(elements) do
+                pcall(function()
+                    if element and element.Remove then
+                        element:Remove()
+                    elseif element and element.SetVisibility then
+                        element:SetVisibility(false)
+                    end
+                end)
+            end
         end
     end
     getgenv()._AbilityUIElements = {Left = {}, Right = {}}
@@ -10847,6 +10820,92 @@ task.spawn(function()
             fallbackSection:SubLabel({ Text = "3. Checking console for errors (F9)" })
         end)
     end
+    
+    task.spawn(function()
+        local lastKnownUnits = {}
+        local function getEquippedUnits()
+            local units = {}
+            local clientData = getClientData()
+            if clientData and clientData.Slots then
+                for slotName, slotData in pairs(clientData.Slots) do
+                    if slotData and slotData.Value then
+                        units[slotName] = slotData.Value
+                    end
+                end
+            end
+            return units
+        end
+        
+        task.wait(10)
+        lastKnownUnits = getEquippedUnits()
+        
+        while true do
+            task.wait(5)
+            
+            local currentUnits = getEquippedUnits()
+            local unitsChanged = false
+            
+            for slotName, unitName in pairs(currentUnits) do
+                if lastKnownUnits[slotName] ~= unitName then
+                    unitsChanged = true
+                    break
+                end
+            end
+            
+            for slotName, unitName in pairs(lastKnownUnits) do
+                if currentUnits[slotName] ~= unitName then
+                    unitsChanged = true
+                    break
+                end
+            end
+            
+            if unitsChanged then
+                print("[Unit Change] Detected unit change, refreshing abilities...")
+                
+                getgenv()._AbilityUIBuilt = false
+                getgenv()._AbilityUIBuilding = false
+                
+                pcall(function()
+                    if getgenv()._AbilityUIElements then
+                        for side, elements in pairs(getgenv()._AbilityUIElements) do
+                            for _, element in ipairs(elements) do
+                                if element and element.Remove then
+                                    pcall(function() element:Remove() end)
+                                elseif element and element.Destroy then
+                                    pcall(function() element:Destroy() end)
+                                end
+                            end
+                        end
+                    end
+                    getgenv()._AbilityUIElements = nil
+                end)
+                
+                pcall(function()
+                    if getgenv()._DynamicSummonSections then
+                        for _, section in pairs(getgenv()._DynamicSummonSections) do
+                            if section and section.Remove then
+                                pcall(function() section:Remove() end)
+                            elseif section and section.Destroy then
+                                pcall(function() section:Destroy() end)
+                            end
+                        end
+                        getgenv()._DynamicSummonSections = {}
+                    end
+                end)
+                
+                task.wait(2)
+                buildAutoAbilityUI()
+                
+                lastKnownUnits = getEquippedUnits()
+                
+                Window:Notify({
+                    Title = "Unit Change Detected",
+                    Description = "Abilities refreshed automatically",
+                    Lifetime = 3
+                })
+            end
+        end
+    end)
     
     task.spawn(function()
         task.wait(5)
@@ -14041,15 +14100,11 @@ task.spawn(function()
                     print("[Auto " .. actionName .. "] Waiting for webhook to complete...")
                     
                     local maxWait = 0
-                    local maxWaitTime = 15
+                    local maxWaitTime = 10
                     
                     while getgenv().WebhookProcessing and maxWait < maxWaitTime do
                         task.wait(0.5)
                         maxWait = maxWait + 0.5
-                        
-                        if maxWait % 5 == 0 then
-                            print("[Auto " .. actionName .. "] Still waiting... (" .. maxWait .. "s)")
-                        end
                     end
                     
                     if getgenv().WebhookProcessing then
@@ -17159,55 +17214,49 @@ end
 getgenv()._FormatNumber = formatNumber
 
 local function SendMessageEMBED(url, embed, content)
-    print("[SendMessageEMBED] Starting webhook send...")
     if not url or url == "" then
         warn("[Webhook] Invalid URL provided")
         return false
     end
     
-    local success, result = pcall(function()
-        print("[SendMessageEMBED] Inside pcall...")
-        local headers = { ["Content-Type"] = "application/json" }
-        local data = { 
-            embeds = { { 
-                title = embed.title, 
-                description = embed.description, 
-                color = embed.color, 
-                fields = embed.fields, 
-                footer = embed.footer, 
-                timestamp = os.date("!%Y-%m-%dT%H:%M:%S.000Z") 
-            } } 
-        }
-        
-        if content and content ~= "" then
-            data.content = content
-        end
-        
-        print("[SendMessageEMBED] Encoding JSON...")
-        local httpSvc = game:GetService("HttpService")
-        if not httpSvc then
-            warn("[Webhook] HttpService not available")
-            return false
-        end
-        
-        local body = httpSvc:JSONEncode(data)
-        print("[SendMessageEMBED] JSON encoded successfully")
-        
-        print("[SendMessageEMBED] Finding request function...")
-        local requestFunc = syn and syn.request or http_request or request
-        if not requestFunc then
-            warn("[Webhook] No request function available")
-            return false
-        end
-        print("[SendMessageEMBED] Request function found: " .. tostring(requestFunc))
-        
-        local maxRetries = 3
-        local retryDelay = 1
-        local response = nil
-        
-        print("[SendMessageEMBED] Starting request attempts...")
-        for attempt = 1, maxRetries do
-            print("[SendMessageEMBED] Attempt " .. attempt .. "/" .. maxRetries)
+    local completed = false
+    local result = false
+    
+    task.spawn(function()
+        local success, err = pcall(function()
+            local headers = { ["Content-Type"] = "application/json" }
+            local data = { 
+                embeds = { { 
+                    title = embed.title, 
+                    description = embed.description, 
+                    color = embed.color, 
+                    fields = embed.fields, 
+                    footer = embed.footer, 
+                    timestamp = os.date("!%Y-%m-%dT%H:%M:%S.000Z") 
+                } } 
+            }
+            
+            if content and content ~= "" then
+                data.content = content
+            end
+            
+            local httpSvc = game:GetService("HttpService")
+            if not httpSvc then
+                warn("[Webhook] HttpService not available")
+                completed = true
+                return
+            end
+            
+            local body = httpSvc:JSONEncode(data)
+            
+            local requestFunc = syn and syn.request or http_request or request
+            if not requestFunc then
+                warn("[Webhook] No request function available")
+                completed = true
+                return
+            end
+            
+            local response = nil
             local requestSuccess, requestResult = pcall(function()
                 return requestFunc({
                     Url = url,
@@ -17218,48 +17267,41 @@ local function SendMessageEMBED(url, embed, content)
             end)
             
             if requestSuccess and requestResult then
-                print("[SendMessageEMBED] Request successful!")
                 response = requestResult
-                break
-            else
-                warn("[Webhook] Attempt " .. attempt .. "/" .. maxRetries .. " failed: " .. tostring(requestResult))
-                if attempt < maxRetries then
-                    task.wait(retryDelay)
-                    retryDelay = retryDelay * 2 
+                if response and response.StatusCode then
+                    if response.StatusCode == 204 or response.StatusCode == 200 then
+                        result = true
+                    else
+                        warn("[Webhook] Failed with status: " .. response.StatusCode)
+                    end
+                else
+                    result = true
                 end
-            end
-        end
-        
-        if not response then
-            warn("[Webhook] All retry attempts failed")
-            return false
-        end
-        
-        print("[SendMessageEMBED] Checking response status...")
-        if response and response.StatusCode then
-            print("[SendMessageEMBED] Status code: " .. response.StatusCode)
-            if response.StatusCode == 204 or response.StatusCode == 200 then
-                print("[SendMessageEMBED] Success!")
-                return true
             else
-                warn("[Webhook] Failed with status: " .. response.StatusCode)
-                if response.Body then
-                    warn("[Webhook] Response: " .. response.Body)
-                end
-                return false
+                warn("[Webhook] Request failed: " .. tostring(requestResult))
             end
-        end
+            
+            completed = true
+        end)
         
-        print("[SendMessageEMBED] Returning true (no status code)")
-        return true
+        if not success then
+            warn("[Webhook] Error: " .. tostring(err))
+            completed = true
+        end
     end)
     
-    if not success then
-        warn("[Webhook] Error sending: " .. tostring(result))
+    local timeout = 8
+    local waited = 0
+    while not completed and waited < timeout do
+        task.wait(0.1)
+        waited = waited + 0.1
+    end
+    
+    if not completed then
+        warn("[Webhook] Request timed out after " .. timeout .. "s")
         return false
     end
     
-    print("[SendMessageEMBED] Final result: " .. tostring(result))
     return result
 end
 
@@ -17597,58 +17639,44 @@ do
         local WEBHOOK_COOLDOWN = 10
     
     local function sendWebhook()
-        local success, err = pcall(function()
-            print("[Webhook] sendWebhook called")
-            
-            if not getgenv().WebhookEnabled then 
-                print("[Webhook] Webhook disabled, exiting")
-                getgenv().WebhookProcessing = false
+        if not getgenv().WebhookEnabled then 
+            getgenv().WebhookProcessing = false
+            return 
+        end
+        
+        if getgenv().WebhookProcessing and not getgenv()._ForceWebhookSend then
+            return
+        end
+        
+        if not getgenv()._ForceWebhookSend then
+            local currentTime = tick()
+            if currentTime - getgenv()._lastWebhookTime < WEBHOOK_COOLDOWN then 
                 return 
             end
-            
-            if getgenv().WebhookProcessing and not getgenv()._ForceWebhookSend then
-                print("[Webhook] ⚠️ Already processing, skipping duplicate call")
-                return
-            end
-            
-            print("[Webhook] Proceeding with webhook send...")
-            
-            if not getgenv()._ForceWebhookSend then
-                local currentTime = tick()
-                if currentTime - getgenv()._lastWebhookTime < WEBHOOK_COOLDOWN then 
-                    print("[Webhook] ⏱️ Cooldown active - " .. string.format("%.1f", WEBHOOK_COOLDOWN - (currentTime - getgenv()._lastWebhookTime)) .. "s remaining")
-                    return 
-                end
-            end
-            
-            getgenv()._lastWebhookTime = tick()
-            getgenv().WebhookProcessing = true
-            print("[Webhook] WebhookProcessing set to true")
+        end
+        
+        getgenv()._lastWebhookTime = tick()
+        getgenv().WebhookProcessing = true
+        
+        local success, err = pcall(function()
+            print("[Webhook] Starting webhook send...")
             
             local isSeamlessRestart = getgenv()._WebhookSeamlessRestart or false
             
-            print("[Webhook] Getting rewards...")
-            local rewards = getRewards()
-            print("[Webhook] Getting match result...")
-            local matchTime, matchWave, matchResult = getgenv()._GetMatchResult()
-            print("[Webhook] Match: " .. tostring(matchResult) .. " | Wave: " .. tostring(matchWave) .. " | Time: " .. tostring(matchTime))
-            print("[Webhook] Getting map info...")
+            local matchTime = getgenv()._CachedMatchTime
+            local matchWave = getgenv()._CachedMatchWave
+            local matchResult = getgenv()._CachedMatchResult
             local mapName, mapDifficulty = getgenv()._GetMapInfo()
-            print("[Webhook] Map: " .. tostring(mapName) .. " | Difficulty: " .. tostring(mapDifficulty))
             
             ClientDataCache.module = nil
             ClientDataCache.lastUpdate = 0
             
-            print("[Webhook] Getting client data...")
             local clientData = getClientData()
             
             if not clientData then
-                print("[Webhook] ❌ Failed to get client data")
                 getgenv().WebhookProcessing = false
                 return
             end
-            
-            print("[Webhook] ✅ Client data retrieved")
             
             if isSeamlessRestart then
                 pcall(function()
@@ -17691,22 +17719,37 @@ do
                 print("[Webhook] Seamless restart - Wave: " .. matchWave .. ", Time: " .. matchTime)
             end
             
-            if not matchWave or matchWave == "0" or matchWave == "" then
-                print("[Webhook] ❌ Invalid wave: " .. tostring(matchWave))
-                getgenv().WebhookProcessing = false
-                return
+            if not matchWave or matchWave == "" then
+                matchWave = "0"
+            end
+            
+            if matchWave == "0" then
+                pcall(function()
+                    local wave = RS:FindFirstChild("Wave")
+                    if wave and wave.Value and wave.Value > 0 then
+                        matchWave = tostring(wave.Value)
+                        print("[Webhook] Using current wave value: " .. matchWave)
+                    end
+                end)
             end
             
             if not matchResult or matchResult == "Unknown" or matchResult == "" then
-                print("[Webhook] ❌ Invalid match result: " .. tostring(matchResult))
-                getgenv().WebhookProcessing = false
-                return
+                matchResult = "Match Complete"
+                print("[Webhook] Using default match result: " .. matchResult)
             end
             
             if not matchTime or matchTime == "00:00:00" or matchTime == "" then
-                print("[Webhook] ❌ Invalid match time: " .. tostring(matchTime))
-                getgenv().WebhookProcessing = false
-                return
+                pcall(function()
+                    local elapsed = RS:FindFirstChild("ElapsedTime")
+                    if elapsed and elapsed.Value then
+                        local seconds = math.floor(elapsed.Value)
+                        local hours = math.floor(seconds / 3600)
+                        local minutes = math.floor((seconds % 3600) / 60)
+                        local secs = seconds % 60
+                        matchTime = string.format("%02d:%02d:%02d", hours, minutes, secs)
+                        print("[Webhook] Using elapsed time: " .. matchTime)
+                    end
+                end)
             end
             
             print("[Webhook] ✅ All validation passed")
@@ -17739,212 +17782,86 @@ do
             
             local rewardsText = ""
             
-            if isSeamlessRestart then
-                local currencyKeys = {
-                    {key = "Jewels", name = "Jewels"},
-                    {key = "Gold", name = "Gold"},
-                    {key = "Emeralds", name = "Emeralds"},
-                    {key = "Rerolls", name = "Rerolls"},
-                    {key = "HeroTokens", name = "Hero Coins"},
-                    {key = "EXP", name = "Player EXP"},
-                    {key = "CandyBasket", name = "Candy Basket"},
-                    {key = "HalloweenCookies", name = "Halloween Cookies"},
-                    {key = "MagicCoins", name = "Slime Coins"},
-                }
+            local currencyKeys = {
+                {key = "Jewels", name = "Jewels"},
+                {key = "Gold", name = "Gold"},
+                {key = "Emeralds", name = "Emeralds"},
+                {key = "Rerolls", name = "Rerolls"},
+                {key = "HeroTokens", name = "Hero Coins"},
+                {key = "EXP", name = "Player EXP"},
+                {key = "CandyBasket", name = "Candy Basket"},
+                {key = "HalloweenCookies", name = "Halloween Cookies"},
+                {key = "MagicCoins", name = "Slime Coins"},
+                {key = "EmberTokens", name = "Ember Tokens"},
+                {key = "BlazeTokens", name = "Blaze Tokens"},
+                {key = "HorseTokens", name = "Horse Tokens"},
+                {key = "DevilDogTokens", name = "Devil Dog Tokens"},
+                {key = "TitanRushTokens", name = "Titan Rush Tokens"},
+                {key = "SoccerTokens", name = "Soccer Tokens"},
+                {key = "SlimeCoins", name = "Slime Coins"},
+            }
+            
+            for _, currency in ipairs(currencyKeys) do
+                local initial = (getgenv()._WebhookInitialData and getgenv()._WebhookInitialData[currency.key]) or 0
+                local current = clientData[currency.key] or 0
+                local gained = current - initial
                 
-                for _, currency in ipairs(currencyKeys) do
-                    local initial = (getgenv()._WebhookInitialData and getgenv()._WebhookInitialData[currency.key]) or 0
-                    local current = clientData[currency.key] or 0
+                if gained > 0 then
+                    rewardsText = rewardsText .. "+" .. formatNumber(gained) .. " " .. currency.name .. " [ Total: " .. formatNumber(current) .. " ]\n"
+                end
+            end
+            
+            if clientData.ItemData then
+                for itemName, itemInfo in pairs(clientData.ItemData) do
+                    local initial = (getgenv()._WebhookInitialData and getgenv()._WebhookInitialData.ItemData and getgenv()._WebhookInitialData.ItemData[itemName]) or 0
+                    local current = itemInfo.Amount or 0
                     local gained = current - initial
                     
                     if gained > 0 then
-                        rewardsText = rewardsText .. "+" .. formatNumber(gained) .. " " .. currency.name .. " [ Total: " .. formatNumber(current) .. " ]\n"
+                        local displayName = itemName:gsub("([A-Z])", " %1"):gsub("^%s+", "")
+                        rewardsText = rewardsText .. "+" .. formatNumber(gained) .. " " .. displayName .. " [ Total: " .. formatNumber(current) .. " ]\n"
                     end
                 end
-                
-                if clientData.ItemData then
-                    for itemName, itemInfo in pairs(clientData.ItemData) do
-                        local initial = (getgenv()._WebhookInitialData and getgenv()._WebhookInitialData.ItemData and getgenv()._WebhookInitialData.ItemData[itemName]) or 0
-                        local current = itemInfo.Amount or 0
-                        local gained = current - initial
-                        
-                        if gained > 0 then
-                            local displayName = itemName:gsub("([A-Z])", " %1"):gsub("^%s+", "")
-                            rewardsText = rewardsText .. "+" .. formatNumber(gained) .. " " .. displayName .. " [ Total: " .. formatNumber(current) .. " ]\n"
-                        end
-                    end
-                end
-                
-                if clientData.ExperienceItemsData then
-                    for itemName, itemInfo in pairs(clientData.ExperienceItemsData) do
-                        local initial = (getgenv()._WebhookInitialData and getgenv()._WebhookInitialData.ExperienceItemsData and getgenv()._WebhookInitialData.ExperienceItemsData[itemName]) or 0
-                        local current = itemInfo.Amount or 0
-                        local gained = current - initial
-                        
-                        if gained > 0 then
-                            local displayName = itemName:gsub("([A-Z])", " %1"):gsub("^%s+", "")
-                            rewardsText = rewardsText .. "+" .. formatNumber(gained) .. " " .. displayName .. " [ Total: " .. formatNumber(current) .. " ]\n"
-                        end
-                    end
-                end
-                
-                if rewardsText == "" then
-                    rewardsText = "No rewards earned this round"
-                end
-            elseif #rewards > 0 then
-                local function findBestMatch(searchTerm, data, dataType)
-                    if not searchTerm or not data then return nil end
-                    
-                    local cleanSearch = searchTerm:gsub(" ", ""):gsub("_", ""):lower()
-                    local bestMatch = nil
-                    local bestScore = 0
-                    
-                    local function checkMatch(key)
-                        local cleanKey = key:gsub("_", ""):lower()
-                        
-                        if cleanKey == cleanSearch then
-                            return key, 100
-                        end
-                        
-                        if cleanKey:find(cleanSearch) or cleanSearch:find(cleanKey) then
-                            local score = 50
-                            if cleanKey:sub(1, #cleanSearch) == cleanSearch then
-                                score = 80
-                            elseif cleanKey:sub(-#cleanSearch) == cleanSearch then
-                                score = 70
-                            end
-                            return key, score
-                        end
-                        
-                        return nil, 0
-                    end
-                    
-                    if dataType == "root" then
-                        for key, value in pairs(data) do
-                            if type(value) == "number" then
-                                local match, score = checkMatch(key)
-                                if match and score > bestScore then
-                                    bestMatch = match
-                                    bestScore = score
-                                end
-                            end
-                        end
-                    elseif dataType == "ItemData" and data.ItemData then
-                        for key, value in pairs(data.ItemData) do
-                            if type(value) == "table" and value.Amount then
-                                local match, score = checkMatch(key)
-                                if match and score > bestScore then
-                                    bestMatch = match
-                                    bestScore = score
-                                end
-                            end
-                        end
-                    elseif dataType == "ExperienceItemsData" and data.ExperienceItemsData then
-                        for key, value in pairs(data.ExperienceItemsData) do
-                            if type(value) == "table" and value.Amount then
-                                local match, score = checkMatch(key)
-                                if match and score > bestScore then
-                                    bestMatch = match
-                                    bestScore = score
-                                end
-                            end
-                        end
-                    end
-                    
-                    return bestMatch
-                end
-                
-                for _, r in ipairs(rewards) do
-                    local initialValue = 0
-                    local currentValue = 0
-                    local itemName = r.name
-                    local itemKey = itemName:gsub(" ", "")
-                    
-                    if itemKey == "HeroCoins" then itemKey = "HeroTokens" end
-                    if itemKey == "PlayerEXP" then itemKey = "EXP" end
-                    
-                    if r.type == "Unit" then
-                        local unitFileName = getUnitFileName(itemName)
-                        initialValue = (getgenv()._WebhookInitialData and getgenv()._WebhookInitialData.UnitCounts and getgenv()._WebhookInitialData.UnitCounts[unitFileName]) or 0
-                        
-                        currentValue = 0
-                        if clientData.UnitData then
-                            for unitID, unitInfo in pairs(clientData.UnitData) do
-                                if unitInfo.UnitName == unitFileName then
-                                    currentValue = currentValue + 1
-                                end
-                            end
-                        end
-                        
-                        local total = currentValue
-                        rewardsText = rewardsText .. "+" .. formatNumber(r.amount) .. " " .. itemName .. " [ Total: " .. formatNumber(total) .. " ]\n"
-                    elseif clientData[itemKey] and type(clientData[itemKey]) == "number" then
-                        currentValue = clientData[itemKey]
-                        initialValue = (getgenv()._WebhookInitialData and getgenv()._WebhookInitialData[itemKey]) or 0
-                        local total = currentValue
-                        rewardsText = rewardsText .. "+" .. formatNumber(r.amount) .. " " .. itemName .. " [ Total: " .. formatNumber(total) .. " ]\n"
-                    elseif clientData.ItemData and clientData.ItemData[itemKey] then
-                        currentValue = clientData.ItemData[itemKey].Amount or 0
-                        initialValue = (getgenv()._WebhookInitialData and getgenv()._WebhookInitialData.ItemData and getgenv()._WebhookInitialData.ItemData[itemKey]) or 0
-                        local total = currentValue
-                        rewardsText = rewardsText .. "+" .. formatNumber(r.amount) .. " " .. itemName .. " [ Total: " .. formatNumber(total) .. " ]\n"
-                    elseif clientData.ExperienceItemsData and clientData.ExperienceItemsData[itemKey] then
-                        currentValue = clientData.ExperienceItemsData[itemKey].Amount or 0
-                        initialValue = (getgenv()._WebhookInitialData and getgenv()._WebhookInitialData.ExperienceItemsData and getgenv()._WebhookInitialData.ExperienceItemsData[itemKey]) or 0
-                        local total = currentValue
-                        rewardsText = rewardsText .. "+" .. formatNumber(r.amount) .. " " .. itemName .. " [ Total: " .. formatNumber(total) .. " ]\n"
-                    elseif itemName:find("Candy Basket") then
-                        currentValue = clientData.CandyBasket or 0
-                        initialValue = (getgenv()._WebhookInitialData and getgenv()._WebhookInitialData.CandyBasket) or 0
-                        local total = currentValue
-                        rewardsText = rewardsText .. "+" .. formatNumber(r.amount) .. " " .. itemName .. " [ Total: " .. formatNumber(total) .. " ]\n"
-                    elseif itemName:find("Bingo Stamp") and clientData.ItemData and clientData.ItemData.HallowenBingoStamp then
-                        currentValue = clientData.ItemData.HallowenBingoStamp.Amount or 0
-                        initialValue = (getgenv()._WebhookInitialData and getgenv()._WebhookInitialData.ItemData and getgenv()._WebhookInitialData.ItemData.HallowenBingoStamp) or 0
-                        local total = currentValue
-                        rewardsText = rewardsText .. "+" .. formatNumber(r.amount) .. " " .. itemName .. " [ Total: " .. formatNumber(total) .. " ]\n"
-                    else
-                        local foundMatch = false
-                        local matchedKey = findBestMatch(itemKey, clientData, "root")
-                        if matchedKey and clientData[matchedKey] and type(clientData[matchedKey]) == "number" then
-                            currentValue = clientData[matchedKey]
-                            initialValue = (getgenv()._WebhookInitialData and getgenv()._WebhookInitialData[matchedKey]) or 0
-                            local total = currentValue
-                            rewardsText = rewardsText .. "+" .. formatNumber(r.amount) .. " " .. itemName .. " [ Total: " .. formatNumber(total) .. " ]\n"
-                            foundMatch = true
-                        end
-                        
-                        if not foundMatch then
-                            matchedKey = findBestMatch(itemKey, clientData, "ItemData")
-                            if matchedKey and clientData.ItemData and clientData.ItemData[matchedKey] then
-                                currentValue = clientData.ItemData[matchedKey].Amount or 0
-                                initialValue = (getgenv()._WebhookInitialData and getgenv()._WebhookInitialData.ItemData and getgenv()._WebhookInitialData.ItemData[matchedKey]) or 0
-                                local total = currentValue
-                                rewardsText = rewardsText .. "+" .. formatNumber(r.amount) .. " " .. itemName .. " [ Total: " .. formatNumber(total) .. " ]\n"
-                                foundMatch = true
-                            end
-                        end
-                        
-                        if not foundMatch then
-                            matchedKey = findBestMatch(itemKey, clientData, "ExperienceItemsData")
-                            if matchedKey and clientData.ExperienceItemsData and clientData.ExperienceItemsData[matchedKey] then
-                                currentValue = clientData.ExperienceItemsData[matchedKey].Amount or 0
-                                initialValue = (getgenv()._WebhookInitialData and getgenv()._WebhookInitialData.ExperienceItemsData and getgenv()._WebhookInitialData.ExperienceItemsData[matchedKey]) or 0
-                                local total = currentValue
-                                rewardsText = rewardsText .. "+" .. formatNumber(r.amount) .. " " .. itemName .. " [ Total: " .. formatNumber(total) .. " ]\n"
-                                foundMatch = true
-                            end
-                        end
-                        
-                        if not foundMatch then
-                            local total = r.amount
-                            rewardsText = rewardsText .. "+" .. formatNumber(r.amount) .. " " .. itemName .. " [ Total: " .. formatNumber(total) .. " ]\n"
-                        end
-                    end
-                end
-            else
-                rewardsText = "No rewards found"
             end
+            
+            if clientData.ExperienceItemsData then
+                for itemName, itemInfo in pairs(clientData.ExperienceItemsData) do
+                    local initial = (getgenv()._WebhookInitialData and getgenv()._WebhookInitialData.ExperienceItemsData and getgenv()._WebhookInitialData.ExperienceItemsData[itemName]) or 0
+                    local current = itemInfo.Amount or 0
+                    local gained = current - initial
+                    
+                    if gained > 0 then
+                        local displayName = itemName:gsub("([A-Z])", " %1"):gsub("^%s+", "")
+                        rewardsText = rewardsText .. "+" .. formatNumber(gained) .. " " .. displayName .. " [ Total: " .. formatNumber(current) .. " ]\n"
+                    end
+                end
+            end
+            
+            if clientData.UnitData and getgenv()._WebhookInitialData and getgenv()._WebhookInitialData.UnitCounts then
+                local currentUnitCounts = {}
+                for unitID, unitInfo in pairs(clientData.UnitData) do
+                    if unitInfo.UnitName then
+                        local unitName = unitInfo.UnitName
+                        currentUnitCounts[unitName] = (currentUnitCounts[unitName] or 0) + 1
+                    end
+                end
+                
+                for unitName, currentCount in pairs(currentUnitCounts) do
+                    local initialCount = getgenv()._WebhookInitialData.UnitCounts[unitName] or 0
+                    local gained = currentCount - initialCount
+                    
+                    if gained > 0 then
+                        local displayName = unitName:gsub("([A-Z])", " %1"):gsub("^%s+", "")
+                        rewardsText = rewardsText .. "+" .. formatNumber(gained) .. " " .. displayName .. " [ Total: " .. formatNumber(currentCount) .. " ]\n"
+                    end
+                end
+            end
+            
+            if rewardsText == "" then
+                rewardsText = "No rewards earned this round"
+            end
+            
+
             
             if getgenv().FinalExpChestRewards and next(getgenv().FinalExpChestRewards) then
                 if rewardsText == "No rewards found" then
@@ -17979,11 +17896,23 @@ do
             
             local hasUnitDrop = false
             local unitDropName = ""
-            for _, r in ipairs(rewards) do
-                if r.name and r.type == "Unit" then
-                    hasUnitDrop = true
-                    unitDropName = r.name
-                    break
+            
+            if clientData.UnitData and getgenv()._WebhookInitialData and getgenv()._WebhookInitialData.UnitCounts then
+                local currentUnitCounts = {}
+                for unitID, unitInfo in pairs(clientData.UnitData) do
+                    if unitInfo.UnitName then
+                        local unitName = unitInfo.UnitName
+                        currentUnitCounts[unitName] = (currentUnitCounts[unitName] or 0) + 1
+                    end
+                end
+                
+                for unitName, currentCount in pairs(currentUnitCounts) do
+                    local initialCount = getgenv()._WebhookInitialData.UnitCounts[unitName] or 0
+                    if currentCount > initialCount then
+                        hasUnitDrop = true
+                        unitDropName = unitName:gsub("([A-Z])", " %1"):gsub("^%s+", "")
+                        break
+                    end
                 end
             end
             
@@ -18012,9 +17941,9 @@ do
                 if getgenv().WebhookIncludePlayerNames then
                     local playerNames = {}
                     for _, player in ipairs(Players:GetPlayers()) do
-                        table.insert(playerNames, player.DisplayName .. " (@" .. player.Name .. ")")
+                        table.insert(playerNames, "||" .. player.DisplayName .. " (@" .. player.Name .. ")||")
                     end
-                    playerInfo = playerInfo .. "**Players:**\n||" .. table.concat(playerNames, "||\n")
+                    playerInfo = playerInfo .. "**Players:**\n" .. table.concat(playerNames, "\n")
                 end
                 
                 table.insert(embedFields, { name = "Server Info", value = playerInfo, inline = false })
@@ -18122,20 +18051,14 @@ do
             
             if not sendSuccess then
                 warn("[Webhook] ❌ Failed to send after " .. maxAttempts .. " attempts")
-                Window:Notify({
-                    Title = "Webhook Failed",
-                    Description = "Failed to send webhook. Check URL and try again.",
-                    Lifetime = 5
-                })
             end
-            
-            task.wait(0.5)
-            getgenv().WebhookProcessing = false
         end)
         
+        task.wait(0.5)
+        getgenv().WebhookProcessing = false
+        
         if not success then
-            warn("[Webhook] ❌ Critical error in sendWebhook: " .. tostring(err))
-            getgenv().WebhookProcessing = false
+            warn("[Webhook] ❌ Critical error: " .. tostring(err))
         end
     end
     
@@ -18264,6 +18187,51 @@ do
                 while not promptClosed and maxWait < 3 do
                     task.wait(0.1)
                 end
+                
+                task.spawn(function()
+                    pcall(function()
+                        getgenv()._CachedMatchTime = nil
+                        getgenv()._CachedMatchWave = nil
+                        getgenv()._CachedMatchResult = nil
+                        
+                        local elapsed = RS:FindFirstChild("ElapsedTime")
+                        if elapsed and elapsed.Value then
+                            local roundTime = elapsed.Value
+                            
+                            if getgenv()._RoundStartTime and getgenv()._RoundStartTime > 0 then
+                                roundTime = elapsed.Value - getgenv()._RoundStartTime
+                                if roundTime < 0 or roundTime > elapsed.Value then
+                                    roundTime = elapsed.Value
+                                end
+                            end
+                            
+                            local timeScale = 1
+                            pcall(function()
+                                local timeScaleValue = RS:FindFirstChild("TimeScale")
+                                if timeScaleValue and timeScaleValue:IsA("NumberValue") then
+                                    timeScale = timeScaleValue.Value or 1
+                                end
+                            end)
+                            
+                            local realTime = roundTime / timeScale
+                            local seconds = math.floor(realTime)
+                            local hours = math.floor(seconds / 3600)
+                            local minutes = math.floor((seconds % 3600) / 60)
+                            local secs = seconds % 60
+                            getgenv()._CachedMatchTime = string.format("%02d:%02d:%02d", hours, minutes, secs)
+                        end
+                        
+                        local wave = RS:FindFirstChild("Wave")
+                        if wave and wave.Value then
+                            getgenv()._CachedMatchWave = tostring(wave.Value)
+                        end
+                        
+                        local matchResult, matchWave = getgenv()._GetMatchResult()
+                        if matchResult then
+                            getgenv()._CachedMatchResult = matchResult
+                        end
+                    end)
+                end)
                 
                 task.wait(0.5)
                 sendWebhook()
@@ -18642,22 +18610,22 @@ if isInLobby then
                     if purchaseEvent then
                         if candyBasket >= 1000000 then
                             pcall(function() 
-                                purchaseEvent:InvokeServer(1, 1000, "Hallowen2025_P2")
+                                purchaseEvent:InvokeServer(2, 1000, "Hallowen2025_P2")
                                 print("[Auto Capsule 2] Purchased 1000 capsules")
                             end)
                         elseif candyBasket >= 100000 then
                             pcall(function() 
-                                purchaseEvent:InvokeServer(1, 100, "Hallowen2025_P2")
+                                purchaseEvent:InvokeServer(2, 100, "Hallowen2025_P2")
                                 print("[Auto Capsule 2] Purchased 100 capsules")
                             end)
                         elseif candyBasket >= 10000 then
                             pcall(function() 
-                                purchaseEvent:InvokeServer(1, 10, "Hallowen2025_P2")
+                                purchaseEvent:InvokeServer(2, 10, "Hallowen2025_P2")
                                 print("[Auto Capsule 2] Purchased 10 capsules")
                             end)
                         elseif candyBasket >= 1000 then
                             pcall(function() 
-                                purchaseEvent:InvokeServer(1, 1, "Hallowen2025_P2")
+                                purchaseEvent:InvokeServer(2, 1, "Hallowen2025_P2")
                                 print("[Auto Capsule 2] Purchased 1 capsule")
                             end)
                         end
@@ -18763,25 +18731,25 @@ task.spawn(function()
             if purchaseEvent then
                 if candyBasket >= 1000000 then
                     pcall(function() 
-                        purchaseEvent:InvokeServer(1, 1000, "Hallowen2025_P2")
+                        purchaseEvent:InvokeServer(2, 1000, "Hallowen2025_P2")
                         print("[Auto Buy Capsule 1] Purchased 1000 capsules")
                     end)
                     task.wait(0.1)
                 elseif candyBasket >= 100000 then
                     pcall(function() 
-                        purchaseEvent:InvokeServer(1, 100, "Hallowen2025_P2")
+                        purchaseEvent:InvokeServer(2, 100, "Hallowen2025_P2")
                         print("[Auto Buy Capsule 1] Purchased 100 capsules")
                     end)
                     task.wait(0.1)
                 elseif candyBasket >= 10000 then
                     pcall(function() 
-                        purchaseEvent:InvokeServer(1, 10, "Hallowen2025_P2")
+                        purchaseEvent:InvokeServer(2, 10, "Hallowen2025_P2")
                         print("[Auto Buy Capsule 1] Purchased 10 capsules")
                     end)
                     task.wait(0.1)
                 elseif candyBasket >= 1000 then
                     pcall(function() 
-                        purchaseEvent:InvokeServer(1, 1, "Hallowen2025_P2")
+                        purchaseEvent:InvokeServer(2, 1, "Hallowen2025_P2")
                         print("[Auto Buy Capsule 1] Purchased 1 capsule")
                     end)
                     task.wait(0.1)
@@ -18964,13 +18932,13 @@ if isInLobby then
             local halloweenCookies = clientData.HalloweenCookies or 0
             
             if halloweenCookies >= 750000 then
-                Purchase:InvokeServer(1, 1000, "Hallowen2025_P2")
+                Purchase:InvokeServer(2, 1000, "Hallowen2025_P2")
             elseif halloweenCookies >= 75000 then
-                Purchase:InvokeServer(1, 100, "Hallowen2025_P2")
+                Purchase:InvokeServer(2, 100, "Hallowen2025_P2")
             elseif halloweenCookies >= 7500 then
-                Purchase:InvokeServer(1, 10, "Hallowen2025_P2")
+                Purchase:InvokeServer(2, 10, "Hallowen2025_P2")
             elseif halloweenCookies >= 750 then
-                Purchase:InvokeServer(1, 1, "Hallowen2025_P2")
+                Purchase:InvokeServer(2, 1, "Hallowen2025_P2")
             end
             
             if halloweenCookies < 1000 then
@@ -19061,19 +19029,19 @@ task.spawn(function()
             local halloweenCookies = clientData.HalloweenCookies or 0
             
             if halloweenCookies >= 750000 then
-                Purchase:InvokeServer(1, 1000, "Hallowen2025_P2")
+                Purchase:InvokeServer(2, 1000, "Hallowen2025_P2")
                 print("[Auto Buy Capsule 2] Purchased 1000 capsules")
                 task.wait(1)
             elseif halloweenCookies >= 75000 then
-                Purchase:InvokeServer(1, 100, "Hallowen2025_P2")
+                Purchase:InvokeServer(2, 100, "Hallowen2025_P2")
                 print("[Auto Buy Capsule 2] Purchased 100 capsules")
                 task.wait(1)
             elseif halloweenCookies >= 7500 then
-                Purchase:InvokeServer(1, 10, "Hallowen2025_P2")
+                Purchase:InvokeServer(2, 10, "Hallowen2025_P2")
                 print("[Auto Buy Capsule 2] Purchased 10 capsules")
                 task.wait(1)
             elseif halloweenCookies >= 750 then
-                Purchase:InvokeServer(1, 1, "Hallowen2025_P2")
+                Purchase:InvokeServer(2, 1, "Hallowen2025_P2")
                 print("[Auto Buy Capsule 2] Purchased 1 capsule")
                 task.wait(1)
             end
@@ -19430,7 +19398,7 @@ do
             end
             
             GuiService.SelectedObject = nil
-            task.wait(0.15)
+            task.wait(0.2)
             
             GuiService.SelectedObject = button
             
@@ -19443,14 +19411,16 @@ do
                 end)
             end)
             
-            task.wait(0.35)
+            task.wait(0.5)
             
             local cardSelected = false
             if GuiService.SelectedObject == button then
                 VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
-                task.wait(0.05)
+                task.wait(0.1)
                 VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
                 cardSelected = true
+                
+                task.wait(0.3)
                 
                 if lockConnection then
                     lockConnection:Disconnect()
@@ -19464,10 +19434,10 @@ do
                 return false
             end
             
-            task.wait(0.3)
+            task.wait(0.4)
             
             pressConfirm()
-            task.wait(0.2)
+            task.wait(0.3)
         end)
         
         return ok
@@ -19544,7 +19514,7 @@ do
             local GuiService = game:GetService("GuiService")
             
             GuiService.SelectedObject = nil
-            task.wait(0.25)
+            task.wait(0.3)
             
             GuiService.SelectedObject = bestCard.button
             
@@ -19557,14 +19527,16 @@ do
                 end)
             end)
             
-            task.wait(0.6)
+            task.wait(0.7)
             
             local cardSelected = false
             if GuiService.SelectedObject == bestCard.button then
                 VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
-                task.wait(0.05)
+                task.wait(0.1)
                 VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
                 cardSelected = true
+                
+                task.wait(0.4)
                 
                 if lockConnection then
                     lockConnection:Disconnect()
