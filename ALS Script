@@ -619,15 +619,6 @@ getgenv()._StateVerification_performFullVerification = function()
     end
     
     for _, result in ipairs(results) do
-        local status = result.passed and "✓" or "✗"
-        local logLevel = result.passed and "INFO" or "WARN"
-        local message = string.format("[StateVerification] %s %s: %s", status, result.checkName, result.reason)
-        
-        if result.passed then
-            warn(message)
-        else
-            warn(message)
-        end
     end
     
     return allPassed, results
@@ -639,14 +630,11 @@ getgenv()._StateVerification_waitForValidState = function(timeout)
     
     local startTime = tick()
     
-    warn(string.format("[StateVerification] Waiting for valid state (timeout: %.1fs)", timeout))
-    
     while (tick() - startTime) < timeout do
         local allPassed, results = getgenv()._StateVerification_performFullVerification()
         
         if allPassed then
             local timeTaken = tick() - startTime
-            warn(string.format("[StateVerification] All verifications passed (%.2fs)", timeTaken))
             return true, timeTaken
         end
         
@@ -730,14 +718,6 @@ getgenv()._DiagnosticsLogger_logLoadingScreenFreeze = function(duration, playerS
         table.remove(logger.freezeHistory, 1)
     end
     
-    warn(string.format("[Diagnostics] Loading screen freeze | Duration: %.1fs | Character: %s | Humanoid: %s (HP: %.1f) | LoadingUI: %s | TeleportUI: %s",
-        duration,
-        tostring(stateDetails.hasCharacter),
-        tostring(stateDetails.hasHumanoid),
-        stateDetails.humanoidHealth,
-        tostring(stateDetails.loadingUIVisible),
-        tostring(stateDetails.teleportUIVisible)))
-    
     return stateDetails
 end
 
@@ -759,17 +739,8 @@ getgenv()._DiagnosticsLogger_logRecoveryAction = function(reason, action, result
         table.remove(logger.recoveryHistory, 1)
     end
     
-    local resultIcon = result == "success" and "✓" or "✗"
-    warn(string.format("[Diagnostics] Recovery action %s | Reason: %s | Action: %s | Result: %s | Memory: %.2f MB",
-        resultIcon,
-        reason,
-        action,
-        result,
-        entry.memoryAfter / 1024))
-    
     if details and type(details) == "table" then
         for key, value in pairs(details) do
-            warn(string.format("[Diagnostics]   %s: %s", key, tostring(value)))
         end
     end
     
@@ -794,8 +765,6 @@ getgenv()._DiagnosticsLogger_trackAverageRestartTime = function()
     
     local avgTime = totalTime / count
     
-    warn(string.format("[Diagnostics] Average time between restarts: %.1fs (based on %d restarts)", avgTime, count))
-    
     return avgTime
 end
 
@@ -818,17 +787,10 @@ getgenv()._DiagnosticsLogger_logMemoryUsage = function(phase)
         table.remove(logger.memorySnapshots, 1)
     end
     
-    warn(string.format("[Diagnostics] Memory usage [%s]: %.2f MB (%.0f KB)", phase, memoryMB, memoryKB))
-    
     if #logger.memorySnapshots >= 2 then
         local previous = logger.memorySnapshots[#logger.memorySnapshots - 1]
         local diff = memoryKB - previous.memoryKB
         local diffMB = diff / 1024
-        
-        if math.abs(diff) > 100 then
-            local changeIcon = diff > 0 and "↑" or "↓"
-            warn(string.format("[Diagnostics]   %s %.2f MB since %s", changeIcon, math.abs(diffMB), previous.phase))
-        end
     end
     
     return snapshot
@@ -985,8 +947,6 @@ getgenv()._DiagnosticsLogger_logCrashWarning = function(warningType, details)
     if #logger.crashWarnings > logger.maxHistorySize then
         table.remove(logger.crashWarnings, 1)
     end
-    
-    warn(string.format("[Diagnostics] Crash Warning: %s | Memory: %.2f MB", warningType, entry.memoryMB))
     
     if details and type(details) == "table" then
         for key, value in pairs(details) do
@@ -7454,8 +7414,6 @@ local function playMacroV2()
                 return
             end
             
-            -- Only wait for restart if we're actually in a restart state (hasStartButton means we're in lobby)
-            -- Don't wait for currentWave == 0 if GameStarted is true, as that means the game is already running
             if getgenv().MacroGameState.hasStartButton then
                 getgenv().MacroStatusText = "Restart Detected"
                 getgenv().MacroWaitingText = "Waiting for game start..."
@@ -7475,7 +7433,6 @@ local function playMacroV2()
                 playbackStartTime = tick()
                 continue
             elseif getgenv().MacroGameState.currentWave == 0 and not gameStarted then
-                -- Only wait for wave 0 if GameStarted is also false (true restart, not just wave transition)
                 getgenv().MacroStatusText = "Restart Detected"
                 getgenv().MacroWaitingText = "Waiting for game start..."
                 getgenv().UpdateMacroStatus()
@@ -7730,7 +7687,6 @@ task.spawn(function()
                 continue
             end
             
-            -- First, verify that GameStarted is actually false (game has ended)
             local gameEnded = false
             local checkWaitTime = 0
             local maxCheckWait = 10
@@ -7764,7 +7720,6 @@ task.spawn(function()
                 continue
             end
             
-            -- Now wait for the new game to start (GameStarted = true)
             print("[Macro] Waiting for new game to start (waiting for GameStarted = true)...")
             local maxWait = 20
             local waited = 0
@@ -7801,7 +7756,6 @@ task.spawn(function()
                     end
                 end)
                 
-                -- Only proceed if GameStarted is true (new game has started)
                 if gameStarted then
                     gameReady = true
                     print("[Macro] ✅ New game started - GameStarted = true, starting playback (Wave: " .. wave .. ", State: " .. state .. ")")
@@ -8632,16 +8586,10 @@ end
 getgenv()._getUnitEnchant = function(unitID)
     local enchant = "None"
     local success = pcall(function()
-        local modules = RS:FindFirstChild("Modules")
-        if not modules then return end
+        local clientData = getClientData()
+        if not clientData or not clientData.UnitData or not clientData.UnitData[unitID] then return end
         
-        local clientData = modules:FindFirstChild("ClientData")
-        if not clientData then return end
-        
-        local data = require(clientData)
-        if not data or not data.UnitData or not data.UnitData[unitID] then return end
-        
-        enchant = data.UnitData[unitID].Enchant or "None"
+        enchant = clientData.UnitData[unitID].Enchant or "None"
     end)
     
     if not success then
@@ -13870,7 +13818,80 @@ if not isInLobby then
                                     end
                                 end)
                                 
-                                task.wait(10)
+                                task.spawn(function()
+                                    print("[Wave Restart] Waiting for game to restart...")
+                                    local restartWaitStart = tick()
+                                    local maxRestartWait = 30
+                                    local gameRestarted = false
+                                    
+                                    while (tick() - restartWaitStart) < maxRestartWait do
+                                        local gameStarted = true
+                                        pcall(function()
+                                            local gs = RS:FindFirstChild("GameStarted")
+                                            if gs and gs.Value ~= nil then
+                                                gameStarted = gs.Value
+                                            end
+                                        end)
+                                        
+                                        if not gameStarted then
+                                            print("[Wave Restart] Game ended, waiting for new game to start...")
+                                            break
+                                        end
+                                        
+                                        task.wait(0.5)
+                                    end
+                                    
+                                    restartWaitStart = tick()
+                                    while (tick() - restartWaitStart) < maxRestartWait do
+                                        local gameStarted = false
+                                        pcall(function()
+                                            local gs = RS:FindFirstChild("GameStarted")
+                                            if gs and gs.Value ~= nil then
+                                                gameStarted = gs.Value
+                                            end
+                                        end)
+                                        
+                                        if gameStarted then
+                                            gameRestarted = true
+                                            print("[Wave Restart] ✅ New game started, restarting macro...")
+                                            
+                                            if getgenv().MacroPlaybackActive then
+                                                print("[Wave Restart] Stopping current macro playback (was still running)...")
+                                                getgenv().MacroPlaybackActive = false
+                                                task.wait(1)
+                                            end
+                                            
+                                            getgenv().MacroStatusText = "Idle"
+                                            getgenv().MacroCurrentStep = 0
+                                            getgenv().MacroActionText = ""
+                                            getgenv().MacroUnitText = ""
+                                            getgenv().MacroWaitingText = ""
+                                            getgenv().MacroGameState.gameEnded = false
+                                            getgenv().MacroGameState.hasEndGameUI = false
+                                            getgenv().MacroGameState.lastGameEndedState = false
+                                            getgenv().UpdateMacroStatus()
+                                            
+                                            task.wait(2)
+                                            
+                                            getgenv().MacroPlaybackActive = false
+                                            
+                                            if getgenv().MacroPlayEnabled then
+                                                print("[Wave Restart] Restarting macro playback from beginning...")
+                                                playMacroV2()
+                                            else
+                                                warn("[Wave Restart] Macro play is disabled, not restarting")
+                                            end
+                                            
+                                            break
+                                        end
+                                        
+                                        task.wait(0.5)
+                                    end
+                                    
+                                    if not gameRestarted then
+                                        warn("[Wave Restart] ⚠️ Timeout waiting for game restart, macro may not restart automatically")
+                                    end
+                                end)
                             else
                                 print("[Wave Restart] ❌ RestartMatch remote not found")
                             end
@@ -14401,6 +14422,9 @@ do
 end
 
 task.spawn(function()
+    local lastRollTime = 0
+    local ROLL_COOLDOWN = 2
+    
     while true do
         task.wait(0.1)
         
@@ -14441,6 +14465,11 @@ task.spawn(function()
             continue
         end
         
+        local currentTime = tick()
+        if (currentTime - lastRollTime) < ROLL_COOLDOWN then
+            continue
+        end
+        
         if getgenv().DebugMode then
             print("[AutoEnchant] Starting enchant attempt for: " .. getgenv().AutoEnchantUnit)
         end
@@ -14452,7 +14481,22 @@ task.spawn(function()
                 return
             end
             
-            local currentEnchant = getgenv()._getUnitEnchant(unit.unitID)
+            ClientDataCache.module = nil
+            ClientDataCache.lastUpdate = 0
+            task.wait(0.3)
+            
+            local currentEnchant = nil
+            for i = 1, 3 do
+                currentEnchant = getgenv()._getUnitEnchant(unit.unitID)
+                if currentEnchant and currentEnchant ~= "None" then
+                    break
+                end
+                task.wait(0.2)
+            end
+            
+            if not currentEnchant then
+                currentEnchant = "None"
+            end
             
             if getgenv().AutoEnchantDesiredEnchants[currentEnchant] then
                 debugPrint("[AutoEnchant] Unit already has desired enchant: " .. currentEnchant)
@@ -14480,16 +14524,28 @@ task.spawn(function()
             print("[AutoEnchant] Attempting to roll enchant for " .. unit.unitName .. " (ID: " .. unit.unitID .. ") using " .. getgenv().AutoEnchantMaterial)
             print("[AutoEnchant] Current enchant: " .. tostring(currentEnchant))
             
+            lastRollTime = tick()
+            
             local rollSuccess, rollResult = pcall(function()
                 return rollEnchant:InvokeServer(unit.unitID, getgenv().AutoEnchantMaterial, currentEnchant)
             end)
             
-            if rollSuccess then
+            if rollSuccess and rollResult then
                 debugPrint("[AutoEnchant] Rolled enchant for " .. unit.unitName .. " using " .. getgenv().AutoEnchantMaterial)
-                task.wait(0.2)
+                ClientDataCache.module = nil
+                ClientDataCache.lastUpdate = 0
+                task.wait(1)
                 
-                local newEnchant = getgenv()._getUnitEnchant(unit.unitID)
-                if getgenv().AutoEnchantDesiredEnchants[newEnchant] then
+                local newEnchant = nil
+                for i = 1, 3 do
+                    newEnchant = getgenv()._getUnitEnchant(unit.unitID)
+                    if newEnchant and newEnchant ~= currentEnchant then
+                        break
+                    end
+                    task.wait(0.3)
+                end
+                
+                if newEnchant and getgenv().AutoEnchantDesiredEnchants[newEnchant] then
                     Window:Notify({
                         Title = "Auto Enchant",
                         Description = "Got " .. newEnchant .. " on " .. unit.unitName .. "!",
@@ -14498,9 +14554,18 @@ task.spawn(function()
                     })
                     getgenv().AutoEnchantEnabled = false
                 end
+                task.wait(1)
             else
-                warn("[AutoEnchant] Failed to roll enchant: " .. tostring(rollResult))
-                task.wait(0.5)
+                local errorMsg = tostring(rollResult)
+                if errorMsg:find("mismatch") then
+                    warn("[AutoEnchant] Enchant mismatch detected, refreshing cache and retrying...")
+                    ClientDataCache.module = nil
+                    ClientDataCache.lastUpdate = 0
+                    task.wait(2)
+                else
+                    warn("[AutoEnchant] Failed to roll enchant: " .. errorMsg)
+                    task.wait(1)
+                end
             end
         end)
         
@@ -17367,7 +17432,6 @@ local function SendMessageEMBED(url, embed, content)
                 return
             end
             
-            -- Log body size for debugging
             print("[Webhook] Request body size: " .. #body .. " bytes")
             
             local requestFunc = syn and syn.request or http_request or request
@@ -17766,18 +17830,12 @@ do
     local WEBHOOK_COOLDOWN = 10
     
     getgenv()._SendWebhookFunction = function()
-        print("[Webhook] sendWebhook() called")
-        
         if not getgenv().WebhookEnabled then 
             warn("[Webhook] Webhook is disabled, returning early")
             getgenv().WebhookProcessing = false
             return 
         end
-        
-        if getgenv().WebhookProcessing and not getgenv()._ForceWebhookSend then
-            warn("[Webhook] Already processing, returning early")
-            return
-        end
+
         
         if not getgenv()._ForceWebhookSend then
             local currentTime = tick()
@@ -17792,9 +17850,8 @@ do
         getgenv()._lastWebhookTime = tick()
         getgenv().WebhookProcessing = true
         
-        -- Use a timeout to ensure WebhookProcessing is always reset
         local webhookStartTime = tick()
-        local maxWebhookDuration = 15 -- Maximum time to wait for webhook to complete
+        local maxWebhookDuration = 15
         
         local success, err = pcall(function()
             print("[Webhook] Starting webhook send...")
@@ -17812,6 +17869,18 @@ do
             local matchResult = getgenv()._CachedMatchResult
             local mapName, mapDifficulty = getgenv()._GetMapInfo()
             
+            local currentGamemode = "Unknown"
+            pcall(function()
+                local gamemode = RS:FindFirstChild("Gamemode")
+                if gamemode and gamemode.Value then
+                    currentGamemode = tostring(gamemode.Value)
+                end
+            end)
+            
+            if getgenv()._CachedGamemode then
+                currentGamemode = getgenv()._CachedGamemode
+            end
+            
             local clientData = getgenv()._WebhookEndGameData or getClientData()
             
             if not clientData then
@@ -17821,11 +17890,8 @@ do
             end
             
             if not getgenv()._WebhookInitialData then
-                print("[Webhook] Initial data missing, refreshing...")
                 getgenv()._RefreshWebhookInitialData()
             end
-            
-            print("[Webhook] Preparing embed with data...")
             
             if isSeamlessRestart then
                 pcall(function()
@@ -17864,8 +17930,6 @@ do
                     
                     matchResult = "Seamless Restart"
                 end)
-                
-                print("[Webhook] Seamless restart - Wave: " .. matchWave .. ", Time: " .. matchTime)
             end
             
             if not matchWave or matchWave == "" then
@@ -17877,33 +17941,48 @@ do
                     local wave = RS:FindFirstChild("Wave")
                     if wave and wave.Value and wave.Value > 0 then
                         matchWave = tostring(wave.Value)
-                        print("[Webhook] Using current wave value: " .. matchWave)
                     end
                 end)
             end
             
             if not matchResult or matchResult == "Unknown" or matchResult == "" then
                 matchResult = "Match Complete"
-                print("[Webhook] Using default match result: " .. matchResult)
             end
             
             if not matchTime or matchTime == "00:00:00" or matchTime == "" then
                 pcall(function()
                     local elapsed = RS:FindFirstChild("ElapsedTime")
                     if elapsed and elapsed.Value then
-                        local seconds = math.floor(elapsed.Value)
+                        local roundTime = elapsed.Value
+                        
+                        if getgenv()._RoundStartTime and getgenv()._RoundStartTime > 0 then
+                            roundTime = elapsed.Value - getgenv()._RoundStartTime
+                            if roundTime < 0 or roundTime > elapsed.Value then
+                                roundTime = elapsed.Value
+                            end
+                        end
+                        
+                        local timeScale = 1
+                        pcall(function()
+                            local timeScaleValue = RS:FindFirstChild("TimeScale")
+                            if timeScaleValue and timeScaleValue:IsA("NumberValue") then
+                                timeScale = timeScaleValue.Value or 1
+                            end
+                        end)
+                        
+                        local realTime = roundTime / timeScale
+                        local seconds = math.floor(realTime)
                         local hours = math.floor(seconds / 3600)
                         local minutes = math.floor((seconds % 3600) / 60)
                         local secs = seconds % 60
                         matchTime = string.format("%02d:%02d:%02d", hours, minutes, secs)
-                        print("[Webhook] Using elapsed time: " .. matchTime)
                     end
                 end)
             end
             
-            print("[Webhook] ✅ All validation passed")
-            
-            print("[Webhook] Data validated - Wave: " .. matchWave .. ", Result: " .. matchResult .. ", Time: " .. matchTime)
+            if not matchTime or matchTime == "00:00:00" or matchTime == "" then
+                matchTime = "00:00:00"
+            end
             
             
             local function formatStats()
@@ -17929,13 +18008,8 @@ do
                 return stats
             end
             
-            print("[Webhook] Comparing initial vs endGame data...")
-            print("[Webhook] Initial data exists: " .. tostring(getgenv()._WebhookInitialData ~= nil))
-            print("[Webhook] EndGame data exists: " .. tostring(clientData ~= nil))
-            
             local rewardsText = ""
             
-            -- Helper function to safely get numeric value
             local function getValue(data, key, default)
                 if not data then return default or 0 end
                 local val = data[key]
@@ -17947,7 +18021,6 @@ do
                 return default or 0
             end
             
-            -- Compare all top-level currency fields
             local currencyKeys = {
                 {key = "Jewels", name = "Jewels"},
                 {key = "Gold", name = "Gold"},
@@ -17965,20 +18038,58 @@ do
                 {key = "TitanRushTokens", name = "Titan Rush Tokens"},
                 {key = "SoccerTokens", name = "Soccer Tokens"},
                 {key = "SlimeCoins", name = "Slime Coins"},
+                {key = "SummerCorals", name = "Summer Corals"},
+                {key = "RaidTokens", name = "Raid Tokens"},
+                {key = "SoulCoin", name = "Soul Coins"},
+                {key = "CandyCanes", name = "Candy Canes"},
             }
             
+            local nonRewardFields = {
+                "LobbySettings", "GameSettings",
+                "TotalStats", "Quests", "LevelRewardsClaimed", "EventData",
+                "Titles", "UnitIndexMilestones", "SpecialEvoRequirements", "Potions", "AutoTrait",
+                "CapsulePity", "InGamePity", "CustomItemPity", "CelestialPity2",
+                "LastDailyChallengeTime", "LastQuestRefresh", "ClanJoinTime", "MoonFragmentPickTime", 
+                "LastWeeklyQuestRefresh", "LastLoginTime", "LastDay",
+                "SkinTicketFix", "TradingFix1", "CleanTasks6",
+                "ObtainedStrings", "LevelReset", "ClaimedCandyLb", "LoginDayIncremented",
+                "RCCells", "CurrentLobbyWorld", "HunterCash", "JewelsDonated",
+                "MerchantHistory", "Slots", "UnitData", "ItemData", "ExperienceItemsData",
+                "InfiniteLeaderboard", "BountyVersion", "Version",
+            }
+            
+            local function isNonRewardField(key)
+                for _, excluded in ipairs(nonRewardFields) do
+                    if key == excluded then
+                        return true
+                    end
+                end
+                if key:find("Pity") or key:find("Last") or key:find("Time") or 
+                   key:find("Settings") or key:find("History") or key:find("Claimed") or 
+                   key:find("Progress") or key:find("Reset") or key:find("Fix") or 
+                   key:find("Milestone") or key:find("Requirement") or key:find("Version") then
+                    return true
+                end
+                return false
+            end
+            
             for _, currency in ipairs(currencyKeys) do
+                if currency.key == "RaidTokens" or currency.key == "SoulCoin" then
+                    local isRaidMode = currentGamemode == "Raids" or currentGamemode == "Raid" or currentGamemode:find("Raid") ~= nil
+                    if not isRaidMode then
+                        continue
+                    end
+                end
+                
                 local initial = getValue(getgenv()._WebhookInitialData, currency.key, 0)
                 local current = getValue(clientData, currency.key, 0)
                 local gained = current - initial
                 
                 if gained > 0 then
                     rewardsText = rewardsText .. "+" .. formatNumber(gained) .. " " .. currency.name .. " [ Total: " .. formatNumber(current) .. " ]\n"
-                    print("[Webhook] Reward found: " .. currency.name .. " - Initial: " .. initial .. ", Current: " .. current .. ", Gained: " .. gained)
                 end
             end
             
-            -- Compare ItemData (deep comparison)
             if clientData.ItemData then
                 local initialItemData = getgenv()._WebhookInitialData and getgenv()._WebhookInitialData.ItemData or {}
                 for itemName, itemInfo in pairs(clientData.ItemData) do
@@ -17990,10 +18101,8 @@ do
                         if gained > 0 then
                             local displayName = itemName:gsub("([A-Z])", " %1"):gsub("^%s+", "")
                             rewardsText = rewardsText .. "+" .. formatNumber(gained) .. " " .. displayName .. " [ Total: " .. formatNumber(current) .. " ]\n"
-                            print("[Webhook] Item reward found: " .. displayName .. " - Initial: " .. initial .. ", Current: " .. current .. ", Gained: " .. gained)
                         end
                     elseif type(itemInfo) == "number" then
-                        -- Handle case where ItemData[itemName] is directly a number
                         local initial = getValue(initialItemData, itemName, 0)
                         local current = itemInfo
                         local gained = current - initial
@@ -18001,13 +18110,11 @@ do
                         if gained > 0 then
                             local displayName = itemName:gsub("([A-Z])", " %1"):gsub("^%s+", "")
                             rewardsText = rewardsText .. "+" .. formatNumber(gained) .. " " .. displayName .. " [ Total: " .. formatNumber(current) .. " ]\n"
-                            print("[Webhook] Item reward found (direct number): " .. displayName .. " - Initial: " .. initial .. ", Current: " .. current .. ", Gained: " .. gained)
                         end
                     end
                 end
             end
             
-            -- Compare ExperienceItemsData (deep comparison)
             if clientData.ExperienceItemsData then
                 local initialExpItems = getgenv()._WebhookInitialData and getgenv()._WebhookInitialData.ExperienceItemsData or {}
                 for itemName, itemInfo in pairs(clientData.ExperienceItemsData) do
@@ -18019,7 +18126,6 @@ do
                         if gained > 0 then
                             local displayName = itemName:gsub("([A-Z])", " %1"):gsub("^%s+", "")
                             rewardsText = rewardsText .. "+" .. formatNumber(gained) .. " " .. displayName .. " [ Total: " .. formatNumber(current) .. " ]\n"
-                            print("[Webhook] ExpItem reward found: " .. displayName .. " - Initial: " .. initial .. ", Current: " .. current .. ", Gained: " .. gained)
                         end
                     elseif type(itemInfo) == "number" then
                         local initial = getValue(initialExpItems, itemName, 0)
@@ -18029,13 +18135,11 @@ do
                         if gained > 0 then
                             local displayName = itemName:gsub("([A-Z])", " %1"):gsub("^%s+", "")
                             rewardsText = rewardsText .. "+" .. formatNumber(gained) .. " " .. displayName .. " [ Total: " .. formatNumber(current) .. " ]\n"
-                            print("[Webhook] ExpItem reward found (direct number): " .. displayName .. " - Initial: " .. initial .. ", Current: " .. current .. ", Gained: " .. gained)
                         end
                     end
                 end
             end
             
-            -- Compare UnitData (count units)
             if clientData.UnitData and getgenv()._WebhookInitialData and getgenv()._WebhookInitialData.UnitCounts then
                 local currentUnitCounts = {}
                 for unitID, unitInfo in pairs(clientData.UnitData) do
@@ -18052,19 +18156,12 @@ do
                     if gained > 0 then
                         local displayName = unitName:gsub("([A-Z])", " %1"):gsub("^%s+", "")
                         rewardsText = rewardsText .. "+" .. formatNumber(gained) .. " " .. displayName .. " [ Total: " .. formatNumber(currentCount) .. " ]\n"
-                        print("[Webhook] Unit reward found: " .. displayName .. " - Initial: " .. initialCount .. ", Current: " .. currentCount .. ", Gained: " .. gained)
                     end
                 end
             end
             
-            -- Removed comprehensive check - it was detecting non-reward fields like inventory sizes, pity counters, etc.
-            -- Only actual rewards (currencies, items, units) are now shown
-            
             if rewardsText == "" then
                 rewardsText = "No rewards earned this round"
-                print("[Webhook] ⚠️ No rewards detected in comparison")
-            else
-                print("[Webhook] ✅ Rewards detected and added to webhook")
             end
             
 
@@ -18129,7 +18226,6 @@ do
                 embedColor = 0xff0000
             end
             
-            -- Helper function to truncate field values to Discord limits
             local function truncateField(value, maxLength)
                 maxLength = maxLength or 1024
                 if not value or type(value) ~= "string" then
@@ -18141,14 +18237,12 @@ do
                 return value:sub(1, maxLength - 3) .. "..."
             end
             
-            -- Split rewards text if it's too long (Discord limit: 1024 chars per field)
             local rewardsFields = {}
             if rewardsText and rewardsText ~= "" and rewardsText ~= "No rewards earned this round" then
                 local maxRewardLength = 1024
                 if #rewardsText <= maxRewardLength then
                     table.insert(rewardsFields, { name = "Rewards", value = rewardsText, inline = true })
                 else
-                    -- Split into multiple fields
                     local lines = {}
                     for line in rewardsText:gmatch("[^\n]+") do
                         table.insert(lines, line)
@@ -18163,7 +18257,6 @@ do
                                 fieldIndex = fieldIndex + 1
                                 currentField = line
                             else
-                                -- Single line is too long, truncate it
                                 table.insert(rewardsFields, { name = "Rewards" .. (fieldIndex > 1 and " (Part " .. fieldIndex .. ")" or ""), value = truncateField(line, maxRewardLength), inline = true })
                                 fieldIndex = fieldIndex + 1
                             end
@@ -18187,12 +18280,10 @@ do
                 { name = "Player Stats", value = truncateField(formatStats() ~= "" and formatStats() or "N/A", 1024), inline = true }
             }
             
-            -- Add rewards fields
             for _, field in ipairs(rewardsFields) do
                 table.insert(embedFields, field)
             end
             
-            -- Add units and match result
             table.insert(embedFields, { name = "Units", value = truncateField(unitsText ~= "" and unitsText or "No units", 1024), inline = false })
             table.insert(embedFields, { name = "Match Result", value = truncateField((matchTime or "00:00:00") .. " - Wave " .. tostring(matchWave or "0") .. "\n" .. (mapName or "Unknown Map") .. ((mapDifficulty and mapDifficulty ~= "Unknown") and (" [" .. mapDifficulty .. "]") or "") .. " - " .. (matchResult or "Unknown"), 1024), inline = false })
             
@@ -18215,7 +18306,6 @@ do
                 table.insert(embedFields, { name = "Server Info", value = truncateField(playerInfo, 1024), inline = false })
             end
             
-            -- Validate embed size (Discord limit: 6000 chars total, description max 4096)
             local embed = {
                 title = "Anime Last Stand",
                 description = truncateField(description or "N/A", 4096),
@@ -18223,13 +18313,6 @@ do
                 fields = embedFields,
                 footer = { text = "Byorl Last Stand | https://discord.gg/V3WcdHpd3J" }
             }
-            
-            -- Log field lengths for debugging
-            print("[Webhook] Embed validation - Description length: " .. #embed.description)
-            print("[Webhook] Embed validation - Number of fields: " .. #embed.fields)
-            for i, field in ipairs(embed.fields) do
-                print("[Webhook] Field " .. i .. " (" .. (field.name or "unnamed") .. ") length: " .. #(field.value or ""))
-            end
             
             local webhookContent = ""
             if hasUnitDrop and getgenv().PingOnSecretDrop and getgenv().DiscordUserID and getgenv().DiscordUserID ~= "" then
@@ -18343,14 +18426,12 @@ do
             getgenv().WebhookProcessing = false
         end
         
-        -- Ensure WebhookProcessing is always reset, even on timeout or error
         task.spawn(function()
             local elapsed = tick() - webhookStartTime
             if elapsed < maxWebhookDuration then
                 task.wait(math.max(0.5, maxWebhookDuration - elapsed))
             end
             
-            -- Double-check that WebhookProcessing is reset
             if getgenv().WebhookProcessing then
                 warn("[Webhook] ⚠️ WebhookProcessing flag was still true after timeout, forcing reset")
                 getgenv().WebhookProcessing = false
@@ -18474,6 +18555,10 @@ do
                     local wave = RS:FindFirstChild("Wave")
                     
                     if elapsed and elapsed.Value then
+                        if not getgenv()._RoundStartTime or getgenv()._RoundStartTime <= 0 then
+                            getgenv()._RoundStartTime = elapsed.Value
+                        end
+                        
                         local roundTime = elapsed.Value
                         
                         if getgenv()._RoundStartTime and getgenv()._RoundStartTime > 0 then
@@ -18503,6 +18588,11 @@ do
                         getgenv()._CachedMatchWave = tostring(wave.Value)
                     end
                     
+                    local gamemode = RS:FindFirstChild("Gamemode")
+                    if gamemode and gamemode.Value then
+                        getgenv()._CachedGamemode = tostring(gamemode.Value)
+                    end
+                    
                     local matchResult, matchWave = getgenv()._GetMatchResult()
                     if matchResult then
                         getgenv()._CachedMatchResult = matchResult
@@ -18513,32 +18603,21 @@ do
                     local endGameClientData = getClientData()
                     if endGameClientData then
                         getgenv()._WebhookEndGameData = endGameClientData
-                        print("[Webhook] EndGame ClientData cached successfully")
-                        print("[Webhook] EndGame Data Sample - Jewels: " .. tostring(endGameClientData.Jewels or 0) .. ", Gold: " .. tostring(endGameClientData.Gold or 0) .. ", Rerolls: " .. tostring(endGameClientData.Rerolls or 0))
                     else
                         warn("[Webhook] Failed to get endGame ClientData")
                     end
                 end)
                 
-                -- Wait a moment to ensure data is fully cached before sending webhook
                 task.wait(0.5)
                 
                 print("[Webhook] EndGameUI detected, triggering webhook...")
-                print("[Webhook] Initial data exists: " .. tostring(getgenv()._WebhookInitialData ~= nil))
-                print("[Webhook] EndGame data exists: " .. tostring(getgenv()._WebhookEndGameData ~= nil))
                 
                 local webhookFunc = getgenv()._SendWebhookFunction
-                print("[Webhook] sendWebhook function exists: " .. tostring(type(webhookFunc)))
-                print("[Webhook] WebhookEnabled: " .. tostring(getgenv().WebhookEnabled))
-                print("[Webhook] WebhookProcessing: " .. tostring(getgenv().WebhookProcessing))
                 
                 task.spawn(function()
-                    print("[Webhook] Inside task.spawn, calling sendWebhook...")
                     local success, err = pcall(function()
                         if webhookFunc then
-                            print("[Webhook] Calling webhook function...")
                             webhookFunc()
-                            print("[Webhook] Webhook function call completed")
                         else
                             warn("[Webhook] ❌ sendWebhook function is nil!")
                         end
@@ -18587,6 +18666,19 @@ do
             getgenv()._WebhookInitialData.CandyBasket = clientData.CandyBasket or 0
             getgenv()._WebhookInitialData.HeroTokens = clientData.HeroTokens or 0
             getgenv()._WebhookInitialData.EXP = clientData.EXP or 0
+            getgenv()._WebhookInitialData.HalloweenCookies = clientData.HalloweenCookies or 0
+            getgenv()._WebhookInitialData.MagicCoins = clientData.MagicCoins or 0
+            getgenv()._WebhookInitialData.EmberTokens = clientData.EmberTokens or 0
+            getgenv()._WebhookInitialData.BlazeTokens = clientData.BlazeTokens or 0
+            getgenv()._WebhookInitialData.HorseTokens = clientData.HorseTokens or 0
+            getgenv()._WebhookInitialData.DevilDogTokens = clientData.DevilDogTokens or 0
+            getgenv()._WebhookInitialData.TitanRushTokens = clientData.TitanRushTokens or 0
+            getgenv()._WebhookInitialData.SoccerTokens = clientData.SoccerTokens or 0
+            getgenv()._WebhookInitialData.SlimeCoins = clientData.SlimeCoins or 0
+            getgenv()._WebhookInitialData.RaidTokens = clientData.RaidTokens or 0
+            getgenv()._WebhookInitialData.SummerCorals = clientData.SummerCorals or 0
+            getgenv()._WebhookInitialData.SoulCoin = clientData.SoulCoin or 0
+            getgenv()._WebhookInitialData.CandyCanes = clientData.CandyCanes or 0
             
             getgenv()._WebhookInitialData.ItemData = {}
             if clientData.ItemData then
@@ -18636,6 +18728,38 @@ do
                 end
             end
         end))
+    
+    task.spawn(function()
+        local lastGameStartedState = false
+        while true do
+            task.wait(0.5)
+            
+            local currentGameStarted = false
+            pcall(function()
+                local gs = RS:FindFirstChild("GameStarted")
+                if gs and gs.Value ~= nil then
+                    currentGameStarted = gs.Value
+                end
+            end)
+            
+            if not lastGameStartedState and currentGameStarted then
+                task.wait(1)
+                
+                pcall(function()
+                    local elapsed = RS:FindFirstChild("ElapsedTime")
+                    if elapsed and elapsed.Value then
+                        getgenv()._RoundStartTime = elapsed.Value
+                    end
+                end)
+                
+                if getgenv()._RefreshWebhookInitialData then
+                    getgenv()._RefreshWebhookInitialData()
+                end
+            end
+            
+            lastGameStartedState = currentGameStarted
+        end
+    end)
 
 
 
@@ -20311,8 +20435,6 @@ getgenv().SeamlessRestartManager = getgenv().SeamlessRestartManager or {
 getgenv()._SeamlessRestartManager_cleanupBeforeRestart = function()
     local manager = getgenv().SeamlessRestartManager
     
-    warn("[SeamlessRestartManager] Starting cleanup before restart...")
-    
     getgenv()._DiagnosticsLogger_logMemoryUsage("before_restart_cleanup")
     
     local cleanupCount = 0
@@ -20320,13 +20442,11 @@ getgenv()._SeamlessRestartManager_cleanupBeforeRestart = function()
     if ConnectionManager then
         local disconnected = ConnectionManager:disconnectGroup("SeamlessRetry")
         cleanupCount = cleanupCount + disconnected
-        warn(string.format("[SeamlessRestartManager] Disconnected %d connections from SeamlessRetry group", disconnected))
     end
     
     if getgenv().MacroPlaybackActive then
         getgenv().MacroPlaybackActive = false
         cleanupCount = cleanupCount + 1
-        warn("[SeamlessRestartManager] Stopped macro playback")
     end
     
     getgenv().MacroCurrentStep = 1
@@ -20334,11 +20454,9 @@ getgenv()._SeamlessRestartManager_cleanupBeforeRestart = function()
     getgenv().MacroUnitText = ""
     getgenv().MacroWaitingText = ""
     getgenv().MacroStatusText = "Ready for restart"
-    warn("[SeamlessRestartManager] Reset macro state to step 1")
     
     pcall(function()
         collectgarbage("collect")
-        warn("[SeamlessRestartManager] Triggered memory cleanup")
     end)
     
     task.wait(1)
@@ -20355,8 +20473,6 @@ getgenv()._SeamlessRestartManager_resetState = function()
     manager.isRestarting = false
     manager.restartStartTime = 0
     getgenv()._SeamlessRestartDetected = false
-    
-    warn("[SeamlessRestartManager] State reset complete")
 end
 
 getgenv()._SeamlessRestartManager_enableSeamless = function()
@@ -20397,14 +20513,11 @@ getgenv()._SeamlessRestartManager_initiateRestart = function()
     local manager = getgenv().SeamlessRestartManager
     
     if manager.isRestarting then
-        warn("[SeamlessRestartManager] Restart already in progress")
         return false
     end
     
     manager.isRestarting = true
     manager.restartStartTime = tick()
-    
-    warn("[SeamlessRestartManager] Initiating restart...")
     
     getgenv()._SeamlessRestartManager_cleanupBeforeRestart()
     
@@ -20417,9 +20530,6 @@ getgenv()._SeamlessRestartManager_initiateRestart = function()
         if restartEvent then
             restartEvent:FireServer()
             success = true
-            warn("[SeamlessRestartManager] RestartMatch fired")
-        else
-            warn("[SeamlessRestartManager] RestartMatch remote not found")
         end
     end)
     
@@ -20434,13 +20544,10 @@ getgenv()._SeamlessRestartManager_waitForRestartComplete = function(timeout)
     
     local startTime = tick()
     
-    warn(string.format("[SeamlessRestartManager] Waiting for restart to complete (timeout: %.1fs)", timeout))
-    
     while (tick() - startTime) < timeout do
         local isFrozen, freezeDuration = getgenv()._LoadingScreenMonitor_checkForFreeze()
         
         if isFrozen then
-            warn(string.format("[SeamlessRestartManager] Loading screen freeze detected during restart (%.1fs)", freezeDuration))
             getgenv()._LoadingScreenMonitor_stopMonitoring()
             
             local recoverySuccess = getgenv()._RestartRecovery_attemptRecovery("restart_timeout")
@@ -20458,7 +20565,6 @@ getgenv()._SeamlessRestartManager_waitForRestartComplete = function(timeout)
         
         if allPassed then
             local timeTaken = tick() - startTime
-            warn(string.format("[SeamlessRestartManager] Restart completed successfully (%.2fs)", timeTaken))
             
             getgenv()._DiagnosticsLogger_logMemoryUsage("after_restart_complete")
             
@@ -20474,7 +20580,6 @@ getgenv()._SeamlessRestartManager_waitForRestartComplete = function(timeout)
     end
     
     local timeTaken = tick() - startTime
-    warn(string.format("[SeamlessRestartManager] Restart timed out after %.2fs", timeTaken))
     
     getgenv()._LoadingScreenMonitor_stopMonitoring()
     
@@ -20505,8 +20610,6 @@ getgenv()._SeamlessRestartManager_trackRestartTime = function()
             totalTime = totalTime + (manager.lastRestartTimes[i] - manager.lastRestartTimes[i-1])
         end
         local avgTime = totalTime / (#manager.lastRestartTimes - 1)
-        
-        warn(string.format("[SeamlessRestartManager] Average time between restarts: %.1fs", avgTime))
     end
 end
 
@@ -20535,7 +20638,6 @@ if not isInLobby then
         until maxWait > 10
         
         if not settingsFound then
-            warn("[SeamlessRestartManager] Settings.SeamlessRetry not found after 10s, using fallback detection")
         end
         
         local function getSeamlessValue()
@@ -20580,14 +20682,12 @@ if not isInLobby then
             
             if manager.endgameCount < maxRounds then
                 if not currentSeamlessValue and (lastSeamlessState ~= false or lastEndgameCount ~= manager.endgameCount) then
-                    warn(string.format("[SeamlessRestartManager] Enabling seamless retry (%d/%d)", manager.endgameCount, maxRounds))
                     getgenv()._SeamlessRestartManager_enableSeamless()
                     lastSeamlessState = false
                     lastEndgameCount = manager.endgameCount
                 end
             elseif manager.endgameCount >= maxRounds then
                 if currentSeamlessValue and (lastSeamlessState ~= true or lastEndgameCount ~= manager.endgameCount) then
-                    warn(string.format("[SeamlessRestartManager] Disabling seamless retry - Max rounds reached (%d/%d)", manager.endgameCount, maxRounds))
                     getgenv()._SeamlessRestartManager_disableSeamless()
                     lastSeamlessState = true
                     lastEndgameCount = manager.endgameCount
@@ -20644,8 +20744,6 @@ if not isInLobby then
                                 getgenv()._DiagnosticsLogger_logSeamlessRestart(manager.endgameCount, maxRounds, "GameStarted")
                                 
                                 getgenv()._SeamlessRestartManager_trackRestartTime()
-                                
-                                warn(string.format("[SeamlessRestartManager] Restart counted: %d/%d", manager.endgameCount, maxRounds))
                                 
                                 task.spawn(function()
                                     task.wait(3)
@@ -20731,19 +20829,15 @@ if not isInLobby then
                                 local elapsed = RS:FindFirstChild("ElapsedTime")
                                 if elapsed and elapsed.Value then
                                     getgenv()._RoundStartTime = elapsed.Value
-                                    warn(string.format("[SeamlessRestartManager] Round start time set (EndGameUI counter): %.1f", elapsed.Value))
                                 end
                             end)
                         end)
-                        
-                        warn(string.format("[SeamlessRestartManager] Endgame detected (method: EndGameUI): %d/%d", manager.endgameCount, maxRounds))
                         
                         if manager.endgameCount >= maxRounds and getgenv().SeamlessFixEnabled then
                             maxRoundsReached = true
                             task.wait(1)
                             
                             if getSeamlessValue() then
-                                warn("[SeamlessRestartManager] Disabling seamless retry before full restart")
                                 getgenv()._SeamlessRestartManager_disableSeamless()
                             end
                             
@@ -20762,8 +20856,6 @@ if not isInLobby then
                                     local restartSuccess, status = getgenv()._SeamlessRestartManager_waitForRestartComplete(45)
                                     
                                     if restartSuccess then
-                                        warn(string.format("[SeamlessRestartManager] Full restart completed: %s", status))
-                                        
                                         getgenv()._DiagnosticsLogger_trackAverageRestartTime()
                                         getgenv()._DiagnosticsLogger_logMemoryUsage("full_restart_complete")
                                         
@@ -20772,11 +20864,7 @@ if not isInLobby then
                                         maxRoundsReached = false
                                         hasRun = false
                                         enableSeamlessIfNeeded()
-                                    else
-                                        warn(string.format("[SeamlessRestartManager] Full restart failed: %s", status))
                                     end
-                                else
-                                    warn("[SeamlessRestartManager] Failed to initiate restart")
                                 end
                             end)
                         else
