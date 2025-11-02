@@ -13188,11 +13188,13 @@ Sections.MiscLeft:SubLabel({
 })
 
 if not isInLobby then
-    local Mouse = LocalPlayer:GetMouse()
-    local UIS = game:GetService("UserInputService")
+    getgenv()._PlaceAnywhereHelpers = getgenv()._PlaceAnywhereHelpers or {}
     
-    local function getUnitAtMouse()
-        local target = Mouse.Target
+    getgenv()._PlaceAnywhereHelpers.Mouse = LocalPlayer:GetMouse()
+    getgenv()._PlaceAnywhereHelpers.UIS = game:GetService("UserInputManager")
+    
+    getgenv()._PlaceAnywhereHelpers.getUnitAtMouse = function()
+        local target = getgenv()._PlaceAnywhereHelpers.Mouse.Target
         if not target then return nil end
         
         local current = target
@@ -13212,11 +13214,11 @@ if not isInLobby then
         return nil
     end
     
-    Mouse.Button1Down:Connect(function()
+    getgenv()._PlaceAnywhereHelpers.Mouse.Button1Down:Connect(function()
         if not getgenv().PlaceAnywhereEnabled then return end
         
         ErrorHandler:wrapAsync(function()
-            local unitName, unitCFrame = getUnitAtMouse()
+            local unitName, unitCFrame = getgenv()._PlaceAnywhereHelpers.getUnitAtMouse()
             if unitName and unitCFrame then
                 local placeRemote = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("PlaceTower")
                 if placeRemote then
@@ -13233,11 +13235,11 @@ if not isInLobby then
         end)
     end)
     
-    UIS.TouchTap:Connect(function(touchPositions, gameProcessedEvent)
+    getgenv()._PlaceAnywhereHelpers.UIS.TouchTap:Connect(function(touchPositions, gameProcessedEvent)
         if not getgenv().PlaceAnywhereEnabled or gameProcessedEvent then return end
         
         ErrorHandler:wrapAsync(function()
-            local unitName, unitCFrame = getUnitAtMouse()
+            local unitName, unitCFrame = getgenv()._PlaceAnywhereHelpers.getUnitAtMouse()
             if unitName and unitCFrame then
                 local placeRemote = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("PlaceTower")
                 if placeRemote then
@@ -13449,7 +13451,7 @@ Sections.SettingsLeft:SubLabel({ Text = "Enable to see detailed console logs for
 
 Sections.SettingsLeft:Divider()
 
-local function getValidKeyCode(keyName, fallback)
+getgenv()._getValidKeyCode = function(keyName, fallback)
     if not keyName or keyName == "" then return Enum.KeyCode[fallback] end
     local success, keyCode = pcall(function()
         return Enum.KeyCode[keyName]
@@ -13463,9 +13465,9 @@ local function getValidKeyCode(keyName, fallback)
     end
 end
 
-local menuKeybind = Sections.SettingsLeft:Keybind({
+getgenv()._menuKeybind = Sections.SettingsLeft:Keybind({
     Name = "Menu Toggle",
-    Default = getValidKeyCode(getgenv().Config.inputs["MenuKeybind"], "LeftControl"),
+    Default = getgenv()._getValidKeyCode(getgenv().Config.inputs["MenuKeybind"], "LeftControl"),
     Callback = function(key)
         Window:SetKeybind(key)
         getgenv().Config.inputs["MenuKeybind"] = key.Name
@@ -13480,7 +13482,7 @@ local menuKeybind = Sections.SettingsLeft:Keybind({
 
 if getgenv().Config.inputs["MenuKeybind"] then
     pcall(function()
-        local validKey = getValidKeyCode(getgenv().Config.inputs["MenuKeybind"], "LeftControl")
+        local validKey = getgenv()._getValidKeyCode(getgenv().Config.inputs["MenuKeybind"], "LeftControl")
         Window:SetKeybind(validKey)
     end)
 end
