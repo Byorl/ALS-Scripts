@@ -13191,7 +13191,7 @@ if not isInLobby then
     getgenv()._PlaceAnywhereHelpers = getgenv()._PlaceAnywhereHelpers or {}
     
     getgenv()._PlaceAnywhereHelpers.Mouse = LocalPlayer:GetMouse()
-    getgenv()._PlaceAnywhereHelpers.UIS = game:GetService("UserInputManager")
+    getgenv()._PlaceAnywhereHelpers.UIS = game:GetService("UserInputService")
     
     getgenv()._PlaceAnywhereHelpers.getUnitAtMouse = function()
         local target = getgenv()._PlaceAnywhereHelpers.Mouse.Target
@@ -22100,9 +22100,6 @@ if not isInLobby then
                         local placeCap = math.floor(getgenv().AutoPlayConfig.placeCaps[slotNum] or 1)
                         local currentCount = getPlacedTowerCount(slotNum)
                         
-                        if getgenv().DebugMode then
-                            print(string.format("[Auto Place] Slot %d: %s (Cap: %d, Current: %d)", slotNum, unitName, placeCap, currentCount))
-                        end
                         
                         if placeCap > 0 and currentCount < placeCap then
                             local cost = getgenv().GetPlaceCost and getgenv().GetPlaceCost(unitName) or 0
