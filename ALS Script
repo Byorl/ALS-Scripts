@@ -21114,38 +21114,6 @@ getgenv().SeamlessRestartManager = getgenv().SeamlessRestartManager or {
     roundHistory = {}
 }
 
-local function enableSeamlessRetry()
-    local success = false
-    pcall(function()
-        local remotes = RS:FindFirstChild("Remotes")
-        local setSettings = remotes and remotes:FindFirstChild("SetSettings")
-        if setSettings then 
-            setSettings:InvokeServer("SeamlessRetry")
-            success = true
-            if getgenv().DebugMode then
-                print("[Seamless] Enabled seamless retry")
-            end
-        end
-    end)
-    return success
-end
-
-local function disableSeamlessRetry()
-    local success = false
-    pcall(function()
-        local remotes = RS:FindFirstChild("Remotes")
-        local setSettings = remotes and remotes:FindFirstChild("SetSettings")
-        if setSettings then 
-            setSettings:InvokeServer("SeamlessRetry")
-            success = true
-            if getgenv().DebugMode then
-                print("[Seamless] Disabled seamless retry")
-            end
-        end
-    end)
-    return success
-end
-
 local function isSeamlessEnabled()
     local enabled = false
     pcall(function()
@@ -21158,6 +21126,42 @@ local function isSeamlessEnabled()
         end
     end)
     return enabled
+end
+
+local function enableSeamlessRetry()
+    local currentlyEnabled = isSeamlessEnabled()
+    if currentlyEnabled then
+        return true
+    end
+    
+    local success = false
+    pcall(function()
+        local remotes = RS:FindFirstChild("Remotes")
+        local setSettings = remotes and remotes:FindFirstChild("SetSettings")
+        if setSettings then 
+            setSettings:InvokeServer("SeamlessRetry")
+            success = true
+        end
+    end)
+    return success
+end
+
+local function disableSeamlessRetry()
+    local currentlyEnabled = isSeamlessEnabled()
+    if not currentlyEnabled then
+        return true
+    end
+    
+    local success = false
+    pcall(function()
+        local remotes = RS:FindFirstChild("Remotes")
+        local setSettings = remotes and remotes:FindFirstChild("SetSettings")
+        if setSettings then 
+            setSettings:InvokeServer("SeamlessRetry")
+            success = true
+        end
+    end)
+    return success
 end
 
 local function performFullRestart()
@@ -21235,13 +21239,22 @@ if not isInLobby then
             local maxRounds = tonumber(getgenv().SeamlessRounds) or 4
             manager.maxRounds = maxRounds
             
-            local shouldBeEnabled = manager.roundCount < maxRounds
             local currentlyEnabled = isSeamlessEnabled()
             
-            if shouldBeEnabled and not currentlyEnabled then
+            if manager.roundCount >= maxRounds then
+                if currentlyEnabled then
+                    disableSeamlessRetry()
+                    task.wait(0.3)
+                    if isSeamlessEnabled() then
+                        disableSeamlessRetry()
+                        task.wait(0.3)
+                    end
+                end
+                return
+            end
+            
+            if manager.roundCount < maxRounds and not currentlyEnabled then
                 enableSeamlessRetry()
-            elseif not shouldBeEnabled and currentlyEnabled then
-                disableSeamlessRetry()
             end
         end
         
@@ -21250,6 +21263,44 @@ if not isInLobby then
         local lastSettingsCheck = 0
         local lastGameStartedState = true
         local hasCountedRound = false
+        
+        task.spawn(function()
+            while true do
+                task.wait(0.5)
+                if getgenv().SeamlessFixEnabled and manager.roundCount >= manager.maxRounds then
+                    if isSeamlessEnabled() then
+                        for i = 1, 2 do
+                            disableSeamlessRetry()
+                            task.wait(0.3)
+                            if not isSeamlessEnabled() then
+                                break
+                            end
+                        end
+                    end
+                end
+            end
+        end)
+        
+        local seamlessValueConnection
+        task.spawn(function()
+            task.wait(2)
+            pcall(function()
+                local settings = LocalPlayer.PlayerGui:WaitForChild("Settings", 10)
+                if settings then
+                    local seamlessValue = settings:WaitForChild("SeamlessRetry", 5)
+                    if seamlessValue then
+                        seamlessValueConnection = seamlessValue:GetPropertyChangedSignal("Value"):Connect(function()
+                            if getgenv().SeamlessFixEnabled and manager.roundCount >= manager.maxRounds then
+                                if seamlessValue.Value == true then
+                                    task.wait(0.1)
+                                    disableSeamlessRetry()
+                                end
+                            end
+                        end)
+                    end
+                end
+            end)
+        end)
         
         while true do
             task.wait(0.3)
@@ -21275,8 +21326,14 @@ if not isInLobby then
                     end
                 end)
                 
+                if getgenv().DebugMode then
+                    print("[Seamless Debug] lastGameStarted=" .. tostring(lastGameStartedState) .. ", currentGameStarted=" .. tostring(currentGameStarted) .. ", hasCountedRound=" .. tostring(hasCountedRound))
+                end
+                
                 if lastGameStartedState and not currentGameStarted and not hasCountedRound then
                     local now = tick()
+                    
+                    print("[Seamless] 🔄 GameStarted went false (seamless transition detected)")
                     
                     if now - manager.lastRoundEndTime >= 3 then
                         manager.lastRoundEndTime = now
@@ -21285,22 +21342,30 @@ if not isInLobby then
                         table.insert(manager.roundHistory, now)
                         hasCountedRound = true
                         
-                        print("[Seamless] Seamless restart detected (GameStarted=false) - Count: " .. manager.roundCount .. "/" .. manager.maxRounds)
+                        print("[Seamless] ✅ Round counted! Total: " .. manager.roundCount .. "/" .. manager.maxRounds)
                         
                         task.spawn(function()
                             task.wait(5)
                             hasCountedRound = false
+                            print("[Seamless] Round counter debounce reset")
                         end)
                         
                         if manager.roundCount >= manager.maxRounds then
-                            task.spawn(function()
-                                task.wait(5)
-                                
+                            print("[Seamless] Max rounds reached - Disabling seamless and preparing restart...")
+                            
+                            for i = 1, 5 do
                                 if isSeamlessEnabled() then
                                     disableSeamlessRetry()
-                                    task.wait(1)
+                                    task.wait(0.5)
+                                    if not isSeamlessEnabled() then
+                                        break
+                                    end
+                                else
+                                    break
                                 end
-                                
+                            end
+                            
+                            task.spawn(function()
                                 local waitTime = 0
                                 while LocalPlayer.PlayerGui:FindFirstChild("EndGameUI") and waitTime < 30 do
                                     task.wait(0.5)
@@ -21316,6 +21381,8 @@ if not isInLobby then
                                 updateSeamlessSettings()
                             end)
                         end
+                    else
+                        print("[Seamless] ⏭️ Skipped count (debounce: " .. string.format("%.1f", now - manager.lastRoundEndTime) .. "s since last)")
                     end
                 end
                 
@@ -21358,8 +21425,48 @@ if not isInLobby then
                 end
                 
                 if state.isNewRound then
-                    if getgenv().DebugMode then
-                        print("[Seamless] New round started - Wave 1 (Round " .. manager.roundCount .. ")")
+                    local now = tick()
+                    
+                    if now - manager.lastRoundEndTime >= 3 and not hasCountedRound then
+                        manager.lastRoundEndTime = now
+                        manager.roundCount = manager.roundCount + 1
+                        getgenv()._SeamlessEndgameCount = manager.roundCount
+                        table.insert(manager.roundHistory, now)
+                        hasCountedRound = true
+                        
+                        print("[Seamless] New round detected - Count: " .. manager.roundCount .. "/" .. manager.maxRounds)
+                        
+                        task.spawn(function()
+                            task.wait(5)
+                            hasCountedRound = false
+                        end)
+                        
+                        if manager.roundCount >= manager.maxRounds then
+                            print("[Seamless] Max rounds reached - Preparing full restart...")
+                            
+                            for i = 1, 5 do
+                                if isSeamlessEnabled() then
+                                    disableSeamlessRetry()
+                                    task.wait(0.5)
+                                    if not isSeamlessEnabled() then
+                                        break
+                                    end
+                                else
+                                    break
+                                end
+                            end
+                            
+                            task.spawn(function()
+                                local waitTime = 0
+                                while LocalPlayer.PlayerGui:FindFirstChild("EndGameUI") and waitTime < 30 do
+                                    task.wait(0.5)
+                                    waitTime = waitTime + 0.5
+                                end
+                                
+                                task.wait(2)
+                                performFullRestart()
+                            end)
+                        end
                     end
                     
                     task.spawn(function()
