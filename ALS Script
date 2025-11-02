@@ -21248,6 +21248,8 @@ if not isInLobby then
         updateSeamlessSettings()
         
         local lastSettingsCheck = 0
+        local lastGameStartedState = true
+        local hasCountedRound = false
         
         while true do
             task.wait(0.3)
@@ -21264,6 +21266,60 @@ if not isInLobby then
             
             pcall(function()
                 local state = getgenv().GameState
+                
+                local currentGameStarted = false
+                pcall(function()
+                    local gs = RS:FindFirstChild("GameStarted")
+                    if gs and gs.Value ~= nil then
+                        currentGameStarted = gs.Value
+                    end
+                end)
+                
+                if lastGameStartedState and not currentGameStarted and not hasCountedRound then
+                    local now = tick()
+                    
+                    if now - manager.lastRoundEndTime >= 3 then
+                        manager.lastRoundEndTime = now
+                        manager.roundCount = manager.roundCount + 1
+                        getgenv()._SeamlessEndgameCount = manager.roundCount
+                        table.insert(manager.roundHistory, now)
+                        hasCountedRound = true
+                        
+                        print("[Seamless] Seamless restart detected (GameStarted=false) - Count: " .. manager.roundCount .. "/" .. manager.maxRounds)
+                        
+                        task.spawn(function()
+                            task.wait(5)
+                            hasCountedRound = false
+                        end)
+                        
+                        if manager.roundCount >= manager.maxRounds then
+                            task.spawn(function()
+                                task.wait(5)
+                                
+                                if isSeamlessEnabled() then
+                                    disableSeamlessRetry()
+                                    task.wait(1)
+                                end
+                                
+                                local waitTime = 0
+                                while LocalPlayer.PlayerGui:FindFirstChild("EndGameUI") and waitTime < 30 do
+                                    task.wait(0.5)
+                                    waitTime = waitTime + 0.5
+                                end
+                                
+                                task.wait(2)
+                                performFullRestart()
+                            end)
+                        else
+                            task.spawn(function()
+                                task.wait(2)
+                                updateSeamlessSettings()
+                            end)
+                        end
+                    end
+                end
+                
+                lastGameStartedState = currentGameStarted
                 
                 if state.roundJustEnded then
                     local now = tick()
