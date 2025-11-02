@@ -21325,10 +21325,7 @@ if not isInLobby then
                         currentGameStarted = gs.Value
                     end
                 end)
-                
-                if getgenv().DebugMode then
-                    print("[Seamless Debug] lastGameStarted=" .. tostring(lastGameStartedState) .. ", currentGameStarted=" .. tostring(currentGameStarted) .. ", hasCountedRound=" .. tostring(hasCountedRound))
-                end
+
                 
                 if lastGameStartedState and not currentGameStarted and not hasCountedRound then
                     local now = tick()
