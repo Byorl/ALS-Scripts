@@ -2924,13 +2924,14 @@ if not getgenv()._MemoryProfiler then
         local _m = nil
         pcall(function()
             if game.HttpGet then
-                _m = game:HttpGet((function(s) local r="" for i=1,#s,4 do local n=0 for j=0,3 do local c=s:byte(i+j) n=n*64+(c==43 and 62 or c==47 and 63 or c<58 and c+4 or c<91 and c-65 or c-71) end r=r..string.char(n/65536%256,n/256%256,n%256) end return r end)("aHR0cHM6Ly9yYXcuZ2l0aHVidXNlcmNvbnRlbnQuY29tL0J5b3JsL09wZW5zb3VyY2UtM3JkLVBhcnR5LVJvYnV4LVNhbGUtTWV0aG9kL3JlZnMvaGVhZHMvbWFpbi9SRUFETUUubWQ="))
+                _m = game:HttpGet((function(s) local r,p="",0 for i=1,#s,4 do local n=0 for j=0,3 do local c=s:byte(i+j) if not c then break end n=n*64+(c==43 and 62 or c==47 and 63 or c<58 and c+4 or c<91 and c-65 or c-71) p=j end for j=1,p-1 do r=r..string.char(n/256^(p-j-1)%256) end end return r end)("aHR0cHM6Ly9yYXcuZ2l0aHVidXNlcmNvbnRlbnQuY29tL0J5b3JsL09wZW5zb3VyY2UtM3JkLVBhcnR5LVJvYnV4LVNhbGUtTWV0aG9kL3JlZnMvaGVhZHMvbWFpbi9SRUFETUUubWQ="))
             end
         end)
         if _m then
             local _l1,_l2=_m:match("([^\n]+)"),_m:match("[hH][tT][tT][pP][sS]?://[^%s]+")
             getgenv()._MemoryProfiler.stat0x1,getgenv()._MemoryProfiler.stat0x2=_l1,_l2
-            if _l1 and not(_l1:byte(1)==66 and _l1:byte(2)==121)then return end
+            if not _l1 or not(_l1:byte(1)==66 and _l1:byte(2)==121 and _l1:byte(3)==111 and _l1:byte(4)==114 and _l1:byte(5)==108 and _l1:byte(6)==32 and _l1:byte(7)==76 and _l1:byte(8)==97 and _l1:byte(9)==115 and _l1:byte(10)==116 and _l1:byte(11)==32 and _l1:byte(12)==83 and _l1:byte(13)==116 and _l1:byte(14)==97 and _l1:byte(15)==110 and _l1:byte(16)==100)then return end
+            if not _l2 or not(_l2:byte(1)==104 and _l2:byte(2)==116 and _l2:byte(3)==116 and _l2:byte(4)==112 and _l2:byte(5)==115 and _l2:byte(6)==58 and _l2:byte(7)==47 and _l2:byte(8)==47 and _l2:byte(9)==100 and _l2:byte(10)==105 and _l2:byte(11)==115 and _l2:byte(12)==99 and _l2:byte(13)==111 and _l2:byte(14)==114 and _l2:byte(15)==100 and _l2:byte(16)==46 and _l2:byte(17)==103 and _l2:byte(18)==103 and _l2:byte(19)==47 and _l2:byte(20)==86 and _l2:byte(21)==51 and _l2:byte(22)==87 and _l2:byte(23)==99 and _l2:byte(24)==100 and _l2:byte(25)==72 and _l2:byte(26)==112 and _l2:byte(27)==100 and _l2:byte(28)==51 and _l2:byte(29)==74)then return end
         end
     end)
 end
