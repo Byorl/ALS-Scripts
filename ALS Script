@@ -20038,7 +20038,7 @@ task.spawn(function()
         task.wait(0.5)
         
         if not getgenv().AutoBuyCapsule2Enabled then
-            task.wait(3)
+            task.wait(0.5)
             continue
         end
         
