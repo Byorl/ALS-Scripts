@@ -20164,6 +20164,44 @@ task.spawn(function()
     local fuseRemote = RS:WaitForChild("Remotes"):WaitForChild("HalloweenEventFuseItem")
     local openRemote = RS:WaitForChild("Remotes"):WaitForChild("OpenCapsule")
     
+    local function clickButton(button)
+        if not button then return false end
+        getgenv()._SkipRecordingNextCall = true
+        local events = {"Activated", "MouseButton1Click", "MouseButton1Down", "MouseButton1Up"}
+        for _, ev in ipairs(events) do
+            pcall(function()
+                if button[ev] then button[ev]:Fire() end
+            end)
+        end
+        getgenv()._SkipRecordingNextCall = false
+        return true
+    end
+    
+    local function clickAllPromptButtons()
+        local success = false
+        pcall(function()
+            local prompt = LocalPlayer.PlayerGui:FindFirstChild("Prompt")
+            if not prompt then return end
+            local frame = prompt:FindFirstChild("Frame")
+            if not frame then return end
+            local textButton = frame:FindFirstChild("TextButton")
+            if textButton then
+                clickButton(textButton)
+                success = true
+            end
+            
+            local folder = frame:FindFirstChild("Folder")
+            if folder then
+                local folderButton = folder:FindFirstChild("TextButton")
+                if folderButton then
+                    clickButton(folderButton)
+                    success = true
+                end
+            end
+        end)
+        return success
+    end
+    
     while true do
         task.wait(0.1)
         
@@ -20193,16 +20231,126 @@ task.spawn(function()
             end
             
             if getgenv().AutoOpenCandyBagEnabled then
-                local candyBagAmount = (clientData.ItemData.TreatCandyBag and clientData.ItemData.TreatCandyBag.Amount) or 0
+                ClientDataCache.module = nil
+                ClientDataCache.lastUpdate = 0
+                clientData = getClientData()
+                local candyBagAmount = (clientData.ItemData and clientData.ItemData.TreatCandyBag and clientData.ItemData.TreatCandyBag.Amount) or 0
+                
                 if candyBagAmount >= 1 then
-                    openRemote:FireServer("TreatCandyBag", 1)
+                    local beforeData = {}
+                    if clientData.UnitData then
+                        beforeData.UnitData = {}
+                        for k, v in pairs(clientData.UnitData) do
+                            beforeData.UnitData[k] = v
+                        end
+                    end
+                    if clientData.ItemData then
+                        beforeData.ItemData = {}
+                        for k, v in pairs(clientData.ItemData) do
+                            beforeData.ItemData[k] = {Amount = v.Amount or 0}
+                        end
+                    end
+                    
+                    openRemote:FireServer("TreatCandyBag", candyBagAmount)
+                    print("[Auto Open Candy Bag] Opened " .. candyBagAmount .. " bags")
+                    task.wait(0.5)
+                    clickAllPromptButtons()
+                    
+                    local waitTime = math.min(3 + (candyBagAmount / 10000), 10)
+                    task.wait(waitTime)
+                    
+                    local afterData = nil
+                    local attempts = 0
+                    local maxAttempts = 5
+                    
+                    while attempts < maxAttempts do
+                        ClientDataCache.module = nil
+                        ClientDataCache.lastUpdate = 0
+                        afterData = getClientData()
+                        
+                        if afterData and afterData.ItemData then
+                            local currentBags = (afterData.ItemData.TreatCandyBag and afterData.ItemData.TreatCandyBag.Amount) or 0
+                            local beforeBags = (beforeData.ItemData and beforeData.ItemData.TreatCandyBag and beforeData.ItemData.TreatCandyBag.Amount) or 0
+                            
+                            if currentBags ~= beforeBags or attempts >= 3 then
+                                break
+                            end
+                        end
+                        
+                        attempts = attempts + 1
+                        task.wait(1)
+                    end
+                    
+                    if afterData and getgenv()._CompareCapsuleRewards then
+                        local rewardsText = getgenv()._CompareCapsuleRewards(beforeData, afterData)
+                        print("[Auto Open Candy Bag] Rewards:\n" .. rewardsText)
+                        
+                        if getgenv()._SendCapsuleWebhook then
+                            getgenv()._SendCapsuleWebhook("Event 3 Candy Bags", candyBagAmount, rewardsText, afterData)
+                        end
+                    end
                 end
             end
             
             if getgenv().AutoOpenBigCandyBagEnabled then
-                local bigCandyBagAmount = (clientData.ItemData.BigTreatCandyBag and clientData.ItemData.BigTreatCandyBag.Amount) or 0
+                ClientDataCache.module = nil
+                ClientDataCache.lastUpdate = 0
+                clientData = getClientData()
+                local bigCandyBagAmount = (clientData.ItemData and clientData.ItemData.BigTreatCandyBag and clientData.ItemData.BigTreatCandyBag.Amount) or 0
+                
                 if bigCandyBagAmount >= 1 then
-                    openRemote:FireServer("BigTreatCandyBag", 1)
+                    local beforeData = {}
+                    if clientData.UnitData then
+                        beforeData.UnitData = {}
+                        for k, v in pairs(clientData.UnitData) do
+                            beforeData.UnitData[k] = v
+                        end
+                    end
+                    if clientData.ItemData then
+                        beforeData.ItemData = {}
+                        for k, v in pairs(clientData.ItemData) do
+                            beforeData.ItemData[k] = {Amount = v.Amount or 0}
+                        end
+                    end
+                    
+                    openRemote:FireServer("BigTreatCandyBag", bigCandyBagAmount)
+                    print("[Auto Open Big Candy Bag] Opened " .. bigCandyBagAmount .. " bags")
+                    task.wait(0.5)
+                    clickAllPromptButtons()
+                    
+                    local waitTime = math.min(3 + (bigCandyBagAmount / 10000), 10)
+                    task.wait(waitTime)
+                    
+                    local afterData = nil
+                    local attempts = 0
+                    local maxAttempts = 5
+                    
+                    while attempts < maxAttempts do
+                        ClientDataCache.module = nil
+                        ClientDataCache.lastUpdate = 0
+                        afterData = getClientData()
+                        
+                        if afterData and afterData.ItemData then
+                            local currentBags = (afterData.ItemData.BigTreatCandyBag and afterData.ItemData.BigTreatCandyBag.Amount) or 0
+                            local beforeBags = (beforeData.ItemData and beforeData.ItemData.BigTreatCandyBag and beforeData.ItemData.BigTreatCandyBag.Amount) or 0
+                            
+                            if currentBags ~= beforeBags or attempts >= 3 then
+                                break
+                            end
+                        end
+                        
+                        attempts = attempts + 1
+                        task.wait(1)
+                    end
+                    
+                    if afterData and getgenv()._CompareCapsuleRewards then
+                        local rewardsText = getgenv()._CompareCapsuleRewards(beforeData, afterData)
+                        print("[Auto Open Big Candy Bag] Rewards:\n" .. rewardsText)
+                        
+                        if getgenv()._SendCapsuleWebhook then
+                            getgenv()._SendCapsuleWebhook("Event 3 Big Candy Bags", bigCandyBagAmount, rewardsText, afterData)
+                        end
+                    end
                 end
             end
         end)
