@@ -4322,6 +4322,13 @@ Tabs.Event2 = ErrorHandler:wrap(function()
     })
 end, "Create Event2 tab")()
 
+Tabs.Event3 = ErrorHandler:wrap(function()
+    return TabGroup2:Tab({ 
+        Name = "Event 3", 
+        Image = "rbxassetid://10734952273" 
+    })
+end, "Create Event3 tab")()
+
 Tabs.SlimeRush = ErrorHandler:wrap(function()
     return TabGroup2:Tab({ 
         Name = "Slime Rush", 
@@ -4537,6 +4544,9 @@ Sections.EventRight = createSection(Tabs.Event, "Event", "Right")
 
 Sections.Event2Left = createSection(Tabs.Event2, "Event2", "Left")
 Sections.Event2Right = createSection(Tabs.Event2, "Event2", "Right")
+
+Sections.Event3Left = createSection(Tabs.Event3, "Event3", "Left")
+Sections.Event3Right = createSection(Tabs.Event3, "Event3", "Right")
 
 Sections.SlimeRushLeft = createSection(Tabs.SlimeRush, "SlimeRush", "Left")
 Sections.SlimeRushRight = createSection(Tabs.SlimeRush, "SlimeRush", "Right")
@@ -5729,6 +5739,12 @@ getgenv().AutoEvent2Enabled = getgenv().Config.toggles.AutoEvent2Toggle or false
 getgenv().AutoCandyEnabled = getgenv().Config.toggles.AutoCandyToggle or false
 getgenv().Capsule2Enabled = getgenv().Config.toggles.Capsule2Toggle or false
 
+getgenv().AutoFuseRainbowCandyEnabled = getgenv().Config.toggles.AutoFuseRainbowCandyToggle or false
+getgenv().AutoFuseCandyBagEnabled = getgenv().Config.toggles.AutoFuseCandyBagToggle or false
+getgenv().AutoFuseBigCandyBagEnabled = getgenv().Config.toggles.AutoFuseBigCandyBagToggle or false
+getgenv().AutoOpenCandyBagEnabled = getgenv().Config.toggles.AutoOpenCandyBagToggle or false
+getgenv().AutoOpenBigCandyBagEnabled = getgenv().Config.toggles.AutoOpenBigCandyBagToggle or false
+
 getgenv().RemoveEnemiesEnabled = getgenv().Config.toggles.RemoveEnemiesToggle or false
 getgenv().AntiAFKEnabled = getgenv().Config.toggles.AntiAFKToggle or false
 getgenv().BlackScreenEnabled = getgenv().Config.toggles.BlackScreenToggle or false
@@ -5851,17 +5867,12 @@ getgenv()._cacheAbilityRemotes = function()
         if abilityRemote and abilityRemote:IsA("RemoteFunction") then
             getgenv().MacroRemoteCache["ability"] = abilityRemote
             debugPrint("[Macro] Ability remote cached successfully")
-        else
-            warn("[Macro] Error: Ability remote not found or wrong type - ability recording disabled")
-            getgenv().AbilityRecordingEnabled = false
         end
         
         local abilitySelectionRemote = remotes:WaitForChild("AbilitySelection", 5)
         if abilitySelectionRemote and abilitySelectionRemote:IsA("RemoteEvent") then
             getgenv().MacroRemoteCache["abilityselection"] = abilitySelectionRemote
             debugPrint("[Macro] AbilitySelection remote cached successfully")
-        else
-            warn("[Macro] Error: AbilitySelection remote not found or wrong type - card selection recording disabled")
         end
     end)
     
@@ -10180,6 +10191,92 @@ createDropdown(
 )
 
 
+
+end
+
+do
+Sections.Event3Left:Header({ Text = "🍬 Event 3 Auto Fuse" })
+Sections.Event3Left:SubLabel({ Text = "Automatically fuse Halloween candy items" })
+
+createToggle(
+    Sections.Event3Left,
+    "Auto Fuse Rainbow Candy",
+    "AutoFuseRainbowCandyToggle",
+    function(value)
+        getgenv().AutoFuseRainbowCandyEnabled = value
+        Window:Notify({
+            Title = "Auto Fuse Rainbow Candy",
+            Description = value and "Enabled - Fusing 5 → 1 Candy Bag" or "Disabled",
+            Lifetime = 3
+        })
+    end,
+    getgenv().AutoFuseRainbowCandyEnabled
+)
+
+createToggle(
+    Sections.Event3Left,
+    "Auto Fuse Candy Bag",
+    "AutoFuseCandyBagToggle",
+    function(value)
+        getgenv().AutoFuseCandyBagEnabled = value
+        Window:Notify({
+            Title = "Auto Fuse Candy Bag",
+            Description = value and "Enabled - Fusing 15 → 1 Big Candy Bag" or "Disabled",
+            Lifetime = 3
+        })
+    end,
+    getgenv().AutoFuseCandyBagEnabled
+)
+
+createToggle(
+    Sections.Event3Left,
+    "Auto Fuse Big Candy Bag",
+    "AutoFuseBigCandyBagToggle",
+    function(value)
+        getgenv().AutoFuseBigCandyBagEnabled = value
+        Window:Notify({
+            Title = "Auto Fuse Big Candy Bag",
+            Description = value and "Enabled" or "Disabled",
+            Lifetime = 3
+        })
+    end,
+    getgenv().AutoFuseBigCandyBagEnabled
+)
+
+Sections.Event3Left:Divider()
+
+Sections.Event3Left:Header({ Text = "🎁 Event 3 Auto Open" })
+Sections.Event3Left:SubLabel({ Text = "Automatically open candy bags" })
+
+createToggle(
+    Sections.Event3Left,
+    "Auto Open Candy Bag",
+    "AutoOpenCandyBagToggle",
+    function(value)
+        getgenv().AutoOpenCandyBagEnabled = value
+        Window:Notify({
+            Title = "Auto Open Candy Bag",
+            Description = value and "Enabled" or "Disabled",
+            Lifetime = 3
+        })
+    end,
+    getgenv().AutoOpenCandyBagEnabled
+)
+
+createToggle(
+    Sections.Event3Left,
+    "Auto Open Big Candy Bag",
+    "AutoOpenBigCandyBagToggle",
+    function(value)
+        getgenv().AutoOpenBigCandyBagEnabled = value
+        Window:Notify({
+            Title = "Auto Open Big Candy Bag",
+            Description = value and "Enabled" or "Disabled",
+            Lifetime = 3
+        })
+    end,
+    getgenv().AutoOpenBigCandyBagEnabled
+)
 
 end
 
@@ -19732,7 +19829,7 @@ task.spawn(function()
     task.wait(0.1)
     
     while true do
-        task.wait(0.5)
+        task.wait(0.1)
         
         if not getgenv().AutoBuyCapsuleEnabled then
             task.wait(3)
@@ -19755,25 +19852,21 @@ task.spawn(function()
                         purchaseEvent:InvokeServer(2, 1000, "Hallowen2025_P2")
                         print("[Auto Buy Capsule 1] Purchased 1000 capsules")
                     end)
-                    task.wait(0.1)
                 elseif candyBasket >= 100000 then
                     pcall(function() 
                         purchaseEvent:InvokeServer(2, 100, "Hallowen2025_P2")
                         print("[Auto Buy Capsule 1] Purchased 100 capsules")
                     end)
-                    task.wait(0.1)
                 elseif candyBasket >= 10000 then
                     pcall(function() 
                         purchaseEvent:InvokeServer(2, 10, "Hallowen2025_P2")
                         print("[Auto Buy Capsule 1] Purchased 10 capsules")
                     end)
-                    task.wait(0.1)
                 elseif candyBasket >= 1000 then
                     pcall(function() 
                         purchaseEvent:InvokeServer(2, 1, "Hallowen2025_P2")
                         print("[Auto Buy Capsule 1] Purchased 1 capsule")
                     end)
-                    task.wait(0.1)
                 end
             end
         end)
@@ -20036,7 +20129,7 @@ task.spawn(function()
     local Purchase = RS:WaitForChild("Events"):WaitForChild("Hallowen2025"):WaitForChild("Purchase")
     
     while true do
-        task.wait(0.5)
+        task.wait(0.1)
         
         if not getgenv().AutoBuyCapsule2Enabled then
             task.wait(0.5)
@@ -20052,19 +20145,65 @@ task.spawn(function()
             if halloweenCookies >= 750000 then
                 Purchase:InvokeServer(2, 1000, "Hallowen2025_P2")
                 print("[Auto Buy Capsule 2] Purchased 1000 capsules")
-                task.wait(1)
             elseif halloweenCookies >= 75000 then
                 Purchase:InvokeServer(2, 100, "Hallowen2025_P2")
                 print("[Auto Buy Capsule 2] Purchased 100 capsules")
-                task.wait(1)
             elseif halloweenCookies >= 7500 then
                 Purchase:InvokeServer(2, 10, "Hallowen2025_P2")
                 print("[Auto Buy Capsule 2] Purchased 10 capsules")
-                task.wait(1)
             elseif halloweenCookies >= 750 then
                 Purchase:InvokeServer(2, 1, "Hallowen2025_P2")
                 print("[Auto Buy Capsule 2] Purchased 1 capsule")
-                task.wait(1)
+            end
+        end)
+    end
+end)
+
+task.spawn(function()
+    task.wait(1)
+    local fuseRemote = RS:WaitForChild("Remotes"):WaitForChild("HalloweenEventFuseItem")
+    local openRemote = RS:WaitForChild("Remotes"):WaitForChild("OpenCapsule")
+    
+    while true do
+        task.wait(0.1)
+        
+        pcall(function()
+            local clientData = getClientData()
+            if not clientData or not clientData.ItemData then return end
+            
+            if getgenv().AutoFuseRainbowCandyEnabled then
+                local rainbowCandyAmount = (clientData.ItemData.RainbowCandyDust and clientData.ItemData.RainbowCandyDust.Amount) or 0
+                if rainbowCandyAmount >= 5 then
+                    fuseRemote:FireServer("RainbowCandyDust")
+                end
+            end
+            
+            if getgenv().AutoFuseCandyBagEnabled then
+                local candyBagAmount = (clientData.ItemData.TreatCandyBag and clientData.ItemData.TreatCandyBag.Amount) or 0
+                if candyBagAmount >= 15 then
+                    fuseRemote:FireServer("TreatCandyBag")
+                end
+            end
+            
+            if getgenv().AutoFuseBigCandyBagEnabled then
+                local bigCandyBagAmount = (clientData.ItemData.BigTreatCandyBag and clientData.ItemData.BigTreatCandyBag.Amount) or 0
+                if bigCandyBagAmount >= 1 then
+                    fuseRemote:FireServer("BigTreatCandyBag")
+                end
+            end
+            
+            if getgenv().AutoOpenCandyBagEnabled then
+                local candyBagAmount = (clientData.ItemData.TreatCandyBag and clientData.ItemData.TreatCandyBag.Amount) or 0
+                if candyBagAmount >= 1 then
+                    openRemote:FireServer("TreatCandyBag", 1)
+                end
+            end
+            
+            if getgenv().AutoOpenBigCandyBagEnabled then
+                local bigCandyBagAmount = (clientData.ItemData.BigTreatCandyBag and clientData.ItemData.BigTreatCandyBag.Amount) or 0
+                if bigCandyBagAmount >= 1 then
+                    openRemote:FireServer("BigTreatCandyBag", 1)
+                end
             end
         end)
     end
