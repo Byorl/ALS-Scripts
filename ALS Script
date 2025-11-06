@@ -19500,6 +19500,95 @@ do
                 end
             end
             
+            if lastGameStartedState and not currentGameStarted then
+                task.wait(2)
+                
+                if getgenv().WebhookEnabled and not getgenv().WebhookProcessing then
+                    print("[Webhook] GameStarted changed to false - match ended (party mode trigger)")
+                    
+                    local endGameUIExists = false
+                    pcall(function()
+                        endGameUIExists = LocalPlayer.PlayerGui:FindFirstChild("EndGameUI") ~= nil
+                    end)
+                    
+                    if not endGameUIExists then
+                        print("[Webhook] No EndGameUI found - triggering webhook via GameStarted (non-host player)")
+                        
+                        pcall(function()
+                            local elapsed = RS:FindFirstChild("ElapsedTime")
+                            local wave = RS:FindFirstChild("Wave")
+                            
+                            if elapsed and elapsed.Value then
+                                if not getgenv()._RoundStartTime or getgenv()._RoundStartTime <= 0 then
+                                    getgenv()._RoundStartTime = elapsed.Value
+                                end
+                                
+                                local roundTime = elapsed.Value
+                                
+                                if getgenv()._RoundStartTime and getgenv()._RoundStartTime > 0 then
+                                    roundTime = elapsed.Value - getgenv()._RoundStartTime
+                                    if roundTime < 0 or roundTime > elapsed.Value then
+                                        roundTime = elapsed.Value
+                                    end
+                                end
+                                
+                                local timeScale = 1
+                                pcall(function()
+                                    local timeScaleValue = RS:FindFirstChild("TimeScale")
+                                    if timeScaleValue and timeScaleValue:IsA("NumberValue") then
+                                        timeScale = timeScaleValue.Value or 1
+                                    end
+                                end)
+                                
+                                local realTime = roundTime / timeScale
+                                local seconds = math.floor(realTime)
+                                local hours = math.floor(seconds / 3600)
+                                local minutes = math.floor((seconds % 3600) / 60)
+                                local secs = seconds % 60
+                                getgenv()._CachedMatchTime = string.format("%02d:%02d:%02d", hours, minutes, secs)
+                            end
+                            
+                            if wave and wave.Value then
+                                getgenv()._CachedMatchWave = tostring(wave.Value)
+                            end
+                            
+                            local gamemode = RS:FindFirstChild("Gamemode")
+                            if gamemode and gamemode.Value then
+                                getgenv()._CachedGamemode = tostring(gamemode.Value)
+                            end
+                            
+                            getgenv()._CachedMatchResult = "Match Complete"
+                            
+                            ClientDataCache.module = nil
+                            ClientDataCache.lastUpdate = 0
+                            local endGameClientData = getClientData()
+                            if endGameClientData then
+                                getgenv()._WebhookEndGameData = endGameClientData
+                            end
+                        end)
+                        
+                        task.wait(0.5)
+                        
+                        task.spawn(function()
+                            local success, err = pcall(function()
+                                if getgenv()._SendWebhookFunction then
+                                    getgenv()._SendWebhookFunction()
+                                else
+                                    warn("[Webhook] sendWebhook function is nil!")
+                                end
+                            end)
+                            
+                            if not success then
+                                warn("[Webhook] Error calling webhook function: " .. tostring(err))
+                                getgenv().WebhookProcessing = false
+                            end
+                        end)
+                    else
+                        print("[Webhook] EndGameUI exists - will use normal trigger")
+                    end
+                end
+            end
+            
             lastGameStartedState = currentGameStarted
         end
     end)
@@ -19608,7 +19697,7 @@ if isInLobby then
         end
                 
         while true do
-            task.wait(1)
+            task.wait(0.1)
             
             if not getgenv().BingoEnabled then
                 task.wait(2)
@@ -19624,8 +19713,7 @@ if isInLobby then
                 end
                 
                 if bingoStamps < 1 then
-                    print("[Auto Bingo] Not enough stamps (" .. bingoStamps .. "), waiting...")
-                    task.wait(5)
+                    task.wait(2)
                     return
                 end
                 
@@ -19635,29 +19723,17 @@ if isInLobby then
                         pcall(function()
                             UseStampEvent:FireServer()
                         end)
-                        if i < 25 then
-                            task.wait(0.05)
-                        end
                     end
                 end
                 
-                task.wait(1)
+                task.wait(0.5)
                 
                 if CompleteBoardEvent then
                     local boardSuccess, boardResult = pcall(function()
                         return CompleteBoardEvent:InvokeServer()
                     end)
-                    if boardSuccess then
-                        print("[Auto Bingo] ✅ Board completed successfully! Result: " .. tostring(boardResult))
-                    else
-                        warn("[Auto Bingo] ❌ Failed to complete board: " .. tostring(boardResult))
-                    end
                 end
             end)
-            
-            if not success then
-                warn("[Auto Bingo] Error in cycle: " .. tostring(err))
-            end
         end
     end)
     
@@ -19716,35 +19792,35 @@ if isInLobby then
                 continue
             end
             
-            if getgenv().Capsule2Enabled then
+            if getgenv().CapsuleEnabled then
                 local clientData = getClientData()
                 if clientData then
                     local candyBasket = clientData.CandyBasket or 0
                     
                     local eventsFolder = RS:FindFirstChild("Events")
                     local halloweenFolder = eventsFolder and eventsFolder:FindFirstChild("Hallowen2025")
-                    local purchaseEvent = halloweenFolder and halloweenFolder:FindFirstChild("PurchaseEvent")
+                    local purchaseEvent = halloweenFolder and halloweenFolder:FindFirstChild("Purchase")
                     
                     if purchaseEvent then
                         if candyBasket >= 1000000 then
                             pcall(function() 
-                                purchaseEvent:InvokeServer(2, 1000, "Hallowen2025_P2")
-                                print("[Auto Capsule 2] Purchased 1000 capsules")
+                                purchaseEvent:InvokeServer(2, 1000, "Hallowen2025")
+                                print("[Auto Capsule 1] Purchased 1000 capsules")
                             end)
                         elseif candyBasket >= 100000 then
                             pcall(function() 
-                                purchaseEvent:InvokeServer(2, 100, "Hallowen2025_P2")
-                                print("[Auto Capsule 2] Purchased 100 capsules")
+                                purchaseEvent:InvokeServer(2, 100, "Hallowen2025")
+                                print("[Auto Capsule 1] Purchased 100 capsules")
                             end)
                         elseif candyBasket >= 10000 then
                             pcall(function() 
-                                purchaseEvent:InvokeServer(2, 10, "Hallowen2025_P2")
-                                print("[Auto Capsule 2] Purchased 10 capsules")
+                                purchaseEvent:InvokeServer(2, 10, "Hallowen2025")
+                                print("[Auto Capsule 1] Purchased 10 capsules")
                             end)
                         elseif candyBasket >= 1000 then
                             pcall(function() 
-                                purchaseEvent:InvokeServer(2, 1, "Hallowen2025_P2")
-                                print("[Auto Capsule 2] Purchased 1 capsule")
+                                purchaseEvent:InvokeServer(2, 1, "Hallowen2025")
+                                print("[Auto Capsule 1] Purchased 1 capsule")
                             end)
                         end
                     end
@@ -19773,10 +19849,10 @@ if isInLobby then
                                 end
                             end
                             
-                            local openCapsuleEvent = halloweenFolder and halloweenFolder:FindFirstChild("OpenCapsule")
-                            if openCapsuleEvent then
+                            local openCapsuleRemote = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("OpenCapsule")
+                            if openCapsuleRemote then
                                 pcall(function()
-                                    openCapsuleEvent:FireServer("HalloweenCapsule2025", capsuleAmount)
+                                    openCapsuleRemote:FireServer("HalloweenCapsule2025", capsuleAmount)
                                     print("[Auto Capsule Event 1] Opened " .. capsuleAmount .. " capsules")
                                 end)
                                 task.wait(0.5)
@@ -19844,27 +19920,27 @@ task.spawn(function()
             
             local eventsFolder = RS:FindFirstChild("Events")
             local halloweenFolder = eventsFolder and eventsFolder:FindFirstChild("Hallowen2025")
-            local purchaseEvent = halloweenFolder and halloweenFolder:FindFirstChild("PurchaseEvent")
+            local purchaseEvent = halloweenFolder and halloweenFolder:FindFirstChild("Purchase")
             
             if purchaseEvent then
                 if candyBasket >= 1000000 then
                     pcall(function() 
-                        purchaseEvent:InvokeServer(2, 1000, "Hallowen2025_P2")
+                        purchaseEvent:InvokeServer(2, 1000, "Hallowen2025")
                         print("[Auto Buy Capsule 1] Purchased 1000 capsules")
                     end)
                 elseif candyBasket >= 100000 then
                     pcall(function() 
-                        purchaseEvent:InvokeServer(2, 100, "Hallowen2025_P2")
+                        purchaseEvent:InvokeServer(2, 100, "Hallowen2025")
                         print("[Auto Buy Capsule 1] Purchased 100 capsules")
                     end)
                 elseif candyBasket >= 10000 then
                     pcall(function() 
-                        purchaseEvent:InvokeServer(2, 10, "Hallowen2025_P2")
+                        purchaseEvent:InvokeServer(2, 10, "Hallowen2025")
                         print("[Auto Buy Capsule 1] Purchased 10 capsules")
                     end)
                 elseif candyBasket >= 1000 then
                     pcall(function() 
-                        purchaseEvent:InvokeServer(2, 1, "Hallowen2025_P2")
+                        purchaseEvent:InvokeServer(2, 1, "Hallowen2025")
                         print("[Auto Buy Capsule 1] Purchased 1 capsule")
                     end)
                 end
@@ -20735,26 +20811,25 @@ do
                 end)
             end)
             
-            task.wait(0.5)
+            task.wait(0.25)
             
             local cardSelected = false
             if GuiService.SelectedObject == button then
                 VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
-                task.wait(0.1)
+                task.wait(0.05)
                 VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
                 cardSelected = true
-                
-                task.wait(0.3)
-                
-                if lockConnection then
-                    lockConnection:Disconnect()
-                end
-                
-                GuiService.SelectedObject = nil
-            else
-                if lockConnection then
-                    lockConnection:Disconnect()
-                end
+            end
+            
+            task.wait(0.3)
+            
+            if lockConnection then
+                lockConnection:Disconnect()
+            end
+            
+            GuiService.SelectedObject = nil
+            
+            if not cardSelected then
                 return false
             end
             
