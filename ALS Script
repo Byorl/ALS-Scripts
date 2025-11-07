@@ -19973,6 +19973,91 @@ do
 
 do
     task.spawn(function()
+        local RS = game:GetService("ReplicatedStorage")
+        local waveValueObj = nil
+        local lastWave = nil
+        local lastSeamlessSend = 0
+        local MIN_INTERVAL = 30 
+        local WAVE_THRESHOLD = 5 
+        while true do
+            task.wait(1)
+            if not getgenv().WebhookEnabled then
+                continue
+            end
+            local hasEndGameUI = false
+            pcall(function()
+                hasEndGameUI = LocalPlayer.PlayerGui:FindFirstChild("EndGameUI") ~= nil
+            end)
+            if hasEndGameUI then
+                lastWave = nil 
+                continue
+            end
+            pcall(function()
+                waveValueObj = waveValueObj or RS:FindFirstChild("Wave")
+                if not waveValueObj or not waveValueObj.Value then return end
+                local currentWave = waveValueObj.Value
+                if not lastWave then
+                    lastWave = currentWave
+                    return
+                end
+                if lastWave >= WAVE_THRESHOLD and currentWave <= 1 then
+                    local now = tick()
+                    if now - lastSeamlessSend >= MIN_INTERVAL and not getgenv().WebhookProcessing then
+                        lastSeamlessSend = now
+                        pcall(function()
+                            local elapsed = RS:FindFirstChild("ElapsedTime")
+                            if elapsed and elapsed.Value then
+                                local roundTime = elapsed.Value
+                                if getgenv()._RoundStartTime and getgenv()._RoundStartTime > 0 then
+                                    roundTime = elapsed.Value - getgenv()._RoundStartTime
+                                    if roundTime < 0 or roundTime > elapsed.Value then
+                                        roundTime = elapsed.Value
+                                    end
+                                end
+                                local timeScale = 1
+                                local timeScaleValue = RS:FindFirstChild("TimeScale")
+                                if timeScaleValue and timeScaleValue:IsA("NumberValue") then
+                                    timeScale = timeScaleValue.Value or 1
+                                end
+                                local realTime = roundTime / timeScale
+                                local seconds = math.floor(realTime)
+                                local hours = math.floor(seconds / 3600)
+                                local minutes = math.floor((seconds % 3600) / 60)
+                                local secs = seconds % 60
+                                getgenv()._CachedMatchTime = string.format("%02d:%02d:%02d", hours, minutes, secs)
+                            end
+                            getgenv()._CachedMatchWave = tostring(lastWave)
+                            local gamemode = RS:FindFirstChild("Gamemode")
+                            if gamemode and gamemode.Value then
+                                getgenv()._CachedGamemode = tostring(gamemode.Value)
+                            end
+                            getgenv()._CachedMatchResult = "Seamless Restart"
+                            ClientDataCache.module = nil
+                            ClientDataCache.lastUpdate = 0
+                            local snapshot = getClientData()
+                            if snapshot then
+                                getgenv()._WebhookEndGameData = snapshot
+                            end
+                        end)
+                        getgenv()._WebhookSeamlessRestart = true
+                        local sendFunc = getgenv()._SendWebhookFunction
+                        if sendFunc then
+                            task.spawn(function()
+                                local ok, err = pcall(sendFunc)
+                                if not ok then
+                                    warn("[Webhook Seamless] Error sending seamless webhook: " .. tostring(err))
+                                end
+                                getgenv()._WebhookSeamlessRestart = false
+                            end)
+                        end
+                    end
+                end
+                lastWave = currentWave
+            end)
+        end
+    end)
+
+    task.spawn(function()
         local eventsFolder = RS:FindFirstChild("Events")
     local halloweenFolder = eventsFolder and eventsFolder:FindFirstChild("Hallowen2025")
     local enterEvent = halloweenFolder and halloweenFolder:FindFirstChild("Enter")
