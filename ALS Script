@@ -9776,6 +9776,8 @@ if isInLobby then
         Sections.EventLeft,
         "2x Reset Wave",
         "TwoXResetWave",
+        "Enter wave (e.g. 30)",
+        "Numbers",
         function(value)
             getgenv().TwoXResetWave = tonumber(value) or 30
             Window:Notify({
@@ -10135,6 +10137,8 @@ Sections.Event2Left:Divider()
         Sections.Event2Left,
         "2x Reset Wave",
         "TwoXResetWave",
+        "Enter wave (e.g. 30)",
+        "Numbers",
         function(value)
             getgenv().TwoXResetWave = tonumber(value) or 30
             Window:Notify({
