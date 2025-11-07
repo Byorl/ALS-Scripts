@@ -5744,6 +5744,8 @@ getgenv().AutoSmartEnabled = getgenv().Config.toggles.AutoSmart or false
 getgenv().AutoEventEnabled = getgenv().Config.toggles.AutoEventToggle or false
 getgenv().BingoEnabled = getgenv().Config.toggles.BingoToggle or false
 getgenv().CapsuleEnabled = getgenv().Config.toggles.CapsuleToggle or false
+getgenv().TwoXTrackerEnabled = getgenv().Config.toggles.TwoXTrackerToggle or false
+getgenv().TwoXResetWave = tonumber(getgenv().Config.inputs.TwoXResetWave) or 30
 getgenv().AutoBuyCapsuleEnabled = getgenv().Config.toggles.AutoBuyCapsuleToggle or false
 
 getgenv().AutoEvent2Enabled = getgenv().Config.toggles.AutoEvent2Toggle or false
@@ -9751,6 +9753,41 @@ if isInLobby then
     )
     
     Sections.EventLeft:Divider()
+
+    Sections.EventLeft:Header({ Text = "⚖️ 2x Currency Tracker" })
+    Sections.EventLeft:SubLabel({ Text = "Detect 2x candy gain spikes and use alternate restart wave" })
+
+    createToggle(
+        Sections.EventLeft,
+        "Enable 2x Tracker",
+        "TwoXTrackerToggle",
+        function(value)
+            getgenv().TwoXTrackerEnabled = value
+            Window:Notify({
+                Title = "2x Tracker",
+                Description = value and "Enabled - Monitoring last 5 rounds" or "Disabled",
+                Lifetime = 3
+            })
+        end,
+        getgenv().Config.toggles.TwoXTrackerToggle or false
+    )
+
+    createInput(
+        Sections.EventLeft,
+        "2x Reset Wave",
+        "TwoXResetWave",
+        function(value)
+            getgenv().TwoXResetWave = tonumber(value) or 30
+            Window:Notify({
+                Title = "2x Reset Wave",
+                Description = "Set to wave " .. tostring(getgenv().TwoXResetWave),
+                Lifetime = 3
+            })
+        end,
+        tostring(getgenv().Config.inputs.TwoXResetWave or 30)
+    )
+
+    Sections.EventLeft:Divider()
     
     Sections.EventLeft:Header({ Text = "💰 Auto Sell Capsule Units" })
     Sections.EventLeft:SubLabel({ Text = "Automatically sell specific units from Event 1 capsules" })
@@ -10075,6 +10112,41 @@ createToggle(
 )
 
 Sections.Event2Left:Divider()
+
+    Sections.Event2Left:Header({ Text = "⚖️ 2x Currency Tracker" })
+    Sections.Event2Left:SubLabel({ Text = "Detect 2x cookie gain spikes and use alternate restart wave" })
+
+    createToggle(
+        Sections.Event2Left,
+        "Enable 2x Tracker",
+        "TwoXTrackerToggle",
+        function(value)
+            getgenv().TwoXTrackerEnabled = value
+            Window:Notify({
+                Title = "2x Tracker",
+                Description = value and "Enabled - Monitoring last 5 rounds" or "Disabled",
+                Lifetime = 3
+            })
+        end,
+        getgenv().Config.toggles.TwoXTrackerToggle or false
+    )
+
+    createInput(
+        Sections.Event2Left,
+        "2x Reset Wave",
+        "TwoXResetWave",
+        function(value)
+            getgenv().TwoXResetWave = tonumber(value) or 30
+            Window:Notify({
+                Title = "2x Reset Wave",
+                Description = "Set to wave " .. tostring(getgenv().TwoXResetWave),
+                Lifetime = 3
+            })
+        end,
+        tostring(getgenv().Config.inputs.TwoXResetWave or 30)
+    )
+
+    Sections.Event2Left:Divider()
 
 Sections.Event2Left:Header({ Text = "🔄 Wave Restart" })
 Sections.Event2Left:SubLabel({
@@ -14437,34 +14509,72 @@ createToggle(
 Sections.AutoTradeRight:Header({ Text = "📦 Trade Items" })
 Sections.AutoTradeRight:SubLabel({ Text = "Select items to add to the trade" })
 
-local function getAvailableItems()
-    local items = {}
-    local clientData = getgenv().GetClientData and getgenv().GetClientData()
-    if clientData and clientData.ItemData then
-        for itemName, itemData in pairs(clientData.ItemData) do
-            if itemData.Amount and itemData.Amount > 0 then
-                table.insert(items, itemName)
+if not getgenv()._GetAvailableItems then
+    local _itemsBuffer = {}
+    getgenv()._GetAvailableItems = function()
+        table.clear(_itemsBuffer)
+        local clientData = getgenv().GetClientData and getgenv().GetClientData()
+        if clientData and clientData.ItemData then
+            for itemName, itemData in pairs(clientData.ItemData) do
+                local amt = itemData.Amount
+                if amt and amt > 0 then
+                    _itemsBuffer[#_itemsBuffer+1] = itemName
+                end
             end
         end
+        if #_itemsBuffer == 0 then
+            _itemsBuffer[1] = "No items available"
+        end
+        table.sort(_itemsBuffer)
+        return _itemsBuffer
     end
-    if #items == 0 then
-        table.insert(items, "No items available")
-    end
-    table.sort(items)
-    return items
 end
 
 getgenv()._autoTradeItemsDropdown = createDropdown(
     Sections.AutoTradeRight,
     "Items to Trade",
     "AutoTradeItems",
-    getAvailableItems(),
+    getgenv()._GetAvailableItems(),
     true,
     function(value)
         getgenv().AutoTradeItems = value
     end,
     getgenv().AutoTradeItems
 )
+
+do
+    getgenv()._AutoTradeItemOptionsCache = getgenv()._AutoTradeItemOptionsCache or {}
+    local seed = getgenv()._GetAvailableItems()
+    for _, name in ipairs(seed) do
+        if name ~= "No items available" then
+            getgenv()._AutoTradeItemOptionsCache[name] = true
+        end
+    end
+end
+
+task.spawn(function()
+    while true do
+        task.wait(10)
+        local dd = getgenv()._autoTradeItemsDropdown
+        if dd and getgenv()._GetAvailableItems then
+            pcall(function()
+                getgenv()._AutoTradeItemOptionsCache = getgenv()._AutoTradeItemOptionsCache or {}
+                local known = getgenv()._AutoTradeItemOptionsCache
+                local nowItems = getgenv()._GetAvailableItems()
+                local toAdd = {}
+                for _, name in ipairs(nowItems) do
+                    if name ~= "No items available" and not known[name] then
+                        table.insert(toAdd, name)
+                        known[name] = true
+                    end
+                end
+                if #toAdd > 0 and dd.InsertOptions then
+                    dd:InsertOptions(toAdd)
+                end
+            end)
+        end
+    end
+end)
 
 
 
@@ -14475,12 +14585,18 @@ if not isInLobby then
         while true do
             task.wait(pollingInterval)
             
-            if getgenv().InfiniteRestartEnabled then
+            if getgenv().InfiniteRestartEnabled or getgenv().TwoXTrackerEnabled then
                 pcall(function()
                     local wave = RS:FindFirstChild("Wave")
                     if wave and wave.Value then
                         local currentWave = tonumber(wave.Value) or 0
-                        local targetWave = tonumber(getgenv().InfiniteRestartWave) or 50
+                        local twoXActive = getgenv().TwoXActive
+                        local targetWave
+                        if twoXActive and getgenv().TwoXTrackerEnabled then
+                            targetWave = tonumber(getgenv().TwoXResetWave) or tonumber(getgenv().InfiniteRestartWave) or 50
+                        else
+                            targetWave = tonumber(getgenv().InfiniteRestartWave) or 50
+                        end
                         
                         if currentWave >= targetWave then
                             print("[Wave Restart] Wave " .. currentWave .. " reached, restarting match...")
@@ -14690,6 +14806,102 @@ if not isInLobby then
         end
     end)
 end
+
+if not getgenv()._TwoXHistory then
+    getgenv()._TwoXHistory = { }
+    getgenv().TwoXActive = false
+end
+
+do 
+    local HttpService = game:GetService("HttpService")
+    getgenv()._TwoXHistory = getgenv()._TwoXHistory or {}
+    getgenv().TwoXActive = getgenv().TwoXActive or false
+
+    getgenv()._SaveTwoXState = function()
+        if not writefile then return end
+        local ok, encoded = pcall(HttpService.JSONEncode, HttpService, {
+            Active = getgenv().TwoXActive,
+            History = getgenv()._TwoXHistory,
+            ResetWave = getgenv().TwoXResetWave
+        })
+        if ok then pcall(writefile, "Maclib_twox_state.json", encoded) end
+    end
+
+    getgenv()._LoadTwoXState = function()
+        if not readfile or not isfile or not isfile("Maclib_twox_state.json") then return end
+        local ok, data = pcall(function()
+            return HttpService:JSONDecode(readfile("Maclib_twox_state.json"))
+        end)
+        if ok and type(data) == "table" then
+            getgenv().TwoXActive = data.Active or false
+            getgenv()._TwoXHistory = data.History or getgenv()._TwoXHistory
+            if data.ResetWave then
+                local rw = tonumber(data.ResetWave)
+                if rw then getgenv().TwoXResetWave = rw end
+            end
+        end
+    end
+
+    getgenv()._PushRoundGain = function(gain)
+        local hist = getgenv()._TwoXHistory
+        hist[#hist+1] = gain
+        if #hist > 5 then table.remove(hist, 1) end
+    end
+
+    local function avg(list)
+        local total = 0
+        for i=1,#list do total += list[i] end
+        if #list == 0 then return 0 end
+        return total / #list
+    end
+
+    getgenv()._DetectTwoX = function()
+        local hist = getgenv()._TwoXHistory
+        local len = #hist
+        if len < 5 then return end
+        local last = hist[len]
+        local prev4 = {hist[len-4], hist[len-3], hist[len-2], hist[len-1]}
+        local baseline = avg(prev4)
+        if baseline <= 0 then return end
+        local ratio = last / baseline
+        if ratio >= 1.8 then
+            if not getgenv().TwoXActive then
+                getgenv().TwoXActive = true
+                getgenv()._SaveTwoXState()
+                Window:Notify({ Title = "2x Tracker", Description = "Detected 2x ACTIVE (ratio " .. string.format("%.2f", ratio) .. ")", Lifetime = 4 })
+            end
+        elseif ratio <= 1.3 and getgenv().TwoXActive then
+            getgenv().TwoXActive = false
+            getgenv()._SaveTwoXState()
+            Window:Notify({ Title = "2x Tracker", Description = "2x ended (ratio " .. string.format("%.2f", ratio) .. ")", Lifetime = 4 })
+        end
+    end
+
+    getgenv()._LoadTwoXState()
+end
+
+task.spawn(function()
+    while true do
+        task.wait(5)
+        if not getgenv().TwoXTrackerEnabled then continue end
+        pcall(function()
+            local data = getgenv().GetClientData and getgenv().GetClientData()
+            if data then
+                local currency = 0
+                if data.CandyBasket then currency = data.CandyBasket end
+                if data.HalloweenCookies and data.HalloweenCookies > currency then currency = data.HalloweenCookies end
+                getgenv()._LastCurrencySnapshot = getgenv()._LastCurrencySnapshot or currency
+                local delta = currency - getgenv()._LastCurrencySnapshot
+                if delta > 0 then
+                    getgenv()._PushRoundGain(delta)
+                    getgenv()._DetectTwoX()
+                    getgenv()._SaveTwoXState()
+                end
+                getgenv()._LastCurrencySnapshot = currency
+            end
+        end)
+    end
+end)
 
 
 task.spawn(function()
@@ -23312,10 +23524,6 @@ do
                                             end
                                         end
 
-                                        -- Determine if we should force ready:
-                                        -- 1) We already added items for this trade (flag), OR
-                                        -- 2) ItemsAdded already has data (other side added), OR
-                                        -- 3) User selected no items to add (empty selection)
                                         local itemsAddedFlag = getgenv()._TradeItemsAdded and getgenv()._TradeItemsAdded[tradeFolder.Name]
                                         local itemsAddedObj = tradeFolder:FindFirstChild("ItemsAdded")
                                         local itemsAddedNonEmpty = itemsAddedObj and itemsAddedObj.Value and itemsAddedObj.Value ~= "[]"
