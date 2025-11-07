@@ -4378,6 +4378,13 @@ Tabs.SeamlessFix = ErrorHandler:wrap(function()
     })
 end, "Create SeamlessFix tab")()
 
+Tabs.AutoTrade = ErrorHandler:wrap(function()
+    return TabGroup3:Tab({ 
+        Name = "Auto Trade", 
+        Image = "rbxassetid://10747373176" 
+    })
+end, "Create AutoTrade tab")()
+
 Tabs.Misc = ErrorHandler:wrap(function()
     return TabGroup3:Tab({ 
         Name = "Misc", 
@@ -4556,8 +4563,8 @@ Sections.WebhookLeft = createSection(Tabs.Webhook, "Webhook", "Left")
 Sections.SeamlessFixLeft = createSection(Tabs.SeamlessFix, "SeamlessFix", "Left")
 Sections.SeamlessFixRight = createSection(Tabs.SeamlessFix, "SeamlessFix", "Right")
 
-Sections.AutoTradeLeft = createSection(Tabs.SeamlessFix, "AutoTrade", "Left")
-Sections.AutoTradeRight = createSection(Tabs.SeamlessFix, "AutoTrade", "Right")
+Sections.AutoTradeLeft = createSection(Tabs.AutoTrade, "AutoTrade", "Left")
+Sections.AutoTradeRight = createSection(Tabs.AutoTrade, "AutoTrade", "Right")
 
 Sections.MiscLeft = createSection(Tabs.Misc, "Misc", "Left")
 Sections.MiscRight = createSection(Tabs.Misc, "Misc", "Right")
@@ -5751,7 +5758,7 @@ getgenv().AutoOpenBigCandyBagEnabled = getgenv().Config.toggles.AutoOpenBigCandy
 getgenv().AutoTradePlayerEnabled = false
 getgenv().AutoTradeTargetPlayer = getgenv().Config.dropdowns.AutoTradeTargetPlayer or nil
 getgenv().AutoAcceptTradeEnabled = getgenv().Config.toggles.AutoAcceptTradeToggle or false
-getgenv().AutoAcceptTradeFromPlayer = getgenv().Config.dropdowns.AutoAcceptTradeFromPlayer or nil
+getgenv().AutoAcceptTradeFromPlayers = getgenv().Config.dropdowns.AutoAcceptTradeFromPlayers or {}
 getgenv().AutoReadyTradeEnabled = getgenv().Config.toggles.AutoReadyTradeToggle or false
 getgenv().AutoTradeItems = getgenv().Config.dropdowns.AutoTradeItems or {}
 
@@ -14345,25 +14352,12 @@ getgenv()._autoTradePlayerDropdown = createDropdown(
         getgenv().AutoTradeTargetPlayer = value
         Window:Notify({
             Title = "Target Player",
-            Description = "Will send trade to " .. value,
+            Description = "Will send trade to " .. tostring(value),
             Lifetime = 3
         })
     end,
     getgenv().AutoTradeTargetPlayer
 )
-
-task.spawn(function()
-    while true do
-        task.wait(2)
-        if getgenv()._autoTradePlayerDropdown then
-            pcall(function()
-                local currentPlayers = getPlayerList()
-                getgenv()._autoTradePlayerDropdown:ClearOptions()
-                getgenv()._autoTradePlayerDropdown:InsertOptions(currentPlayers)
-            end)
-        end
-    end
-end)
 
 Sections.AutoTradeLeft:Divider()
 
@@ -14373,9 +14367,16 @@ createToggle(
     "AutoAcceptTradeToggle",
     function(value)
         getgenv().AutoAcceptTradeEnabled = value
+        local playerList = ""
+        if getgenv().AutoAcceptTradeFromPlayers and type(getgenv().AutoAcceptTradeFromPlayers) == "table" then
+            for _, player in pairs(getgenv().AutoAcceptTradeFromPlayers) do
+                playerList = playerList .. player .. ", "
+            end
+            playerList = playerList:sub(1, -3)
+        end
         Window:Notify({
             Title = "Auto Accept Trade",
-            Description = value and "Enabled - Will accept trades from " .. (getgenv().AutoAcceptTradeFromPlayer or "selected player") or "Disabled",
+            Description = value and "Enabled - Will accept from: " .. (playerList ~= "" and playerList or "selected players") or "Disabled",
             Lifetime = 3
         })
     end,
@@ -14384,33 +14385,27 @@ createToggle(
 
 getgenv()._autoAcceptTradePlayerDropdown = createDropdown(
     Sections.AutoTradeLeft,
-    "Accept From Player",
-    "AutoAcceptTradeFromPlayer",
+    "Accept From Players",
+    "AutoAcceptTradeFromPlayers",
     getPlayerList(),
-    false,
+    true,
     function(value)
-        getgenv().AutoAcceptTradeFromPlayer = value
+        getgenv().AutoAcceptTradeFromPlayers = value
+        local playerList = ""
+        if type(value) == "table" then
+            for _, player in pairs(value) do
+                playerList = playerList .. player .. ", "
+            end
+            playerList = playerList:sub(1, -3)
+        end
         Window:Notify({
-            Title = "Accept From Player",
-            Description = "Will accept trades from " .. value,
+            Title = "Accept From Players",
+            Description = "Will accept trades from: " .. (playerList ~= "" and playerList or "none"),
             Lifetime = 3
         })
     end,
-    getgenv().AutoAcceptTradeFromPlayer
+    getgenv().AutoAcceptTradeFromPlayers
 )
-
-task.spawn(function()
-    while true do
-        task.wait(2)
-        if getgenv()._autoAcceptTradePlayerDropdown then
-            pcall(function()
-                local currentPlayers = getPlayerList()
-                getgenv()._autoAcceptTradePlayerDropdown:ClearOptions()
-                getgenv()._autoAcceptTradePlayerDropdown:InsertOptions(currentPlayers)
-            end)
-        end
-    end
-end)
 
 Sections.AutoTradeLeft:Divider()
 
@@ -14460,19 +14455,6 @@ getgenv()._autoTradeItemsDropdown = createDropdown(
     end,
     getgenv().AutoTradeItems
 )
-
-task.spawn(function()
-    while true do
-        task.wait(5)
-        if getgenv()._autoTradeItemsDropdown then
-            pcall(function()
-                local availableItems = getAvailableItems()
-                getgenv()._autoTradeItemsDropdown:ClearOptions()
-                getgenv()._autoTradeItemsDropdown:InsertOptions(availableItems)
-            end)
-        end
-    end
-end)
 
 
 
@@ -23146,31 +23128,41 @@ do
         while true do
             task.wait(0.5)
             
-            if getgenv().AutoAcceptTradeEnabled and getgenv().AutoAcceptTradeFromPlayer then
-                local acceptUsername = getgenv().AutoAcceptTradeFromPlayer:match("@([^)]+)%)")
-                if acceptUsername and acceptUsername ~= "No other players" then
-                    pcall(function()
-                        local tradeInvite = LocalPlayer.PlayerGui:FindFirstChild("Trade_Invite")
-                        if tradeInvite then
-                            local main = tradeInvite:FindFirstChild("Main")
-                            if main then
-                                local prompt = main:FindFirstChild("Prompt")
-                                if prompt then
-                                    local bg = prompt:FindFirstChild("BG")
-                                    if bg then
-                                        local title = bg:FindFirstChild("Title")
-                                        if title and title.Text then
-                                            local displayName = title.Text:match("Trade request From @(.+)")
-                                            if displayName then
-                                                local traderPlayer = nil
-                                                for _, player in ipairs(Players:GetPlayers()) do
-                                                    if player.DisplayName == displayName then
-                                                        traderPlayer = player
-                                                        break
+            if getgenv().AutoAcceptTradeEnabled and getgenv().AutoAcceptTradeFromPlayers then
+                pcall(function()
+                    local tradeInvite = LocalPlayer.PlayerGui:FindFirstChild("Trade_Invite")
+                    if tradeInvite then
+                        local main = tradeInvite:FindFirstChild("Main")
+                        if main then
+                            local prompt = main:FindFirstChild("Prompt")
+                            if prompt then
+                                local bg = prompt:FindFirstChild("BG")
+                                if bg then
+                                    local title = bg:FindFirstChild("Title")
+                                    if title and title.Text then
+                                        local displayName = title.Text:match("Trade request From @(.+)")
+                                        if displayName then
+                                            local traderPlayer = nil
+                                            for _, player in ipairs(Players:GetPlayers()) do
+                                                if player.DisplayName == displayName then
+                                                    traderPlayer = player
+                                                    break
+                                                end
+                                            end
+                                            
+                                            if traderPlayer then
+                                                local shouldAccept = false
+                                                if type(getgenv().AutoAcceptTradeFromPlayers) == "table" then
+                                                    for _, acceptPlayer in pairs(getgenv().AutoAcceptTradeFromPlayers) do
+                                                        local acceptUsername = acceptPlayer:match("@([^)]+)%)")
+                                                        if acceptUsername and traderPlayer.Name == acceptUsername then
+                                                            shouldAccept = true
+                                                            break
+                                                        end
                                                     end
                                                 end
                                                 
-                                                if traderPlayer and traderPlayer.Name == acceptUsername then
+                                                if shouldAccept then
                                                     local tradeRemote = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("Trade") and RS.Remotes.Trade:FindFirstChild("Invite")
                                                     if tradeRemote then
                                                         tradeRemote:FireServer("Accept")
@@ -23194,7 +23186,7 @@ do
                                                             end
                                                         end
                                                     end
-                                                elseif displayName then
+                                                else
                                                     local tradeRemote = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("Trade") and RS.Remotes.Trade:FindFirstChild("Invite")
                                                     if tradeRemote then
                                                         tradeRemote:FireServer("Decline")
@@ -23206,8 +23198,8 @@ do
                                 end
                             end
                         end
-                    end)
-                end
+                    end
+                end)
             end
         end
     end)
