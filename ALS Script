@@ -20081,7 +20081,7 @@ do
     end)
 end
 
-if isInLobby then
+if not isInLobby then
     task.spawn(function()
         task.wait(1)
         
@@ -20145,7 +20145,9 @@ if isInLobby then
             end)
         end
     end)
-    
+end
+
+if not isInLobby then
     task.spawn(function()
         task.wait(1)
         local Purchase = RS:WaitForChild("Events"):WaitForChild("Hallowen2025"):WaitForChild("Purchase")
@@ -20459,7 +20461,7 @@ task.spawn(function()
     end
 end)
 
-if isInLobby then
+if not isInLobby then
     task.spawn(function()
         task.wait(1)
         
