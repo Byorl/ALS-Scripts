@@ -4621,7 +4621,7 @@ local function createUIElementWithRetry(elementType, section, config, retryAttem
 end
 
 
-local function createToggle(section, name, flag, callback, default)
+getgenv().createToggle = function(section, name, flag, callback, default)
     return UIFactory:createElement("Toggle", section, {
         name = name or "Toggle",
         flag = flag,
@@ -4631,7 +4631,7 @@ local function createToggle(section, name, flag, callback, default)
     })
 end
 
-local function createToggleNoSave(section, name, flag, callback, default)
+getgenv().createToggleNoSave = function(section, name, flag, callback, default)
     return UIFactory:createElement("Toggle", section, {
         name = name or "Toggle",
         flag = flag,
@@ -4641,7 +4641,7 @@ local function createToggleNoSave(section, name, flag, callback, default)
     })
 end
 
-local function createInput(section, name, flag, placeholder, charType, callback, default)
+getgenv().createInput = function(section, name, flag, placeholder, charType, callback, default)
     return UIFactory:createElement("Input", section, {
         name = name or "Input",
         flag = flag,
@@ -4653,7 +4653,7 @@ local function createInput(section, name, flag, placeholder, charType, callback,
     })
 end
 
-local function createDropdown(section, name, flag, options, multi, callback, default)
+getgenv().createDropdown = function(section, name, flag, options, multi, callback, default)
     return UIFactory:createElement("Dropdown", section, {
         name = name or "Dropdown",
         flag = flag,
@@ -4665,7 +4665,7 @@ local function createDropdown(section, name, flag, options, multi, callback, def
     })
 end
 
-local function createSlider(section, name, flag, minimum, maximum, default, callback, displayMethod, precision)
+getgenv().createSlider = function(section, name, flag, minimum, maximum, default, callback, displayMethod, precision)
     return UIFactory:createElement("Slider", section, {
         name = name or "Slider",
         flag = flag,
@@ -4679,7 +4679,7 @@ local function createSlider(section, name, flag, minimum, maximum, default, call
     })
 end
 
-local function createMutuallyExclusiveToggle(section, name, flag, otherToggle, otherFlag, callback, default)
+getgenv().createMutuallyExclusiveToggle = function(section, name, flag, otherToggle, otherFlag, callback, default)
     local toggle = UIFactory:createElement("Toggle", section, {
         name = name,
         flag = flag,
@@ -4704,7 +4704,7 @@ local function createMutuallyExclusiveToggle(section, name, flag, otherToggle, o
 end
 
 
-local function createCardPriorityInputs(section, cardTable, targetPriorityTable, keyPrefix)
+getgenv().createCardPriorityInputs = function(section, cardTable, targetPriorityTable, keyPrefix)
     if not cardTable or type(cardTable) ~= "table" then return end
     keyPrefix = keyPrefix or "Card_"
     
@@ -14399,6 +14399,7 @@ if not getgenv()._autoEnchantSuccess then
     warn("[UI ERROR] Auto Enchant UI failed:", getgenv()._autoEnchantErr)
 end
 
+do
 
 Sections.AutoTradeLeft:Header({ Text = "🤝 Auto Trade" })
 Sections.AutoTradeLeft:SubLabel({ Text = "Automatically send and accept trades with other players" })
@@ -14808,6 +14809,8 @@ if not isInLobby then
             end
         end
     end)
+end
+
 end
 
 if not getgenv()._TwoXHistory then
@@ -17026,18 +17029,18 @@ do
     end)
 end
 
+end
 
-do
-    task.spawn(function()
-        ConnectionManager:trackGroup("GameState",
-            LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
-                if child.Name == "EndGameUI" then
-                    getgenv().BulmaWishUsedThisRound = false
-                            getgenv().WukongTrackedClones = {}
-                    getgenv()._WukongLastSynthesisTime = 0
-                    getgenv().SkeletonKnightLastUse = 0
-                    getgenv().AlucardHypnosisLastUse = 0
-                    getgenv().OneEyeDevilCurrentIndex = 0 
+task.spawn(function()
+    ConnectionManager:trackGroup("GameState",
+        LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
+            if child.Name == "EndGameUI" then
+                getgenv().BulmaWishUsedThisRound = false
+                        getgenv().WukongTrackedClones = {}
+                getgenv()._WukongLastSynthesisTime = 0
+                getgenv().SkeletonKnightLastUse = 0
+                getgenv().AlucardHypnosisLastUse = 0
+                getgenv().OneEyeDevilCurrentIndex = 0 
                     
                     if getgenv()._EtoEvoAbilityUsed then
                         getgenv()._EtoEvoAbilityUsed = {}
@@ -17264,412 +17267,383 @@ getgenv()._ClickButton = function(button)
     return success
 end
 
-do
-    task.spawn(function()
-        local lastWave = 0
-        local isWaitingForPrompt = false
-        local promptWaitStart = 0
-        local lastGameStartedForEto = true
-        
-        while true do
-            task.wait(0.3)
-            
-            if not getgenv().OneEyeDevilEnabled then
-                task.wait(2)
-                continue
-            end
-            
-            pcall(function()
-                local gameStarted = true
-                pcall(function()
-                    local gs = RS:FindFirstChild("GameStarted")
-                    if gs and gs.Value ~= nil then
-                        gameStarted = gs.Value
-                    end
-                end)
-                
-                if getgenv().SeamlessFixEnabled and lastGameStartedForEto and not gameStarted then
-                    getgenv()._ResetEtoEvoCooldowns()
-                    isWaitingForPrompt = false
-                end
-                lastGameStartedForEto = gameStarted
-                
-                local currentWave = 0
-                pcall(function()
-                    local wave = RS:FindFirstChild("Wave")
-                    if wave and wave:IsA("NumberValue") then
-                        currentWave = wave.Value
-                    end
-                end)
-                
-                if currentWave < lastWave then
-                    getgenv()._ResetEtoEvoCooldowns()
-                    isWaitingForPrompt = false
-                end
-                
-                lastWave = currentWave
-                
-                local tower = getgenv()._GetEtoEvoTower()
-                if not tower then 
-                    isWaitingForPrompt = false
-                    return 
-                end
-                
-                local infoName = getgenv()._GetTowerInfoName(tower)
-                local towerLevel = getgenv()._GetUpgradeLevel(tower)
-                
-                if towerLevel < 3 then
-                    return
-                end
-                
-                local buttons = getgenv()._GetCardButtons()
-                
-                if buttons and #buttons > 0 then
-                    if isWaitingForPrompt and tick() - promptWaitStart > 5 then
-                        print("[One Eye Devil] Timeout waiting for prompt, resetting")
-                        isWaitingForPrompt = false
-                    end
-                    
-                    local targetCard = getgenv()._SIGIL_ORDER[getgenv().OneEyeDevilCurrentIndex]
-                    
-                    if not getgenv()._FindFirst then
-                        getgenv()._FindFirst = function(list, pred)
-                            local i = 1
-                            while list and i <= #list do
-                                local v = list[i]
-                                if pred(v) then return v end
-                                i = i + 1
-                            end
-                            return nil
-                        end
-                    end
-                    
-                    local targetButton = getgenv()._FindFirst(buttons, function(b)
-                        local name = getgenv()._GetCardName(b)
-                        return name and name == targetCard
-                    end)
-                    
-                    if targetButton and getgenv()._ClickButton(targetButton) then
-                        isWaitingForPrompt = false
-                        
-                        getgenv()._SetAbilityUsed(infoName, "Detachment")
-                        
-                        local timeScale = getgenv()._GetCurrentTimeScale()
-                        local baseCd = 50
-                        local effectiveCd = baseCd / timeScale
-                        
-                        getgenv().OneEyeDevilCurrentIndex = (getgenv().OneEyeDevilCurrentIndex + 1) % 4
-                        
-                        local nextCard = getgenv()._SIGIL_ORDER[getgenv().OneEyeDevilCurrentIndex]
-                        local cdText = string.format("%.1fs", effectiveCd)
-                        if timeScale ~= 1 then
-                            cdText = cdText .. " (x" .. timeScale .. " speed)"
-                        end
-                        
-                        Window:Notify({
-                            Title = "One Eye Devil",
-                            Description = "Selected: " .. (getgenv()._GetCardName(targetButton) or targetCard),
-                            Lifetime = 2
-                        })
-                        
-                        return
-                    end
-                end
-                
-                if not isWaitingForPrompt and not getgenv()._IsOnCooldown(infoName, "Detachment", "EtoEvo") then
-                    print("[One Eye Devil] Using Detachment ability")
-                    local abilityUsed, abilityResult = pcall(function()
-                        return RS.Remotes.Ability:InvokeServer(tower, "Detachment")
-                    end)
-                    
-                    if abilityUsed and abilityResult then
-                        print("[One Eye Devil] Detachment used successfully, waiting for prompt")
-                        isWaitingForPrompt = true
-                        promptWaitStart = tick()
-                    else
-                        print("[One Eye Devil] Detachment failed or returned false")
-                    end
-                end
-            end)
+if not getgenv()._FindFirst then
+    getgenv()._FindFirst = function(list, pred)
+        local i = 1
+        while list and i <= #list do
+            local v = list[i]
+            if pred(v) then return v end
+            i = i + 1
         end
-    end)
+        return nil
+    end
 end
 
-do
-    task.spawn(function()
-        if not getgenv().GriffithLightUsedThisRound then
-            getgenv().GriffithLightUsedThisRound = false
+task.spawn(function()
+    getgenv()._EtoLastWave = 0
+    getgenv()._EtoIsWaitingForPrompt = false
+    getgenv()._EtoPromptWaitStart = 0
+    getgenv()._EtoLastGameStarted = true
+    
+    while true do
+        task.wait(0.3)
+        
+        if not getgenv().OneEyeDevilEnabled then
+            task.wait(2)
+            continue
         end
         
-        local function getGriffithEclipseTower()
-            local towers = workspace:FindFirstChild("Towers")
-            if not towers then return nil end
+        pcall(function()
+            local gameStarted = true
+            pcall(function()
+                local gs = RS:FindFirstChild("GameStarted")
+                if gs and gs.Value ~= nil then
+                    gameStarted = gs.Value
+                end
+            end)
             
-            for _, tower in pairs(towers:GetChildren()) do
-                local owner = tower:FindFirstChild("Owner")
-                if tower.Name == "GriffithEclipse" and owner and owner.Value == LocalPlayer then
-                    return tower
+            if getgenv().SeamlessFixEnabled and getgenv()._EtoLastGameStarted and not gameStarted then
+                getgenv()._ResetEtoEvoCooldowns()
+                getgenv()._EtoIsWaitingForPrompt = false
+            end
+            getgenv()._EtoLastGameStarted = gameStarted
+            
+            local currentWave = 0
+            pcall(function()
+                local wave = RS:FindFirstChild("Wave")
+                if wave and wave:IsA("NumberValue") then
+                    currentWave = wave.Value
+                end
+            end)
+            
+            if currentWave < getgenv()._EtoLastWave then
+                getgenv()._ResetEtoEvoCooldowns()
+                getgenv()._EtoIsWaitingForPrompt = false
+            end
+            
+            getgenv()._EtoLastWave = currentWave
+            
+            local tower = getgenv()._GetEtoEvoTower()
+            if not tower then 
+                getgenv()._EtoIsWaitingForPrompt = false
+                return 
+            end
+            
+            local infoName = getgenv()._GetTowerInfoName(tower)
+            local towerLevel = getgenv()._GetUpgradeLevel(tower)
+            
+            if towerLevel < 3 then
+                return
+            end
+            
+            local buttons = getgenv()._GetCardButtons()
+            
+            if buttons and #buttons > 0 then
+                if getgenv()._EtoIsWaitingForPrompt and tick() - getgenv()._EtoPromptWaitStart > 5 then
+                    print("[One Eye Devil] Timeout waiting for prompt, resetting")
+                    getgenv()._EtoIsWaitingForPrompt = false
+                end
+                
+                local targetCard = getgenv()._SIGIL_ORDER[getgenv().OneEyeDevilCurrentIndex]
+                
+                local targetButton = getgenv()._FindFirst(buttons, function(b)
+                    local name = getgenv()._GetCardName(b)
+                    return name and name == targetCard
+                end)
+                
+                if targetButton and getgenv()._ClickButton(targetButton) then
+                    getgenv()._EtoIsWaitingForPrompt = false
+                    
+                    getgenv()._SetAbilityUsed(infoName, "Detachment")
+                    
+                    local timeScale = getgenv()._GetCurrentTimeScale()
+                    local baseCd = 50
+                    local effectiveCd = baseCd / timeScale
+                    
+                    getgenv().OneEyeDevilCurrentIndex = (getgenv().OneEyeDevilCurrentIndex + 1) % 4
+                    
+                    local nextCard = getgenv()._SIGIL_ORDER[getgenv().OneEyeDevilCurrentIndex]
+                    local cdText = string.format("%.1fs", effectiveCd)
+                    if timeScale ~= 1 then
+                        cdText = cdText .. " (x" .. timeScale .. " speed)"
+                    end
+                    
+                    Window:Notify({
+                        Title = "One Eye Devil",
+                        Description = "Selected: " .. (getgenv()._GetCardName(targetButton) or targetCard),
+                        Lifetime = 2
+                    })
+                    
+                    return
+                end
+            end
+            
+            if not getgenv()._EtoIsWaitingForPrompt and not getgenv()._IsOnCooldown(infoName, "Detachment", "EtoEvo") then
+                print("[One Eye Devil] Using Detachment ability")
+                local abilityUsed, abilityResult = pcall(function()
+                    return RS.Remotes.Ability:InvokeServer(tower, "Detachment")
+                end)
+                
+                if abilityUsed and abilityResult then
+                    print("[One Eye Devil] Detachment used successfully, waiting for prompt")
+                    getgenv()._EtoIsWaitingForPrompt = true
+                    getgenv()._EtoPromptWaitStart = tick()
+                else
+                    print("[One Eye Devil] Detachment failed or returned false")
+                end
+            end
+        end)
+    end
+end)
+
+if not getgenv().GriffithLightUsedThisRound then
+    getgenv().GriffithLightUsedThisRound = false
+end
+
+getgenv()._GetGriffithEclipseTower = function()
+    local towers = workspace:FindFirstChild("Towers")
+    if not towers then return nil end
+    for _, tower in pairs(towers:GetChildren()) do
+        local owner = tower:FindFirstChild("Owner")
+        if tower.Name == "GriffithEclipse" and owner and owner.Value == LocalPlayer then
+            return tower
+        end
+    end
+    return nil
+end
+
+getgenv()._GetGriffithCardButtons = function()
+    local ok, result = pcall(function()
+        local prompt = LocalPlayer.PlayerGui:FindFirstChild("Prompt")
+        if not prompt or not prompt.Enabled then return nil end
+        local frame = prompt:FindFirstChild("Frame")
+        if not frame then return nil end
+        local frame2 = frame:FindFirstChild("Frame")
+        if not frame2 then return nil end
+        local frame3 = frame2:FindFirstChild("Frame")
+        if not frame3 then return nil end
+        local frame4 = frame3:FindFirstChild("Frame")
+        if not frame4 then return nil end
+        local buttons = {}
+        for _, child in ipairs(frame4:GetChildren()) do
+            if child:IsA("TextButton") then
+                table.insert(buttons, child)
+            end
+        end
+        return #buttons > 0 and buttons or nil
+    end)
+    return ok and result or nil
+end
+
+getgenv()._GetGriffithCardName = function(button)
+    local ok, result = pcall(function()
+        local function searchForTextLabel(parent, depth)
+            if depth > 10 then return nil end
+            for _, child in ipairs(parent:GetChildren()) do
+                if child:IsA("TextLabel") and child.Text ~= "" then
+                    local text = child.Text:gsub("<[^>]+>", ""):gsub("%s+", " "):match("^%s*(.-)%s*$")
+                    if text:find("Light Sacrifice") then
+                        return text
+                    end
+                end
+                if child:IsA("Frame") or child:IsA("Folder") then
+                    local found = searchForTextLabel(child, depth + 1)
+                    if found then return found end
                 end
             end
             return nil
         end
-        
-        local function getCardButtons()
-            local ok, result = pcall(function()
-                local prompt = LocalPlayer.PlayerGui:FindFirstChild("Prompt")
-                if not prompt or not prompt.Enabled then return nil end
-                
-                local frame = prompt:FindFirstChild("Frame")
-                if not frame then return nil end
-                
-                local frame2 = frame:FindFirstChild("Frame")
-                if not frame2 then return nil end
-                
-                local frame3 = frame2:FindFirstChild("Frame")
-                if not frame3 then return nil end
-                
-                local frame4 = frame3:FindFirstChild("Frame")
-                if not frame4 then return nil end
-                
-                local buttons = {}
-                for _, child in ipairs(frame4:GetChildren()) do
-                    if child:IsA("TextButton") then
-                        table.insert(buttons, child)
-                    end
-                end
-                
-                return #buttons > 0 and buttons or nil
-            end)
-            
-            return ok and result or nil
-        end
-        
-        local function getCardName(button)
-            local ok, result = pcall(function()
-                local function searchForTextLabel(parent, depth)
-                    if depth > 10 then return nil end
-                    
-                    for _, child in ipairs(parent:GetChildren()) do
-                        if child:IsA("TextLabel") and child.Text ~= "" then
-                            local text = child.Text:gsub("<[^>]+>", ""):gsub("%s+", " "):match("^%s*(.-)%s*$")
-                            if text:find("Light Sacrifice") then
-                                return text
-                            end
-                        end
-                        
-                        if child:IsA("Frame") or child:IsA("Folder") then
-                            local found = searchForTextLabel(child, depth + 1)
-                            if found then return found end
-                        end
-                    end
-                    
-                    return nil
-                end
-                
-                return searchForTextLabel(button, 0)
-            end)
-            
-            return ok and result or nil
-        end
-        
-        local function clickButton(button)
-            if not button then return false end
-            
-            local success = false
-            
-            if getconnections then
-                pcall(function()
-                    local events = {"Activated", "MouseButton1Click", "MouseButton1Down"}
-                    for _, eventName in ipairs(events) do
-                        local connections = getconnections(button[eventName])
-                        if connections then
-                            for _, conn in ipairs(connections) do
-                                if conn and conn.Fire then
-                                    conn:Fire()
-                                    success = true
-                                end
-                            end
-                        end
-                    end
-                end)
-            end
-            
-            if not success then
-                pcall(function()
-                    local GuiService = game:GetService("GuiService")
-                    pcall(function()
-                        GuiService.SelectedObject = nil
-                    end)
-                    task.wait(0.05)
-                    
-                    if button and button:IsDescendantOf(LocalPlayer.PlayerGui) then
-                        pcall(function()
-                            GuiService.SelectedObject = button
-                        end)
-                        task.wait(0.1)
-                        
-                        VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
-                        task.wait(0.02)
-                        VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
-                        
-                        success = true
-                    end
-                end)
-            end
-            
-            getgenv()._SkipRecordingNextCall = false
-            return success
-        end
-        
-        local function getCurrentCash()
-            local ok, cash = pcall(function()
-                local cashValue = LocalPlayer:FindFirstChild("Cash")
-                if cashValue and cashValue:IsA("NumberValue") then
-                    return cashValue.Value
-                end
-                return 0
-            end)
-            return ok and cash or 0
-        end
-        
-        local lastWave = 0
-        local isWaitingForPrompt = false
-        local promptWaitStart = 0
-        local cashAboveThresholdStart = 0
-        local CASH_STABILITY_DURATION = 3
-        local lastGameStartedForGriffith = true
-        
-        while true do
-            task.wait(0.3)
-            
-            if not getgenv().GriffithLightEnabled then
-                task.wait(2)
-                continue
-            end
-            
-            pcall(function()
-                local gameStarted = true
-                pcall(function()
-                    local gs = RS:FindFirstChild("GameStarted")
-                    if gs and gs.Value ~= nil then
-                        gameStarted = gs.Value
-                    end
-                end)
-                
-                if getgenv().SeamlessFixEnabled and lastGameStartedForGriffith and not gameStarted then
-                    getgenv().GriffithLightUsedThisRound = false
-                    isWaitingForPrompt = false
-                    cashAboveThresholdStart = 0
-                end
-                lastGameStartedForGriffith = gameStarted
-                
-                local currentWave = 0
-                pcall(function()
-                    local wave = RS:FindFirstChild("Wave")
-                    if wave and wave:IsA("NumberValue") then
-                        currentWave = wave.Value
-                    end
-                end)
-                
-                if currentWave < lastWave then
-                    getgenv().GriffithLightUsedThisRound = false
-                    isWaitingForPrompt = false
-                    cashAboveThresholdStart = 0
-                end
-                
-                lastWave = currentWave
-                
-                if getgenv().GriffithLightUsedThisRound then
-                    return
-                end
-                
-                local tower = getGriffithEclipseTower()
-                if not tower then 
-                    isWaitingForPrompt = false
-                    cashAboveThresholdStart = 0
-                    return 
-                end
-                
-                local buttons = getCardButtons()
-                
-                if buttons then
-                    if isWaitingForPrompt and tick() - promptWaitStart > 5 then
-                        isWaitingForPrompt = false
-                        return
-                    end
-                    
-                    if not isWaitingForPrompt then
-                        isWaitingForPrompt = true
-                        promptWaitStart = tick()
-                    end
-                    
-                    local foundCard = false
-                    for _, button in ipairs(buttons) do
-                        local cardName = getCardName(button)
-                        if cardName and cardName:find("Light Sacrifice") then
-                            print("[Griffith Light] Clicking: " .. cardName)
-                            
-                            if clickButton(button) then
-                                foundCard = true
-                                isWaitingForPrompt = false
-                                getgenv().GriffithLightUsedThisRound = true
-                                cashAboveThresholdStart = 0
-                                
-                                print("[Griffith Light] Light Sacrifice selected - will not use again this round")
-                                
-                                Window:Notify({
-                                    Title = "Griffith Light",
-                                    Description = "Light Sacrifice selected! Unit transformed to Umbral Prince",
-                                    Lifetime = 3
-                                })
-                                
-                                break
-                            end
-                        end
-                    end
-
-                    return
-                end
-                
-                if not isWaitingForPrompt then
-                    local currentCash = getCurrentCash()
-                    
-                    if currentCash >= 50000 then
-                        if cashAboveThresholdStart == 0 then
-                            cashAboveThresholdStart = tick()
-                            print("[Griffith Light] Cash reached 50k+ - waiting " .. CASH_STABILITY_DURATION .. "s for stability...")
-                        end
-                        
-                        local timeAboveThreshold = tick() - cashAboveThresholdStart
-                        
-                        if timeAboveThreshold >= CASH_STABILITY_DURATION then
-                            local abilityUsed, abilityResult = pcall(function()
-                                return RS.Remotes.Ability:InvokeServer(tower, "Sacrifice")
-                            end)
-                            
-                            if abilityUsed and abilityResult then
-                                isWaitingForPrompt = true
-                                promptWaitStart = tick()
-                                print("[Griffith Light] Sacrifice ability used at " .. currentCash .. " cash (stable for " .. string.format("%.1f", timeAboveThreshold) .. "s)")
-                            else
-                                cashAboveThresholdStart = 0
-                            end
-                        end
-                    else
-                        if cashAboveThresholdStart > 0 then
-                            print("[Griffith Light] Cash dropped below 50k - resetting stability timer")
-                            cashAboveThresholdStart = 0
-                        end
-                    end
-                end
-            end)
-        end
+        return searchForTextLabel(button, 0)
     end)
+    return ok and result or nil
 end
 
-do
-    task.spawn(function()
-    local lastWave = 0
+getgenv()._ClickGriffithButton = function(button)
+    if not button then return false end
+    local success = false
+    if getconnections then
+        pcall(function()
+            local events = {"Activated", "MouseButton1Click", "MouseButton1Down"}
+            for _, eventName in ipairs(events) do
+                local connections = getconnections(button[eventName])
+                if connections then
+                    for _, conn in ipairs(connections) do
+                        if conn and conn.Fire then
+                            conn:Fire()
+                            success = true
+                        end
+                    end
+                end
+            end
+        end)
+    end
+    if not success then
+        pcall(function()
+            local GuiService = game:GetService("GuiService")
+            pcall(function() GuiService.SelectedObject = nil end)
+            task.wait(0.05)
+            if button and button:IsDescendantOf(LocalPlayer.PlayerGui) then
+                pcall(function() GuiService.SelectedObject = button end)
+                task.wait(0.1)
+                VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
+                task.wait(0.02)
+                VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
+                success = true
+            end
+        end)
+    end
+    getgenv()._SkipRecordingNextCall = false
+    return success
+end
+
+getgenv()._GetCurrentCash = function()
+    local ok, cash = pcall(function()
+        local cashValue = LocalPlayer:FindFirstChild("Cash")
+        if cashValue and cashValue:IsA("NumberValue") then
+            return cashValue.Value
+        end
+        return 0
+    end)
+    return ok and cash or 0
+end
+
+task.spawn(function()
+    getgenv()._GriffithLastWave = 0
+    getgenv()._GriffithIsWaitingForPrompt = false
+    getgenv()._GriffithPromptWaitStart = 0
+    getgenv()._GriffithCashAboveThresholdStart = 0
+    getgenv()._GriffithCashStabilityDuration = 3
+    getgenv()._GriffithLastGameStarted = true
+        
+    while true do
+        task.wait(0.3)
+        
+        if not getgenv().GriffithLightEnabled then
+            task.wait(2)
+            continue
+        end
+        
+        pcall(function()
+            local gameStarted = true
+            pcall(function()
+                local gs = RS:FindFirstChild("GameStarted")
+                if gs and gs.Value ~= nil then
+                    gameStarted = gs.Value
+                end
+            end)
+            
+            if getgenv().SeamlessFixEnabled and getgenv()._GriffithLastGameStarted and not gameStarted then
+                getgenv().GriffithLightUsedThisRound = false
+                getgenv()._GriffithIsWaitingForPrompt = false
+                getgenv()._GriffithCashAboveThresholdStart = 0
+            end
+            getgenv()._GriffithLastGameStarted = gameStarted
+            
+            local currentWave = 0
+            pcall(function()
+                local wave = RS:FindFirstChild("Wave")
+                if wave and wave:IsA("NumberValue") then
+                    currentWave = wave.Value
+                end
+            end)
+            
+            if currentWave < getgenv()._GriffithLastWave then
+                getgenv().GriffithLightUsedThisRound = false
+                getgenv()._GriffithIsWaitingForPrompt = false
+                getgenv()._GriffithCashAboveThresholdStart = 0
+            end
+            
+            getgenv()._GriffithLastWave = currentWave
+            
+            if getgenv().GriffithLightUsedThisRound then
+                return
+            end
+            
+            local tower = getgenv()._GetGriffithEclipseTower()
+            if not tower then 
+                getgenv()._GriffithIsWaitingForPrompt = false
+                getgenv()._GriffithCashAboveThresholdStart = 0
+                return 
+            end
+            
+            local buttons = getgenv()._GetGriffithCardButtons()
+            
+            if buttons then
+                if getgenv()._GriffithIsWaitingForPrompt and tick() - getgenv()._GriffithPromptWaitStart > 5 then
+                    getgenv()._GriffithIsWaitingForPrompt = false
+                    return
+                end
+                
+                if not getgenv()._GriffithIsWaitingForPrompt then
+                    getgenv()._GriffithIsWaitingForPrompt = true
+                    getgenv()._GriffithPromptWaitStart = tick()
+                end
+                
+                local foundCard = false
+                for _, button in ipairs(buttons) do
+                    local cardName = getgenv()._GetGriffithCardName(button)
+                    if cardName and cardName:find("Light Sacrifice") then
+                        print("[Griffith Light] Clicking: " .. cardName)
+                        
+                        if getgenv()._ClickGriffithButton(button) then
+                            foundCard = true
+                            getgenv()._GriffithIsWaitingForPrompt = false
+                            getgenv().GriffithLightUsedThisRound = true
+                            getgenv()._GriffithCashAboveThresholdStart = 0
+                            
+                            print("[Griffith Light] Light Sacrifice selected - will not use again this round")
+                            
+                            Window:Notify({
+                                Title = "Griffith Light",
+                                Description = "Light Sacrifice selected! Unit transformed to Umbral Prince",
+                                Lifetime = 3
+                            })
+                            
+                            break
+                        end
+                    end
+                end
+
+                return
+            end
+            
+            if not getgenv()._GriffithIsWaitingForPrompt then
+                local currentCash = getgenv()._GetCurrentCash()
+                
+                if currentCash >= 50000 then
+                    if getgenv()._GriffithCashAboveThresholdStart == 0 then
+                        getgenv()._GriffithCashAboveThresholdStart = tick()
+                        print("[Griffith Light] Cash reached 50k+ - waiting " .. getgenv()._GriffithCashStabilityDuration .. "s for stability...")
+                    end
+                    
+                    local timeAboveThreshold = tick() - getgenv()._GriffithCashAboveThresholdStart
+                    
+                    if timeAboveThreshold >= getgenv()._GriffithCashStabilityDuration then
+                        local abilityUsed, abilityResult = pcall(function()
+                            return RS.Remotes.Ability:InvokeServer(tower, "Sacrifice")
+                        end)
+                        
+                        if abilityUsed and abilityResult then
+                            getgenv()._GriffithIsWaitingForPrompt = true
+                            getgenv()._GriffithPromptWaitStart = tick()
+                            print("[Griffith Light] Sacrifice ability used at " .. currentCash .. " cash (stable for " .. string.format("%.1f", timeAboveThreshold) .. "s)")
+                        else
+                            getgenv()._GriffithCashAboveThresholdStart = 0
+                        end
+                    end
+                else
+                    if getgenv()._GriffithCashAboveThresholdStart > 0 then
+                        print("[Griffith Light] Cash dropped below 50k - resetting stability timer")
+                        getgenv()._GriffithCashAboveThresholdStart = 0
+                    end
+                end
+            end
+        end)
+    end
+end)
+
+task.spawn(function()
+    getgenv()._AbilityResetLastWave = 0
     while true do
         task.wait(1)
         pcall(function()
@@ -17677,7 +17651,7 @@ do
             if wave and wave:IsA("NumberValue") then
                 local currentWave = wave.Value
                 
-                if currentWave < lastWave and currentWave <= 5 then
+                if currentWave < getgenv()._AbilityResetLastWave and currentWave <= 5 then
                     getgenv().BulmaWishUsedThisRound = false
                     getgenv().WukongTrackedClones = {}
                     getgenv()._WukongLastSynthesisTime = 0
@@ -17687,7 +17661,7 @@ do
                     getgenv().GriffithLightUsedThisRound = false
                 end
                 
-                lastWave = currentWave
+                getgenv()._AbilityResetLastWave = currentWave
             end
         end)
     end
@@ -23332,8 +23306,6 @@ if not isInLobby then
         task.spawn(autoUpgradeLoop)
     end)
 end
-end
-end
 
 
 task.spawn(function()
@@ -23373,9 +23345,6 @@ task.spawn(function()
         end)
     end
 end)
-
-end
-
 
 do
     task.spawn(function()
