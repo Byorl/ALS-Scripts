@@ -3346,12 +3346,16 @@ task.spawn(function()
         if afkFolder then
             local changeState = afkFolder:FindFirstChild("ChangeState")
             local teleport = afkFolder:FindFirstChild("Teleport")
+            local idletracker = game:GetService("Players").LocalPlayer.PlayerScripts.IdleTracker
             
             if changeState then
                 changeState:Destroy()
             end
             if teleport then
                 teleport:Destroy()
+            end
+            if idletracker then
+                idletracker:Destroy()
             end
         end
     end)
