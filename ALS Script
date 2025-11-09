@@ -23309,41 +23309,43 @@ if not isInLobby then
     end)
 end
 
+getgenv()._ButtonPressActive = false
+getgenv().SelectionSanitizerEnabled = getgenv().SelectionSanitizerEnabled ~= false
 
 task.spawn(function()
     local GuiService = game:GetService("GuiService")
-    local lastClearTime = tick()
-    
-    while task.wait(0.5) do
+    local lastScan = tick()
+    while task.wait(0.2) do
         pcall(function()
+            if getgenv()._checkIfInLobby() then return end
+            if not getgenv().SelectionSanitizerEnabled then return end
 
-            if tick() - lastClearTime > 1 then
-                if GuiService.SelectedObject then
+            local gameStarted = true
+            pcall(function()
+                local gs = RS:FindFirstChild("GameStarted")
+                if gs and gs.Value ~= nil then
+                    gameStarted = gs.Value
+                end
+            end)
+            if not gameStarted then return end
 
+            local selected = GuiService.SelectedObject
+            if selected then
+                local now = tick()
+                local shouldClear = false
+                if not getgenv()._ButtonPressActive then
+                    if (now - lastScan) > 0.6 then
+                        local nameLower = selected.Name:lower()
+                        if not nameLower:find("tooltip") and not nameLower:find("hover") then
+                            shouldClear = true
+                        end
+                    end
+                end
+                if shouldClear then
                     GuiService.SelectedObject = nil
                 end
             end
-            lastClearTime = tick()
-        end)
-    end
-end)
-
-
-
-getgenv()._ButtonPressActive = false
-
-task.spawn(function()
-    local GuiService = game:GetService("GuiService")
-    
-    while task.wait(0.1) do
-        pcall(function()
-            if getgenv()._checkIfInLobby() then
-                return
-            end
-            
-            if not getgenv()._ButtonPressActive and GuiService.SelectedObject then
-                GuiService.SelectedObject = nil
-            end
+            lastScan = tick()
         end)
     end
 end)
