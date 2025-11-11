@@ -4331,13 +4331,6 @@ Tabs.Event3 = ErrorHandler:wrap(function()
     })
 end, "Create Event3 tab")()
 
-Tabs.Event4 = ErrorHandler:wrap(function()
-    return TabGroup2:Tab({ 
-        Name = "Event 4", 
-        Image = "rbxassetid://10734952273" 
-    })
-end, "Create Event4 tab")()
-
 Tabs.SlimeRush = ErrorHandler:wrap(function()
     return TabGroup2:Tab({ 
         Name = "Slime Rush", 
@@ -4563,85 +4556,6 @@ Sections.Event2Right = createSection(Tabs.Event2, "Event2", "Right")
 
 Sections.Event3Left = createSection(Tabs.Event3, "Event3", "Left")
 Sections.Event3Right = createSection(Tabs.Event3, "Event3", "Right")
-
-Sections.Event4Left = createSection(Tabs.Event4, "Event4", "Left")
-Sections.Event4Right = createSection(Tabs.Event4, "Event4", "Right")
-local function _GetTeamVsTeamQuestNames()
-    local names = {}
-    pcall(function()
-        local evt = RS:FindFirstChild("Events") and RS.Events:FindFirstChild("TeamVsTeam")
-        if not evt then return end
-        local constants = evt:FindFirstChild("Constants")
-        if not constants then return end
-        local questsModule = constants:FindFirstChild("Quests")
-        if questsModule and questsModule:IsA("ModuleScript") then
-            local ok, data = pcall(require, questsModule)
-            if ok and type(data) == "table" then
-                for qName in pairs(data) do table.insert(names, qName) end
-            end
-        end
-    end)
-    table.sort(names)
-    return names
-end
-
-local function _GetEventQuestProgress(eventData, eventName)
-    local lines = {}
-    local evt = eventData and eventData[eventName]
-    if evt and evt.Quests and type(evt.Quests) == "table" then
-        local added = 0
-        for qName, qInfo in pairs(evt.Quests) do
-            local prog = (type(qInfo) == "table" and qInfo.Progress) or qInfo
-            table.insert(lines, qName .. ":" .. tostring(prog))
-            added = added + 1
-            if added >= 10 then break end
-        end
-    end
-    return table.concat(lines, " | ")
-end
-
-local function getQuestProgressSummary()
-    local data = getgenv().GetClientData and getgenv().GetClientData() or nil
-    local parts = {}
-    if data and data.EventData then
-        local ann = _GetEventQuestProgress(data.EventData, "Anniversary1")
-        if ann ~= "" then table.insert(parts, "Anniversary1=" .. ann) end
-        local gvt = _GetEventQuestProgress(data.EventData, "GurrenVsAstreav1")
-        if gvt ~= "" then table.insert(parts, "GurrenVsAstreav1=" .. gvt) end
-    end
-    local teamNames = _GetTeamVsTeamQuestNames()
-    if #teamNames > 0 then
-        table.insert(parts, "TeamVsTeamQuests=" .. table.concat(teamNames, ","))
-    end
-    return (#parts > 0) and table.concat(parts, " || ") or "No quest data"
-end
-
-ErrorHandler:wrap(function()
-    if Sections.Event4Left then
-        UIFactory:createElement("Button", Sections.Event4Left, {
-            name = "Refresh Quest Progress",
-            flag = "RefreshQuestProgressBtn",
-            callback = function()
-                local summary = getQuestProgressSummary()
-                if Window then
-                    Window:Notify({ Title = "Quest Progress", Description = summary, Lifetime = 6 })
-                end
-            end
-        })
-    end
-end, "Create Event4 quest progress button")()
-
-if not getgenv()._QuestProgressAutoUpdater then
-    getgenv()._QuestProgressAutoUpdater = task.spawn(function()
-        while true do
-            task.wait(30)
-            if Sections.Event4Left and Window then
-                local summary = getQuestProgressSummary()
-                Window:Notify({ Title = "Quest Progress Auto", Description = summary, Lifetime = 4 })
-            end
-        end
-    end)
-end
 
 Sections.SlimeRushLeft = createSection(Tabs.SlimeRush, "SlimeRush", "Left")
 Sections.SlimeRushRight = createSection(Tabs.SlimeRush, "SlimeRush", "Right")
@@ -5865,7 +5779,6 @@ getgenv().SeamlessFixEnabled = getgenv().Config.toggles.SeamlessFixToggle or fal
 getgenv().SeamlessRounds = tonumber(getgenv().Config.inputs.SeamlessRounds) or 4
 getgenv().AutoExecuteTeleportEnabled = getgenv().Config.toggles.AutoExecuteTeleport or false
 getgenv().AutoExecuteEnabled = getgenv().Config.toggles.AutoExecuteToggle or false
-getgenv().AutoClaimQuestEnabled = getgenv().Config.toggles.AutoClaimQuestToggle or false
 
 local queueteleport = queue_on_teleport or queueonteleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport) or (Xeno and Xeno.queue_on_teleport)
 
@@ -13711,112 +13624,6 @@ if not isInLobby then
     end)
 end
 
-
-if not getgenv().AutoClaimQuestEnabled then
-    getgenv().AutoClaimQuestEnabled = getgenv().Config.toggles.AutoClaimQuestToggle or false
-end
-
-createToggle(
-    Sections.MiscLeft,
-    "Auto Claim Quest",
-    "AutoClaimQuestToggle",
-    function(value)
-        getgenv().AutoClaimQuestEnabled = value
-    end,
-    getgenv().AutoClaimQuestEnabled
-)
-
-local _QuestClaimParamSets = {
-    {"Daily", "AnyModeKills"},
-    {"Weekly", "AnyModeKills"},
-    {"Permanent", "Damage"},
-    {"HeavenlyTrials", "NatureEssence", "FrierenGodly"},
-    {"AbyssalTrials", "EZAUnits", "GokuVegetaRed"}
-}
-
-local _EventClaimFolders = {
-    "Anniversary1","BossEvent","Coronation","Easter2025","GlobalBoss","Halloween","Hallowen2025","HunterEvent","SaintPatricks2025","SamsungFold7","SummerPrep2025","TeamVsTeam"
-}
-
-local function claimTeamVsTeamQuests()
-    pcall(function()
-        local evt = RS:FindFirstChild("Events") and RS.Events:FindFirstChild("TeamVsTeam")
-        if not evt then return end
-        local claimRemote = evt:FindFirstChild("ClaimQuest")
-        if not claimRemote or not claimRemote:IsA("RemoteFunction") then return end
-        local constants = evt:FindFirstChild("Constants")
-        local questsModule = constants and constants:FindFirstChild("Quests")
-        if questsModule and questsModule:IsA("ModuleScript") then
-            local ok, quests = pcall(require, questsModule)
-            if ok and type(quests) == "table" then
-                local lastCall = 0
-                for questName in pairs(quests) do
-                    if not getgenv().AutoClaimQuestEnabled then break end
-                    local now = tick()
-                    local diff = now - lastCall
-                    if diff < 0.15 then task.wait(0.15 - diff) end
-                    lastCall = tick()
-                    pcall(function() claimRemote:InvokeServer(questName) end)
-                end
-                return
-            end
-        end
-        pcall(function() claimRemote:InvokeServer("Dungeon") end)
-    end)
-end
-
-local function claimAllQuests()
-    local questsRemote = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("Quests") and RS.Remotes.Quests:FindFirstChild("Claim")
-    if questsRemote and questsRemote:IsA("RemoteFunction") then
-        local lastCall = 0
-        local data = getgenv().GetClientData and getgenv().GetClientData() or nil
-        if data and data.Quests and type(data.Quests) == "table" then
-            for category, questTable in pairs(data.Quests) do
-                if not getgenv().AutoClaimQuestEnabled then break end
-                if type(questTable) == "table" then
-                    for questKey in pairs(questTable) do
-                        local now = tick()
-                        local diff = now - lastCall
-                        if diff < 0.15 then task.wait(0.15 - diff) end
-                        lastCall = tick()
-                        pcall(function() questsRemote:InvokeServer(category, questKey) end)
-                    end
-                end
-            end
-        end
-        
-        for _, params in ipairs(_QuestClaimParamSets) do
-            if not getgenv().AutoClaimQuestEnabled then break end
-            local now = tick()
-            local diff = now - lastCall
-            if diff < 0.15 then task.wait(0.15 - diff) end
-            lastCall = tick()
-            pcall(function() questsRemote:InvokeServer(unpack(params)) end)
-        end
-    end
-    claimTeamVsTeamQuests()
-    for _, folderName in ipairs(_EventClaimFolders) do
-        pcall(function()
-            local evtFolder = RS:FindFirstChild("Events") and RS.Events:FindFirstChild(folderName)
-            if not evtFolder then return end
-            local r = evtFolder:FindFirstChild("ClaimQuest")
-            if r and r:IsA("RemoteFunction") then
-                pcall(function() r:InvokeServer("Dungeon") end)
-            end
-        end)
-    end
-end
-
-if not getgenv()._AutoClaimQuestLoop then
-    getgenv()._AutoClaimQuestLoop = task.spawn(function()
-        while true do
-            if getgenv().AutoClaimQuestEnabled then
-                claimAllQuests()
-            end
-            task.wait(5)
-        end
-    end)
-end
 
 Sections.MiscRight:Header({ Text = "ℹ️ Information" })
 Sections.MiscRight:SubLabel({ Text = "Important notes and warnings" })
