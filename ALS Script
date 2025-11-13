@@ -6127,6 +6127,9 @@ getgenv()._GetEZADisplayName = function(actualTowerName)
             if slotData and slotData.Value == actualTowerName and slotData.UnitID then
                 local unitData = (clientData.UnitData and clientData.UnitData[slotData.UnitID]) or clientData[slotData.UnitID]
                 if unitData and unitData.EZA == true then
+                    if actualTowerName:match("EZA$") or actualTowerName:match("Eza$") then
+                        return actualTowerName
+                    end
                     return actualTowerName .. "EZA"
                 end
             end
@@ -6143,6 +6146,11 @@ getgenv()._GetActualTowerName = function(displayName)
     
     if displayName:match("EZA$") then
         local actualName = displayName:gsub("EZA$", "")
+        return actualName
+    end
+    
+    if displayName:match("Eza$") then
+        local actualName = displayName:gsub("Eza$", "")
         return actualName
     end
     
@@ -8006,6 +8014,53 @@ end
 
 setupRecordingHook()
 monitorEndGameUI()
+
+task.spawn(function()
+    local lastWaveValue = 0
+    local highestWaveSeen = 0
+    
+    while true do
+        task.wait(0.5)
+        
+        if getgenv().MacroPlayEnabled and getgenv().MacroPlaybackActive then
+            pcall(function()
+                local waveValue = RS:FindFirstChild("Wave")
+                if waveValue then
+                    local currentWave = waveValue.Value
+                    
+                    if currentWave > highestWaveSeen then
+                        highestWaveSeen = currentWave
+                    end
+                    
+                    if lastWaveValue >= 10 and currentWave <= 3 and (lastWaveValue - currentWave) >= 8 then
+                        print("[Macro] 🔄 Wave reset detected (" .. lastWaveValue .. " → " .. currentWave .. ") - Seamless restart triggered!")
+                        
+                        if getgenv().MacroPlaybackActive then
+                            getgenv().MacroPlaybackActive = false
+                            task.wait(0.3)
+                        end
+                        
+                        getgenv()._MacroSeamlessRestart = true
+                        getgenv()._MacroProgressDetected = false
+                        getgenv().MacroGameState.gameEnded = false
+                        getgenv().MacroGameState.hasEndGameUI = false
+                        getgenv().MacroGameState.lastGameEndedState = false
+                        
+                        task.wait(0.5)
+                        playMacroV2()
+                        
+                        highestWaveSeen = currentWave
+                    end
+                    
+                    lastWaveValue = currentWave
+                end
+            end)
+        else
+            lastWaveValue = 0
+            highestWaveSeen = 0
+        end
+    end
+end)
 
 task.spawn(function()
     local gameStartedTracker = nil
@@ -20026,10 +20081,19 @@ do
         
         if enterEvent and startEvent then
             pcall(function()
+                local delay = getgenv().EventJoinDelay or 0
+                if delay > 0 then
+                    task.wait(delay)
+                end
+                
+                enterEvent:FireServer()
+                
+                task.wait(0.5)
+                
                 if getgenv().WaitForPlayerEnabled then
                     local entryUI = nil
                     for _, gui in ipairs(LocalPlayer.PlayerGui:GetChildren()) do
-                        if gui.Name:find("Entry") then
+                        if gui.Name:find("Entry") and gui.Enabled then
                             entryUI = gui
                             break
                         end
@@ -20059,7 +20123,7 @@ do
                                     local targetCount = getgenv().WaitForPlayerCount or 1
                                     
                                     if currentPlayers >= targetCount then
-                                        print("[Auto Event] ✅ " .. currentPlayers .. "/" .. targetCount .. " players ready, joining...")
+                                        print("[Auto Event] ✅ " .. currentPlayers .. "/" .. targetCount .. " players ready, starting...")
                                         break
                                     else
                                         print("[Auto Event] ⏳ Waiting for players... " .. currentPlayers .. "/" .. targetCount)
@@ -20072,12 +20136,7 @@ do
                     end
                 end
                 
-                local delay = getgenv().EventJoinDelay or 0
-                if delay > 0 then
-                    task.wait(delay)
-                end
-                
-                enterEvent:FireServer()
+                startEvent:FireServer()
                 startEvent:FireServer()
             end)
         end
@@ -20380,10 +20439,14 @@ task.spawn(function()
             local startEvent = halloweenFolder and halloweenFolder:FindFirstChild("Start")
             
             if enterEvent and startEvent then
+                enterEvent:FireServer("Hallowen2025_P2")
+                
+                task.wait(0.5)
+                
                 if getgenv().WaitForPlayerEnabled then
                     local entryUI = nil
                     for _, gui in ipairs(LocalPlayer.PlayerGui:GetChildren()) do
-                        if gui.Name:find("Entry") then
+                        if gui.Name:find("Entry") and gui.Enabled then
                             entryUI = gui
                             break
                         end
@@ -20413,7 +20476,7 @@ task.spawn(function()
                                     local targetCount = getgenv().WaitForPlayerCount or 1
                                     
                                     if currentPlayers >= targetCount then
-                                        print("[Auto Event2] ✅ " .. currentPlayers .. "/" .. targetCount .. " players ready, joining...")
+                                        print("[Auto Event2] ✅ " .. currentPlayers .. "/" .. targetCount .. " players ready, starting...")
                                         break
                                     else
                                         print("[Auto Event2] ⏳ Waiting for players... " .. currentPlayers .. "/" .. targetCount)
@@ -20426,9 +20489,6 @@ task.spawn(function()
                     end
                 end
                 
-                enterEvent:FireServer("Hallowen2025_P2")
-                
-                task.wait(0.5)
                 startEvent:FireServer()
                 
                 task.wait(5)
