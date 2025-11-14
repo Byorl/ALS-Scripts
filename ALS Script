@@ -8018,6 +8018,10 @@ monitorEndGameUI()
 task.spawn(function()
     local lastWaveValue = 0
     local highestWaveSeen = 0
+    local lastSeamlessRestartTick = 0
+    local waveResetCooldown = 20
+    local lastStableWaveTick = 0
+    local lastIncreaseWave = 0
     
     while true do
         task.wait(0.5)
@@ -8030,25 +8034,37 @@ task.spawn(function()
                     
                     if currentWave > highestWaveSeen then
                         highestWaveSeen = currentWave
+                        lastIncreaseWave = tick()
                     end
                     
-                    if lastWaveValue >= 10 and currentWave <= 3 and (lastWaveValue - currentWave) >= 8 then
-                        print("[Macro] 🔄 Wave reset detected (" .. lastWaveValue .. " → " .. currentWave .. ") - Seamless restart triggered!")
-                        
+                    local timeSinceLastRestart = tick() - lastSeamlessRestartTick
+                    local dropAmount = lastWaveValue - currentWave
+                    local progressedRecently = (tick() - lastIncreaseWave) < 5
+                    local enoughProgress = highestWaveSeen >= (getgenv().TwoXResetWave or 20)
+                    local earlyGame = currentWave <= 3
+                    local validDrop = lastWaveValue >= 8 and dropAmount >= 5
+                    local cooldownPassed = timeSinceLastRestart >= waveResetCooldown
+                    local notAlreadyFlagged = getgenv()._MacroSeamlessRestart ~= true
+                    local stableBefore = (tick() - lastStableWaveTick) >= 3
+                    
+                    if currentWave ~= lastWaveValue then
+                        lastStableWaveTick = tick()
+                    end
+                    
+                    if enoughProgress and earlyGame and validDrop and cooldownPassed and notAlreadyFlagged and progressedRecently and stableBefore then
+                        print("[Macro] 🔄 Seamless wave reset (" .. lastWaveValue .. " → " .. currentWave .. ")")
                         if getgenv().MacroPlaybackActive then
                             getgenv().MacroPlaybackActive = false
-                            task.wait(0.3)
+                            task.wait(0.2)
                         end
-                        
                         getgenv()._MacroSeamlessRestart = true
                         getgenv()._MacroProgressDetected = false
                         getgenv().MacroGameState.gameEnded = false
                         getgenv().MacroGameState.hasEndGameUI = false
                         getgenv().MacroGameState.lastGameEndedState = false
-                        
-                        task.wait(0.5)
+                        lastSeamlessRestartTick = tick()
+                        task.wait(0.4)
                         playMacroV2()
-                        
                         highestWaveSeen = currentWave
                     end
                     
@@ -8058,6 +8074,7 @@ task.spawn(function()
         else
             lastWaveValue = 0
             highestWaveSeen = 0
+            lastIncreaseWave = 0
         end
     end
 end)
