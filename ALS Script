@@ -19180,7 +19180,42 @@ do
                 {key = "RaidTokens", name = "Raid Tokens"},
                 {key = "SoulCoin", name = "Soul Coins"},
                 {key = "CandyCanes", name = "Candy Canes"},
+                {key = "ChainsawTokens", name = "Chainsaw Tokens"},
+                {key = "DivineTokens", name = "Divine Tokens"},
+                {key = "GrailRushTokens", name = "Grail Rush Tokens"},
+                {key = "PirateBountyTokens", name = "Pirate Bounty Tokens"},
+                {key = "BossRushTokens", name = "Boss Rush Tokens"},
+                {key = "SoulTokens", name = "Soul Tokens"},
+                {key = "FlowerTokens", name = "Flower Tokens"},
+                {key = "AlchemyTokens", name = "Alchemy Tokens"},
+                {key = "NationalTokens", name = "National Tokens"},
+                {key = "SwordsmanOrbs", name = "Swordsman Orbs"},
+                {key = "DragonScales", name = "Dragon Scales"},
+                {key = "CursedEnergyTokens", name = "Cursed Energy Tokens"},
+                {key = "CursedBreachTokens", name = "Cursed Breach Tokens"},
+                {key = "VisionaryToken", name = "Visionary Tokens"},
+                {key = "BlackChakraRod", name = "Black Chakra Rods"},
+                {key = "LuckyTokens", name = "Lucky Tokens"},
+                {key = "RevolutionTokens", name = "Revolution Tokens"},
+                {key = "ManaRushTokens", name = "Mana Rush Tokens"},
+                {key = "SummerPrepTokens", name = "Summer Prep Tokens"},
             }
+            
+            if getgenv()._WebhookInitialData and getgenv()._WebhookInitialData.Tokens then
+                for tokenKey, _ in pairs(getgenv()._WebhookInitialData.Tokens) do
+                    local alreadyAdded = false
+                    for _, currency in ipairs(currencyKeys) do
+                        if currency.key == tokenKey then
+                            alreadyAdded = true
+                            break
+                        end
+                    end
+                    if not alreadyAdded then
+                        local displayName = tokenKey:gsub("([A-Z])", " %1"):gsub("^%s+", "")
+                        table.insert(currencyKeys, {key = tokenKey, name = displayName})
+                    end
+                end
+            end
             
             local nonRewardFields = {
                 "LobbySettings", "GameSettings",
@@ -19237,7 +19272,12 @@ do
                         local gained = current - initial
                         
                         if gained > 0 then
-                            local displayName = itemName:gsub("([A-Z])", " %1"):gsub("^%s+", "")
+                            local displayName = itemName
+                            if itemNamesModule and itemNamesModule[itemName] then
+                                displayName = itemNamesModule[itemName]
+                            else
+                                displayName = itemName:gsub("([A-Z])", " %1"):gsub("^%s+", "")
+                            end
                             rewardsText = rewardsText .. "+" .. formatNumber(gained) .. " " .. displayName .. " [ Total: " .. formatNumber(current) .. " ]\n"
                         end
                     elseif type(itemInfo) == "number" then
@@ -19246,7 +19286,12 @@ do
                         local gained = current - initial
                         
                         if gained > 0 then
-                            local displayName = itemName:gsub("([A-Z])", " %1"):gsub("^%s+", "")
+                            local displayName = itemName
+                            if itemNamesModule and itemNamesModule[itemName] then
+                                displayName = itemNamesModule[itemName]
+                            else
+                                displayName = itemName:gsub("([A-Z])", " %1"):gsub("^%s+", "")
+                            end
                             rewardsText = rewardsText .. "+" .. formatNumber(gained) .. " " .. displayName .. " [ Total: " .. formatNumber(current) .. " ]\n"
                         end
                     end
@@ -19278,6 +19323,7 @@ do
                 end
             end
             
+            local unitDropsText = ""
             if clientData.UnitData and getgenv()._WebhookInitialData and getgenv()._WebhookInitialData.UnitCounts then
                 local currentUnitCounts = {}
                 for unitID, unitInfo in pairs(clientData.UnitData) do
@@ -19292,9 +19338,22 @@ do
                     local gained = currentCount - initialCount
                     
                     if gained > 0 then
-                        local displayName = unitName:gsub("([A-Z])", " %1"):gsub("^%s+", "")
-                        rewardsText = rewardsText .. "+" .. formatNumber(gained) .. " " .. displayName .. " [ Total: " .. formatNumber(currentCount) .. " ]\n"
+                        local displayName = unitName
+                        if unitNamesModule and unitNamesModule[unitName] then
+                            displayName = unitNamesModule[unitName]
+                        else
+                            displayName = unitName:gsub("([A-Z])", " %1"):gsub("^%s+", "")
+                        end
+                        unitDropsText = unitDropsText .. "+" .. formatNumber(gained) .. " " .. displayName .. " [ Total: " .. formatNumber(currentCount) .. " ]\n"
                     end
+                end
+            end
+            
+            if unitDropsText ~= "" then
+                if rewardsText == "" then
+                    rewardsText = "**Units Obtained:**\n" .. unitDropsText
+                else
+                    rewardsText = rewardsText .. "\n**Units Obtained:**\n" .. unitDropsText
                 end
             end
             
@@ -19787,6 +19846,22 @@ do
     
     setupWebhookTrigger()
     
+    local unitNamesModule = nil
+    local itemNamesModule = nil
+    pcall(function()
+        local modules = RS:FindFirstChild("Modules")
+        if modules then
+            local unitNamesData = modules:FindFirstChild("UnitNames")
+            if unitNamesData then
+                unitNamesModule = require(unitNamesData)
+            end
+            local itemNamesData = modules:FindFirstChild("ItemNames")
+            if itemNamesData then
+                itemNamesModule = require(itemNamesData)
+            end
+        end
+    end)
+
     getgenv()._RefreshWebhookInitialData = function()
         pcall(function()
             local elapsed = RS:FindFirstChild("ElapsedTime")
@@ -19817,6 +19892,13 @@ do
             getgenv()._WebhookInitialData.SummerCorals = clientData.SummerCorals or 0
             getgenv()._WebhookInitialData.SoulCoin = clientData.SoulCoin or 0
             getgenv()._WebhookInitialData.CandyCanes = clientData.CandyCanes or 0
+            
+            getgenv()._WebhookInitialData.Tokens = {}
+            for key, value in pairs(clientData) do
+                if type(key) == "string" and key:find("Tokens") and type(value) == "number" then
+                    getgenv()._WebhookInitialData.Tokens[key] = value
+                end
+            end
             
             getgenv()._WebhookInitialData.ItemData = {}
             if clientData.ItemData then
