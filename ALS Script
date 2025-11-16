@@ -4310,22 +4310,6 @@ Tabs.Portals = ErrorHandler:wrap(function()
     })
 end, "Create Portals tab")()
 
--- Event tab removed - code saved in Event1_Event2_Backup.lua
--- Tabs.Event = ErrorHandler:wrap(function()
---     return TabGroup2:Tab({ 
---         Name = "Event", 
---         Image = "rbxassetid://10734952273" 
---     })
--- end, "Create Event tab")()
-
--- Event2 tab removed - code saved in Event1_Event2_Backup.lua
--- Tabs.Event2 = ErrorHandler:wrap(function()
---     return TabGroup2:Tab({ 
---         Name = "Event 2", 
---         Image = "rbxassetid://10734952273" 
---     })
--- end, "Create Event2 tab")()
-
 Tabs.Event3 = ErrorHandler:wrap(function()
     return TabGroup2:Tab({ 
         Name = "Event 3", 
@@ -4549,12 +4533,6 @@ Sections.FinalExpeditionRight = createSection(Tabs.FinalExpedition, "FinalExpedi
 
 Sections.InfinityCastleLeft = createSection(Tabs.InfinityCastle, "InfinityCastle", "Left")
 Sections.InfinityCastleRight = createSection(Tabs.InfinityCastle, "InfinityCastle", "Right")
-
--- Sections.EventLeft = createSection(Tabs.Event, "Event", "Left")
--- Sections.EventRight = createSection(Tabs.Event, "Event", "Right")
-
--- Sections.Event2Left = createSection(Tabs.Event2, "Event2", "Left")
--- Sections.Event2Right = createSection(Tabs.Event2, "Event2", "Right")
 
 Sections.Event3Left = createSection(Tabs.Event3, "Event3", "Left")
 Sections.Event3Right = createSection(Tabs.Event3, "Event3", "Right")
@@ -9720,9 +9698,9 @@ task.spawn(function()
         end
     end
 end)
-end
 
--- Event tab 1 UI code removed - code saved in Event1_Event2_Backup.lua
+
+end
 
 do
 Sections.Event3Left:Header({ Text = "🍬 Event 3 Auto Fuse" })
@@ -18617,15 +18595,7 @@ do
                     end
                 end
                 
-                local initial = 0
-                if getgenv()._WebhookInitialData then
-                    if getgenv()._WebhookInitialData.Tokens and getgenv()._WebhookInitialData.Tokens[currency.key] then
-                        initial = getgenv()._WebhookInitialData.Tokens[currency.key]
-                    else
-                        initial = getValue(getgenv()._WebhookInitialData, currency.key, 0)
-                    end
-                end
-                
+                local initial = getValue(getgenv()._WebhookInitialData, currency.key, 0)
                 local current = getValue(clientData, currency.key, 0)
                 local gained = current - initial
                 
@@ -19532,21 +19502,161 @@ do
         end
     end)
 
-    -- Event 1 auto-join removed - see Event1_Event2_Backup.lua
-    -- Event auto-bingo removed - see Event1_Event2_Backup.lua
-    -- Event auto-capsule 1 removed - see Event1_Event2_Backup.lua
-    -- Event auto-join 2 removed - see Event1_Event2_Backup.lua
-    -- Event auto-candy removed - see Event1_Event2_Backup.lua
-    -- Event auto-capsule 2 removed - see Event1_Event2_Backup.lua
-    -- Event auto-buy-capsule 2 removed - see Event1_Event2_Backup.lua
-    -- Event auto-fuse removed - see Event1_Event2_Backup.lua
+    task.spawn(function()
+        local eventsFolder = RS:FindFirstChild("Events")
+    local halloweenFolder = eventsFolder and eventsFolder:FindFirstChild("Hallowen2025")
+    local enterEvent = halloweenFolder and halloweenFolder:FindFirstChild("Enter")
+    local startEvent = halloweenFolder and halloweenFolder:FindFirstChild("Start")
+    
+    while true do
+        task.wait(1) 
+        
+
+        if not getgenv().AutoEventEnabled then
+            task.wait(2)
+            continue
+        end
+        
+        if enterEvent and startEvent then
+            pcall(function()
+                local delay = getgenv().EventJoinDelay or 0
+                if delay > 0 then
+                    task.wait(delay)
+                end
+                
+                enterEvent:FireServer()
+                
+                task.wait(0.5)
+                
+                if getgenv().WaitForPlayerEnabled then
+                    local entryUI = nil
+                    for _, gui in ipairs(LocalPlayer.PlayerGui:GetChildren()) do
+                        if gui.Name:find("Entry") and gui.Enabled then
+                            entryUI = gui
+                            break
+                        end
+                    end
+                    
+                    if entryUI then
+                        local function findTextLabel(parent)
+                            for _, child in ipairs(parent:GetDescendants()) do
+                                if child:IsA("TextLabel") and child.Text:find("Players") then
+                                    return child
+                                end
+                            end
+                            return nil
+                        end
+                        
+                        local textLabel = findTextLabel(entryUI)
+                        if textLabel then
+                            local waitStartTime = tick()
+                            local maxWaitTime = 300
+                            
+                            while tick() - waitStartTime < maxWaitTime do
+                                local text = textLabel.Text
+                                local current, max = text:match("%((%d+)/(%d+)%)")
+                                
+                                if current and max then
+                                    local currentPlayers = tonumber(current)
+                                    local targetCount = getgenv().WaitForPlayerCount or 1
+                                    
+                                    if currentPlayers >= targetCount then
+                                        print("[Auto Event] ✅ " .. currentPlayers .. "/" .. targetCount .. " players ready, starting...")
+                                        break
+                                    else
+                                        print("[Auto Event] ⏳ Waiting for players... " .. currentPlayers .. "/" .. targetCount)
+                                    end
+                                end
+                                
+                                task.wait(1)
+                            end
+                        end
+                    end
+                end
+                
+                startEvent:FireServer()
+                startEvent:FireServer()
+            end)
+        end
+    end
+    end)
 end
 
-do
-    if isInLobby then
-        task.spawn(function()
+if not isInLobby then
+    task.spawn(function()
+        task.wait(1)
         
-        local function getAvailableBreaches()
+        local BingoEvents = RS:WaitForChild("Events", 10)
+        if not BingoEvents then 
+            warn("[Auto Bingo] Events folder not found")
+            return 
+        end
+        
+        local BingoFolder = BingoEvents:WaitForChild("Bingo", 10)
+        if not BingoFolder then
+            return
+        end
+        
+        local UseStampEvent = BingoFolder:FindFirstChild("UseStamp")
+        local ClaimRewardEvent = BingoFolder:FindFirstChild("ClaimReward")
+        local CompleteBoardEvent = BingoFolder:FindFirstChild("CompleteBoard")
+        
+        if not UseStampEvent or not ClaimRewardEvent or not CompleteBoardEvent then
+            warn("[Auto Bingo] Missing events - UseStamp: " .. tostring(UseStampEvent ~= nil) .. ", ClaimReward: " .. tostring(ClaimRewardEvent ~= nil) .. ", CompleteBoard: " .. tostring(CompleteBoardEvent ~= nil))
+            return
+        end
+                
+        while true do
+            task.wait(0.1)
+            
+            if not getgenv().BingoEnabled then
+                task.wait(2)
+                continue
+            end
+            
+            local success, err = pcall(function()
+                local clientData = getClientData()
+                local bingoStamps = 0
+                
+                if clientData and clientData.ItemData and clientData.ItemData.HallowenBingoStamp then
+                    bingoStamps = clientData.ItemData.HallowenBingoStamp.Amount or 0
+                end
+                
+                if bingoStamps < 1 then
+                    task.wait(2)
+                    return
+                end
+                
+                
+                if UseStampEvent then
+                    for i = 1, 25 do
+                        pcall(function()
+                            UseStampEvent:FireServer()
+                        end)
+                    end
+                end
+                
+                task.wait(0.5)
+                
+                if CompleteBoardEvent then
+                    local boardSuccess, boardResult = pcall(function()
+                        return CompleteBoardEvent:InvokeServer()
+                    end)
+                end
+            end)
+        end
+    end)
+end
+
+if not isInLobby then
+    task.spawn(function()
+        task.wait(1)
+        local Purchase = RS:WaitForChild("Events"):WaitForChild("Hallowen2025"):WaitForChild("Purchase")
+        local OpenCapsule = RS:WaitForChild("Remotes"):WaitForChild("OpenCapsule")
+        
+        local function clickButton(button)
+            if not button then return false end
+            getgenv()._SkipRecordingNextCall = true
             local events = {"Activated", "MouseButton1Click", "MouseButton1Down", "MouseButton1Up"}
             for _, ev in ipairs(events) do
                 pcall(function()
@@ -22991,7 +23101,6 @@ do
             end
         end
     end)
-end
 end
 
 getgenv()._InitializeGameSystems()
