@@ -4331,13 +4331,6 @@ Tabs.BossRush = ErrorHandler:wrap(function()
     })
 end, "Create BossRush tab")()
 
-Tabs.DivineCrafter = ErrorHandler:wrap(function()
-    return TabGroup2:Tab({ 
-        Name = "Divine Crafter", 
-        Image = "rbxassetid://10734952273" 
-    })
-end, "Create DivineCrafter tab")()
-
 Tabs.Breach = ErrorHandler:wrap(function()
     return TabGroup2:Tab({ 
         Name = "Breach", 
@@ -4372,6 +4365,13 @@ Tabs.SeamlessFix = ErrorHandler:wrap(function()
         Image = "rbxassetid://10734923549" 
     })
 end, "Create SeamlessFix tab")()
+
+Tabs.DivineCrafter = ErrorHandler:wrap(function()
+    return TabGroup3:Tab({ 
+        Name = "Divine Crafter", 
+        Image = "rbxassetid://10734952273" 
+    })
+end, "Create DivineCrafter tab")()
 
 Tabs.AutoTrade = ErrorHandler:wrap(function()
     return TabGroup3:Tab({ 
