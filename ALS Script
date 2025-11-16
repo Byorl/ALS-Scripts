@@ -18527,7 +18527,8 @@ do
             EXP = 0,
             ItemData = {},
             ExperienceItemsData = {},
-            UnitCounts = {}
+            UnitCounts = {},
+            PortalData = {}
         }
     end
     
@@ -18591,6 +18592,13 @@ do
                             local unitName = unitInfo.UnitName
                             getgenv()._WebhookInitialData.UnitCounts[unitName] = (getgenv()._WebhookInitialData.UnitCounts[unitName] or 0) + 1
                         end
+                    end
+                end
+                
+                getgenv()._WebhookInitialData.PortalData = {}
+                if clientData.PortalData then
+                    for portalID, portalInfo in pairs(clientData.PortalData) do
+                        getgenv()._WebhookInitialData.PortalData[portalID] = true
                     end
                 end
             end
@@ -18690,11 +18698,15 @@ do
                         
                         local realTime = roundTime / timeScale
                         
-                        local seconds = math.floor(realTime)
-                        local hours = math.floor(seconds / 3600)
-                        local minutes = math.floor((seconds % 3600) / 60)
-                        local secs = seconds % 60
-                        matchTime = string.format("%02d:%02d:%02d", hours, minutes, secs)
+                        if realTime > 0 then
+                            local seconds = math.floor(realTime)
+                            local hours = math.floor(seconds / 3600)
+                            local minutes = math.floor((seconds % 3600) / 60)
+                            local secs = seconds % 60
+                            matchTime = string.format("%02d:%02d:%02d", hours, minutes, secs)
+                        else
+                            matchTime = "00:00:00"
+                        end
                     end
                     
                     matchResult = "Seamless Restart"
@@ -18910,6 +18922,7 @@ do
                 ["RevolutionTokens"] = {"Revolution"},
                 ["ManaRushTokens"] = {"Mana Rush"},
                 ["SummerPrepTokens"] = {"Summer Prep"},
+                ["SuperTokens"] = {"Tournament Of Power"},
             }
             
             for _, currency in ipairs(currencyKeys) do
@@ -19031,6 +19044,30 @@ do
                     rewardsText = "**Units Obtained:**\n" .. unitDropsText
                 else
                     rewardsText = rewardsText .. "\n**Units Obtained:**\n" .. unitDropsText
+                end
+            end
+            
+            local portalsText = ""
+            if clientData.PortalData and getgenv()._WebhookInitialData and getgenv()._WebhookInitialData.PortalData then
+                for portalID, portalInfo in pairs(clientData.PortalData) do
+                    if not getgenv()._WebhookInitialData.PortalData[portalID] then
+                        if portalInfo and portalInfo.PortalData then
+                            local portalData = portalInfo.PortalData
+                            local mapName = portalData.Map or "Unknown"
+                            local challenge = portalData.Challenges or "None"
+                            local tier = portalData.Tier or "?"
+                            
+                            portalsText = portalsText .. "• " .. mapName .. " | " .. challenge .. " | Tier " .. tier .. "\n"
+                        end
+                    end
+                end
+            end
+            
+            if portalsText ~= "" then
+                if rewardsText == "" then
+                    rewardsText = "**New Portals:**\n" .. portalsText
+                else
+                    rewardsText = rewardsText .. "\n**New Portals:**\n" .. portalsText
                 end
             end
             
