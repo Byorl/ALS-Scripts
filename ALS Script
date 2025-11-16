@@ -4310,19 +4310,21 @@ Tabs.Portals = ErrorHandler:wrap(function()
     })
 end, "Create Portals tab")()
 
-Tabs.Event = ErrorHandler:wrap(function()
-    return TabGroup2:Tab({ 
-        Name = "Event", 
-        Image = "rbxassetid://10734952273" 
-    })
-end, "Create Event tab")()
+-- Event tab removed - code saved in Event1_Event2_Backup.lua
+-- Tabs.Event = ErrorHandler:wrap(function()
+--     return TabGroup2:Tab({ 
+--         Name = "Event", 
+--         Image = "rbxassetid://10734952273" 
+--     })
+-- end, "Create Event tab")()
 
-Tabs.Event2 = ErrorHandler:wrap(function()
-    return TabGroup2:Tab({ 
-        Name = "Event 2", 
-        Image = "rbxassetid://10734952273" 
-    })
-end, "Create Event2 tab")()
+-- Event2 tab removed - code saved in Event1_Event2_Backup.lua
+-- Tabs.Event2 = ErrorHandler:wrap(function()
+--     return TabGroup2:Tab({ 
+--         Name = "Event 2", 
+--         Image = "rbxassetid://10734952273" 
+--     })
+-- end, "Create Event2 tab")()
 
 Tabs.Event3 = ErrorHandler:wrap(function()
     return TabGroup2:Tab({ 
@@ -4548,11 +4550,11 @@ Sections.FinalExpeditionRight = createSection(Tabs.FinalExpedition, "FinalExpedi
 Sections.InfinityCastleLeft = createSection(Tabs.InfinityCastle, "InfinityCastle", "Left")
 Sections.InfinityCastleRight = createSection(Tabs.InfinityCastle, "InfinityCastle", "Right")
 
-Sections.EventLeft = createSection(Tabs.Event, "Event", "Left")
-Sections.EventRight = createSection(Tabs.Event, "Event", "Right")
+-- Sections.EventLeft = createSection(Tabs.Event, "Event", "Left")
+-- Sections.EventRight = createSection(Tabs.Event, "Event", "Right")
 
-Sections.Event2Left = createSection(Tabs.Event2, "Event2", "Left")
-Sections.Event2Right = createSection(Tabs.Event2, "Event2", "Right")
+-- Sections.Event2Left = createSection(Tabs.Event2, "Event2", "Left")
+-- Sections.Event2Right = createSection(Tabs.Event2, "Event2", "Right")
 
 Sections.Event3Left = createSection(Tabs.Event3, "Event3", "Left")
 Sections.Event3Right = createSection(Tabs.Event3, "Event3", "Right")
@@ -9718,648 +9720,9 @@ task.spawn(function()
         end
     end
 end)
-
-
 end
 
-do
-Sections.EventLeft:Header({ Text = "🎃 Event Automation" })
-Sections.EventLeft:SubLabel({ Text = "Automatically join and start events" })
-
-createToggle(
-    Sections.EventLeft,
-    "Auto Event Join",
-    "AutoEventToggle",
-    function(value)
-        getgenv().AutoEventEnabled = value
-        Window:Notify({
-            Title = "Auto Event",
-            Description = value and "Enabled" or "Disabled",
-            Lifetime = 3
-        })
-    end,
-    getgenv().Config.toggles.AutoEventToggle or false
-)
-
-createInput(
-    Sections.EventLeft,
-    "Join Delay (seconds)",
-    "EventJoinDelay",
-    "Delay before joining event (0 = instant)",
-    "Number",
-    function(value)
-        local delay = tonumber(value) or 0
-        getgenv().EventJoinDelay = delay
-        Window:Notify({
-            Title = "Event Join Delay",
-            Description = "Set to " .. delay .. " seconds",
-            Lifetime = 2
-        })
-    end,
-    tostring(getgenv().Config.inputs.EventJoinDelay or 0)
-)
-
-local LOBBY_PLACEIDS = {12886143095, 18583778121}
-local function checkIsInLobby()
-    for _, placeId in ipairs(LOBBY_PLACEIDS) do
-        if game.PlaceId == placeId then return true end
-    end
-    return false
-end
-local isInLobby = checkIsInLobby()
-
-if isInLobby then
-    Sections.EventLeft:Divider()
-    
-    Sections.EventLeft:Header({ Text = "🎲 Auto Bingo" })
-    Sections.EventLeft:SubLabel({ Text = "Complete bingo cards automatically" })
-    
-    createToggle(
-        Sections.EventLeft,
-        "Enable Auto Bingo",
-        "BingoToggle",
-        function(value)
-            getgenv().BingoEnabled = value
-            Window:Notify({
-                Title = "Auto Bingo",
-                Description = value and "Enabled" or "Disabled",
-                Lifetime = 3
-            })
-        end,
-        getgenv().Config.toggles.BingoToggle or false
-    )
-    
-    Sections.EventLeft:Divider()
-    
-    Sections.EventLeft:Header({ Text = "🎁 Auto Capsules" })
-    Sections.EventLeft:SubLabel({ Text = "Open event capsules automatically" })
-    
-    createToggle(
-        Sections.EventLeft,
-        "Enable Auto Capsules",
-        "CapsuleToggle",
-        function(value)
-            getgenv().CapsuleEnabled = value
-            Window:Notify({
-                Title = "Auto Capsules",
-                Description = value and "Enabled" or "Disabled",
-                Lifetime = 3
-            })
-        end,
-        getgenv().Config.toggles.CapsuleToggle or false
-    )
-    
-    createToggle(
-        Sections.EventLeft,
-        "Auto Buy Capsule",
-        "AutoBuyCapsuleToggle",
-        function(value)
-            getgenv().AutoBuyCapsuleEnabled = value
-            Window:Notify({
-                Title = "Auto Buy Capsule",
-                Description = value and "Enabled - Will only purchase, not open" or "Disabled",
-                Lifetime = 3
-            })
-        end,
-        getgenv().Config.toggles.AutoBuyCapsuleToggle or false
-    )
-    
-    Sections.EventLeft:Divider()
-
-    Sections.EventLeft:Header({ Text = "⚖️ 2x Currency Tracker" })
-    Sections.EventLeft:SubLabel({ Text = "Detect 2x candy gain spikes and use alternate restart wave" })
-
-    createToggle(
-        Sections.EventLeft,
-        "Enable 2x Tracker",
-        "TwoXTrackerToggle",
-        function(value)
-            getgenv().TwoXTrackerEnabled = value
-            Window:Notify({
-                Title = "2x Tracker",
-                Description = value and "Enabled - Monitoring last 5 rounds" or "Disabled",
-                Lifetime = 3
-            })
-        end,
-        getgenv().Config.toggles.TwoXTrackerToggle or false
-    )
-
-    createInput(
-        Sections.EventLeft,
-        "2x Reset Wave",
-        "TwoXResetWave",
-        "Enter wave (e.g. 30)",
-        "Numbers",
-        function(value)
-            getgenv().TwoXResetWave = tonumber(value) or 30
-            Window:Notify({
-                Title = "2x Reset Wave",
-                Description = "Set to wave " .. tostring(getgenv().TwoXResetWave),
-                Lifetime = 3
-            })
-        end,
-        tostring(getgenv().Config.inputs.TwoXResetWave or 30)
-    )
-
-    Sections.EventLeft:Divider()
-    
-    Sections.EventLeft:Header({ Text = "💰 Auto Sell Capsule Units" })
-    Sections.EventLeft:SubLabel({ Text = "Automatically sell specific units from Event 1 capsules" })
-    
-    getgenv().AutoSellEvent1CapsuleEnabled = getgenv().Config.toggles.AutoSellEvent1CapsuleEnabled or false
-    getgenv().AutoSellEvent1CapsuleUnits = getgenv().Config.dropdowns.AutoSellEvent1CapsuleUnits or {}
-    
-    if not getgenv()._Event1CapsuleUnitCache then
-        getgenv()._Event1CapsuleUnitCache = {}
-    end
-    
-    local function initializeEvent1CapsuleCache()
-        local clientData = getgenv().GetClientData and getgenv().GetClientData()
-        if clientData and clientData.UnitData then
-            getgenv()._Event1CapsuleUnitCache = {}
-            for unitID, unitData in pairs(clientData.UnitData) do
-                if unitData.UnitName then
-                    getgenv()._Event1CapsuleUnitCache[unitID] = {
-                        UnitName = unitData.UnitName,
-                        ObtainTime = unitData.ObtainTime or 0
-                    }
-                end
-            end
-            print("[Auto Sell Event1 Capsule] Cached " .. #getgenv()._Event1CapsuleUnitCache .. " existing units")
-        end
-    end
-    
-    task.spawn(function()
-        task.wait(3)
-        initializeEvent1CapsuleCache()
-    end)
-    
-    local event1CapsuleUnitList = {
-        "MobUnevo",
-        "LightUnevo",
-        "AsuraUnevo",
-        "LelouchUnevo",
-        "LelouchUnevoShiny"
-    }
-    
-    local function getEvent1UnitDisplayNames()
-        local displayNames = {}
-        local unitNameModule = getgenv().GetAllAbilities and getgenv().GetAllAbilities()
-        
-        for _, unitName in ipairs(event1CapsuleUnitList) do
-            local displayName = unitName
-            if unitNameModule and unitNameModule[unitName] then
-                displayName = unitNameModule[unitName].displayName or unitName
-            end
-            table.insert(displayNames, displayName)
-        end
-        
-        return displayNames
-    end
-    
-    createToggle(
-        Sections.EventLeft,
-        "Auto Sell Capsule Units",
-        "AutoSellEvent1CapsuleEnabled",
-        function(value)
-            getgenv().AutoSellEvent1CapsuleEnabled = value
-            Window:Notify({
-                Title = "Auto Sell Event1 Capsule",
-                Description = value and "Enabled - Will sell selected units" or "Disabled",
-                Lifetime = 3
-            })
-            
-            if value then
-                initializeEvent1CapsuleCache()
-            end
-        end,
-        getgenv().AutoSellEvent1CapsuleEnabled
-    )
-    
-    createDropdown(
-        Sections.EventLeft,
-        "Units to Sell",
-        "AutoSellEvent1CapsuleUnits",
-        getEvent1UnitDisplayNames(),
-        true,
-        function(value)
-            getgenv().AutoSellEvent1CapsuleUnits = value
-            local selectedCount = 0
-            for _, selected in pairs(value) do
-                if selected then selectedCount = selectedCount + 1 end
-            end
-            Window:Notify({
-                Title = "Auto Sell Units",
-                Description = selectedCount .. " units selected for auto-sell",
-                Lifetime = 3
-            })
-        end,
-        getgenv().AutoSellEvent1CapsuleUnits
-    )
-    
-    Sections.EventLeft:Divider()
-end
-
-local eventHeaderSuccess, eventHeaderErr = pcall(function()
-    Sections.EventLeft:Header({ Text = "⚙️ Card Selection Mode" })
-    Sections.EventLeft:SubLabel({ Text = "Choose between fast or reliable selection" })
-end)
-if not eventHeaderSuccess then
-    warn("[UI ERROR] Event tab header failed:", eventHeaderErr)
-    error("[FATAL] Cannot continue - Event tab header failed: " .. tostring(eventHeaderErr))
-end
-
-local fastModeToggle, slowerModeToggle, smartModeToggle
-
-getgenv().SmartCardSelectionEnabled = getgenv().Config.toggles.SmartCardSelectionToggle or false
-
-local fastSuccess, fastErr = pcall(function()
-    fastModeToggle = createToggle(
-        Sections.EventLeft,
-        "⚡ Fast Mode",
-        "CardSelectionToggle",
-        function(value)
-            getgenv().CardSelectionEnabled = value
-            if value then
-                if slowerModeToggle then
-                    getgenv().SlowerCardSelectionEnabled = false
-                    getgenv().Config.toggles.SlowerCardSelectionToggle = false
-                    pcall(function() slowerModeToggle:UpdateState(false) end)
-                end
-                if smartModeToggle then
-                    getgenv().SmartCardSelectionEnabled = false
-                    getgenv().Config.toggles.SmartCardSelectionToggle = false
-                    pcall(function() smartModeToggle:UpdateState(false) end)
-                end
-                getgenv().SaveConfig(getgenv().Config)
-            end
-            Window:Notify({
-                Title = "Card Selection",
-                Description = value and "Fast Mode Enabled" or "Disabled",
-                Lifetime = 3
-            })
-        end,
-        getgenv().CardSelectionEnabled
-    )
-end)
-if not fastSuccess then
-    warn("[UI ERROR] Fast Mode toggle failed:", fastErr)
-end
-
-local slowerSuccess, slowerErr = pcall(function()
-    slowerModeToggle = createToggle(
-        Sections.EventLeft,
-        "🐢 Slower Mode (More Reliable)",
-        "SlowerCardSelectionToggle",
-        function(value)
-            getgenv().SlowerCardSelectionEnabled = value
-            if value then
-                if fastModeToggle then
-                    getgenv().CardSelectionEnabled = false
-                    getgenv().Config.toggles.CardSelectionToggle = false
-                    pcall(function() fastModeToggle:UpdateState(false) end)
-                end
-                if smartModeToggle then
-                    getgenv().SmartCardSelectionEnabled = false
-                    getgenv().Config.toggles.SmartCardSelectionToggle = false
-                    pcall(function() smartModeToggle:UpdateState(false) end)
-                end
-                getgenv().SaveConfig(getgenv().Config)
-            end
-            Window:Notify({
-                Title = "Card Selection",
-                Description = value and "Slower Mode Enabled" or "Disabled",
-                Lifetime = 3
-            })
-        end,
-        getgenv().SlowerCardSelectionEnabled
-    )
-end)
-if not slowerSuccess then
-    warn("[UI ERROR] Slower Mode toggle failed:", slowerErr)
-end
-
-local smartSuccess, smartErr = pcall(function()
-    smartModeToggle = createToggle(
-        Sections.EventLeft,
-        "🧠 Smart Mode (Wave-Based)",
-        "SmartCardSelectionToggle",
-        function(value)
-            getgenv().SmartCardSelectionEnabled = value
-            getgenv().Config.toggles.SmartCardSelectionToggle = value
-            if value then
-                if fastModeToggle then
-                    getgenv().CardSelectionEnabled = false
-                    getgenv().Config.toggles.CardSelectionToggle = false
-                    pcall(function() fastModeToggle:UpdateState(false) end)
-                end
-                if slowerModeToggle then
-                    getgenv().SlowerCardSelectionEnabled = false
-                    getgenv().Config.toggles.SlowerCardSelectionToggle = false
-                    pcall(function() slowerModeToggle:UpdateState(false) end)
-                end
-            end
-            getgenv().SaveConfig(getgenv().Config)
-            Window:Notify({
-                Title = "Card Selection",
-                Description = value and "Smart Mode Enabled - Maximizes candy based on wave" or "Disabled",
-                Lifetime = 3
-            })
-        end,
-        getgenv().SmartCardSelectionEnabled
-    )
-end)
-if not smartSuccess then
-    warn("[UI ERROR] Smart Mode toggle failed:", smartErr)
-end
-
-local paraSuccess, paraErr = pcall(function()
-    Sections.EventLeft:SubLabel({ 
-        Text = "Lower number = higher priority (1 is best, 999 to skip)"
-    })
-end)
-if not paraSuccess then
-    warn("[UI ERROR] Event instructions failed:", paraErr)
-end
-
-
-local candyHeaderSuccess, candyHeaderErr = pcall(function()
-    Sections.EventRight:Header({ Text = "🃏 Card Priorities" })
-    Sections.EventRight:SubLabel({ Text = "Lower number = higher priority (1 is best, 999 to skip)" })
-    Sections.EventRight:Divider()
-    Sections.EventRight:Header({ Text = "🍬 Candy Cards" })
-end)
-if not candyHeaderSuccess then
-    warn("[UI ERROR] Candy Cards header failed:", candyHeaderErr)
-    error("[FATAL] Cannot continue - Candy Cards header failed: " .. tostring(candyHeaderErr))
-end
-
-local candyInputsSuccess, candyInputsErr = pcall(function()
-    createCardPriorityInputs(Sections.EventRight, getgenv().CandyCards, getgenv().CardPriority)
-end)
-if not candyInputsSuccess then
-    warn("[UI ERROR] Candy Cards inputs failed:", candyInputsErr)
-    error("[FATAL] Cannot continue - Candy Cards inputs failed: " .. tostring(candyInputsErr))
-end
-
-Sections.EventRight:Divider()
-
-Sections.EventRight:Header({ Text = "😈 Devil's Sacrifice" })
-createCardPriorityInputs(Sections.EventRight, getgenv().DevilSacrifice, getgenv().CardPriority)
-
-Sections.EventRight:Divider()
-
-Sections.EventRight:Header({ Text = "📋 Other Cards" })
-createCardPriorityInputs(Sections.EventRight, getgenv().OtherCards, getgenv().CardPriority)
-
-
-
-end
-
-do
-Sections.Event2Left:Header({ Text = "🎃 Event 2 Automation" })
-Sections.Event2Left:SubLabel({ Text = "Halloween Part 2 automation features" })
-
-createToggle(
-    Sections.Event2Left,
-    "Auto Event Join (Part 2)",
-    "AutoEvent2Toggle",
-    function(value)
-        getgenv().AutoEvent2Enabled = value
-        Window:Notify({
-            Title = "Auto Event 2",
-            Description = value and "Enabled" or "Disabled",
-            Lifetime = 3
-        })
-    end,
-    getgenv().Config.toggles.AutoEvent2Toggle or false
-)
-
-createToggle(
-    Sections.Event2Left,
-    "Auto Candy Collector",
-    "AutoCandyToggle",
-    function(value)
-        getgenv().AutoCandyEnabled = value
-        Window:Notify({
-            Title = "Auto Candy",
-            Description = value and "Enabled" or "Disabled",
-            Lifetime = 3
-        })
-    end,
-    getgenv().Config.toggles.AutoCandyToggle or false
-)
-
-Sections.Event2Left:Divider()
-
-Sections.Event2Left:Header({ Text = "🎁 Auto Capsules (Part 2)" })
-Sections.Event2Left:SubLabel({ Text = "Open Halloween Part 2 capsules automatically" })
-
-createToggle(
-    Sections.Event2Left,
-    "Enable Auto Capsules",
-    "Capsule2Toggle",
-    function(value)
-        getgenv().Capsule2Enabled = value
-        Window:Notify({
-            Title = "Auto Capsules 2",
-            Description = value and "Enabled" or "Disabled",
-            Lifetime = 3
-        })
-    end,
-    getgenv().Config.toggles.Capsule2Toggle or false
-)
-
-createToggle(
-    Sections.Event2Left,
-    "Auto Buy Capsule",
-    "AutoBuyCapsule2Toggle",
-    function(value)
-        getgenv().AutoBuyCapsule2Enabled = value
-        Window:Notify({
-            Title = "Auto Buy Capsule 2",
-            Description = value and "Enabled - Will only purchase, not open" or "Disabled",
-            Lifetime = 3
-        })
-    end,
-    getgenv().Config.toggles.AutoBuyCapsule2Toggle or false
-)
-
-Sections.Event2Left:Divider()
-
-    Sections.Event2Left:Header({ Text = "⚖️ 2x Currency Tracker" })
-    Sections.Event2Left:SubLabel({ Text = "Detect 2x cookie gain spikes and use alternate restart wave" })
-
-    createToggle(
-        Sections.Event2Left,
-        "Enable 2x Tracker",
-        "TwoXTrackerToggle",
-        function(value)
-            getgenv().TwoXTrackerEnabled = value
-            Window:Notify({
-                Title = "2x Tracker",
-                Description = value and "Enabled - Monitoring last 5 rounds" or "Disabled",
-                Lifetime = 3
-            })
-        end,
-        getgenv().Config.toggles.TwoXTrackerToggle or false
-    )
-
-    createInput(
-        Sections.Event2Left,
-        "2x Reset Wave",
-        "TwoXResetWave",
-        "Enter wave (e.g. 30)",
-        "Numbers",
-        function(value)
-            getgenv().TwoXResetWave = tonumber(value) or 30
-            Window:Notify({
-                Title = "2x Reset Wave",
-                Description = "Set to wave " .. tostring(getgenv().TwoXResetWave),
-                Lifetime = 3
-            })
-        end,
-        tostring(getgenv().Config.inputs.TwoXResetWave or 30)
-    )
-
-    Sections.Event2Left:Divider()
-
-Sections.Event2Left:Header({ Text = "🔄 Wave Restart" })
-Sections.Event2Left:SubLabel({
-    Text = "Automatically restart the match when reaching a specific wave"
-})
-
-createToggle(
-    Sections.Event2Left,
-    "Enable Wave Restart",
-    "InfiniteRestartToggle",
-    function(value)
-        getgenv().InfiniteRestartEnabled = value
-        Window:Notify({
-            Title = "Wave Restart",
-            Description = value and "Enabled - Will restart at wave " .. getgenv().InfiniteRestartWave or "Disabled",
-            Lifetime = 3
-        })
-    end,
-    getgenv().InfiniteRestartEnabled or false
-)
-
-createInput(
-    Sections.Event2Left,
-    "Restart at Wave",
-    "InfiniteRestartWave",
-    "Enter wave number (e.g., 50)",
-    "Numeric",
-    function(value)
-        getgenv().InfiniteRestartWave = tonumber(value) or 50
-        Window:Notify({
-            Title = "Wave Restart",
-            Description = "Will restart at wave " .. (tonumber(value) or 50),
-            Lifetime = 3
-        })
-    end,
-    tostring(getgenv().InfiniteRestartWave or 50)
-)
-
-Sections.Event2Right:Divider()
-Sections.Event2Right:Header({ Text = "💰 Auto Sell Capsule Units" })
-Sections.Event2Right:SubLabel({ Text = "Automatically sell specific units from capsules" })
-
-getgenv().AutoSellCapsuleEnabled = getgenv().Config.toggles.AutoSellCapsuleEnabled or false
-getgenv().AutoSellCapsuleUnits = getgenv().Config.dropdowns.AutoSellCapsuleUnits or {}
-
-if not getgenv()._CapsuleUnitCache then
-    getgenv()._CapsuleUnitCache = {}
-end
-
-local function initializeCapsuleCache()
-    local clientData = getgenv().GetClientData and getgenv().GetClientData()
-    if clientData and clientData.UnitData then
-        getgenv()._CapsuleUnitCache = {}
-        for unitID, unitData in pairs(clientData.UnitData) do
-            if unitData.UnitName then
-                getgenv()._CapsuleUnitCache[unitID] = {
-                    UnitName = unitData.UnitName,
-                    ObtainTime = unitData.ObtainTime or 0
-                }
-            end
-        end
-        print("[Auto Sell Capsule] Cached " .. #getgenv()._CapsuleUnitCache .. " existing units")
-    end
-end
-
-task.spawn(function()
-    task.wait(3)
-    initializeCapsuleCache()
-end)
-
-local capsuleUnitList = {
-    "ZamasuBlackGokuRoseUnevo",
-    "AinzAlbedoUnevo",
-    "SimonUnevo",
-    "GokuVegitaSSJ4Unevo",
-    "RimuruGodlyUnevo",
-    "RimuruGodlyUnevoShiny"
-}
-
-local function getUnitDisplayNames()
-    local displayNames = {}
-    local unitNameModule = getgenv().GetAllAbilities and getgenv().GetAllAbilities()
-    
-    for _, unitName in ipairs(capsuleUnitList) do
-        local displayName = unitName
-        if unitNameModule and unitNameModule[unitName] then
-            displayName = unitNameModule[unitName].displayName or unitName
-        end
-        table.insert(displayNames, displayName)
-    end
-    
-    return displayNames
-end
-
-createToggle(
-    Sections.Event2Right,
-    "Auto Sell Capsule Units",
-    "AutoSellCapsuleEnabled",
-    function(value)
-        getgenv().AutoSellCapsuleEnabled = value
-        Window:Notify({
-            Title = "Auto Sell Capsule",
-            Description = value and "Enabled - Will sell selected units" or "Disabled",
-            Lifetime = 3
-        })
-        
-        if value then
-            initializeCapsuleCache()
-        end
-    end,
-    getgenv().AutoSellCapsuleEnabled
-)
-
-createDropdown(
-    Sections.Event2Right,
-    "Units to Sell",
-    "AutoSellCapsuleUnits",
-    getUnitDisplayNames(),
-    true,
-    function(value)
-        getgenv().AutoSellCapsuleUnits = value
-        local selectedCount = 0
-        for _, selected in pairs(value) do
-            if selected then selectedCount = selectedCount + 1 end
-        end
-        Window:Notify({
-            Title = "Auto Sell Units",
-            Description = selectedCount .. " units selected for auto-sell",
-            Lifetime = 3
-        })
-    end,
-    getgenv().AutoSellCapsuleUnits
-)
-
-
-
-end
+-- Event tab 1 UI code removed - code saved in Event1_Event2_Backup.lua
 
 do
 Sections.Event3Left:Header({ Text = "🍬 Event 3 Auto Fuse" })
@@ -19254,7 +18617,15 @@ do
                     end
                 end
                 
-                local initial = getValue(getgenv()._WebhookInitialData, currency.key, 0)
+                local initial = 0
+                if getgenv()._WebhookInitialData then
+                    if getgenv()._WebhookInitialData.Tokens and getgenv()._WebhookInitialData.Tokens[currency.key] then
+                        initial = getgenv()._WebhookInitialData.Tokens[currency.key]
+                    else
+                        initial = getValue(getgenv()._WebhookInitialData, currency.key, 0)
+                    end
+                end
+                
                 local current = getValue(clientData, currency.key, 0)
                 local gained = current - initial
                 
@@ -20161,161 +19532,21 @@ do
         end
     end)
 
-    task.spawn(function()
-        local eventsFolder = RS:FindFirstChild("Events")
-    local halloweenFolder = eventsFolder and eventsFolder:FindFirstChild("Hallowen2025")
-    local enterEvent = halloweenFolder and halloweenFolder:FindFirstChild("Enter")
-    local startEvent = halloweenFolder and halloweenFolder:FindFirstChild("Start")
-    
-    while true do
-        task.wait(1) 
-        
-
-        if not getgenv().AutoEventEnabled then
-            task.wait(2)
-            continue
-        end
-        
-        if enterEvent and startEvent then
-            pcall(function()
-                local delay = getgenv().EventJoinDelay or 0
-                if delay > 0 then
-                    task.wait(delay)
-                end
-                
-                enterEvent:FireServer()
-                
-                task.wait(0.5)
-                
-                if getgenv().WaitForPlayerEnabled then
-                    local entryUI = nil
-                    for _, gui in ipairs(LocalPlayer.PlayerGui:GetChildren()) do
-                        if gui.Name:find("Entry") and gui.Enabled then
-                            entryUI = gui
-                            break
-                        end
-                    end
-                    
-                    if entryUI then
-                        local function findTextLabel(parent)
-                            for _, child in ipairs(parent:GetDescendants()) do
-                                if child:IsA("TextLabel") and child.Text:find("Players") then
-                                    return child
-                                end
-                            end
-                            return nil
-                        end
-                        
-                        local textLabel = findTextLabel(entryUI)
-                        if textLabel then
-                            local waitStartTime = tick()
-                            local maxWaitTime = 300
-                            
-                            while tick() - waitStartTime < maxWaitTime do
-                                local text = textLabel.Text
-                                local current, max = text:match("%((%d+)/(%d+)%)")
-                                
-                                if current and max then
-                                    local currentPlayers = tonumber(current)
-                                    local targetCount = getgenv().WaitForPlayerCount or 1
-                                    
-                                    if currentPlayers >= targetCount then
-                                        print("[Auto Event] ✅ " .. currentPlayers .. "/" .. targetCount .. " players ready, starting...")
-                                        break
-                                    else
-                                        print("[Auto Event] ⏳ Waiting for players... " .. currentPlayers .. "/" .. targetCount)
-                                    end
-                                end
-                                
-                                task.wait(1)
-                            end
-                        end
-                    end
-                end
-                
-                startEvent:FireServer()
-                startEvent:FireServer()
-            end)
-        end
-    end
-    end)
+    -- Event 1 auto-join removed - see Event1_Event2_Backup.lua
+    -- Event auto-bingo removed - see Event1_Event2_Backup.lua
+    -- Event auto-capsule 1 removed - see Event1_Event2_Backup.lua
+    -- Event auto-join 2 removed - see Event1_Event2_Backup.lua
+    -- Event auto-candy removed - see Event1_Event2_Backup.lua
+    -- Event auto-capsule 2 removed - see Event1_Event2_Backup.lua
+    -- Event auto-buy-capsule 2 removed - see Event1_Event2_Backup.lua
+    -- Event auto-fuse removed - see Event1_Event2_Backup.lua
 end
 
-if not isInLobby then
-    task.spawn(function()
-        task.wait(1)
+do
+    if isInLobby then
+        task.spawn(function()
         
-        local BingoEvents = RS:WaitForChild("Events", 10)
-        if not BingoEvents then 
-            warn("[Auto Bingo] Events folder not found")
-            return 
-        end
-        
-        local BingoFolder = BingoEvents:WaitForChild("Bingo", 10)
-        if not BingoFolder then
-            return
-        end
-        
-        local UseStampEvent = BingoFolder:FindFirstChild("UseStamp")
-        local ClaimRewardEvent = BingoFolder:FindFirstChild("ClaimReward")
-        local CompleteBoardEvent = BingoFolder:FindFirstChild("CompleteBoard")
-        
-        if not UseStampEvent or not ClaimRewardEvent or not CompleteBoardEvent then
-            warn("[Auto Bingo] Missing events - UseStamp: " .. tostring(UseStampEvent ~= nil) .. ", ClaimReward: " .. tostring(ClaimRewardEvent ~= nil) .. ", CompleteBoard: " .. tostring(CompleteBoardEvent ~= nil))
-            return
-        end
-                
-        while true do
-            task.wait(0.1)
-            
-            if not getgenv().BingoEnabled then
-                task.wait(2)
-                continue
-            end
-            
-            local success, err = pcall(function()
-                local clientData = getClientData()
-                local bingoStamps = 0
-                
-                if clientData and clientData.ItemData and clientData.ItemData.HallowenBingoStamp then
-                    bingoStamps = clientData.ItemData.HallowenBingoStamp.Amount or 0
-                end
-                
-                if bingoStamps < 1 then
-                    task.wait(2)
-                    return
-                end
-                
-                
-                if UseStampEvent then
-                    for i = 1, 25 do
-                        pcall(function()
-                            UseStampEvent:FireServer()
-                        end)
-                    end
-                end
-                
-                task.wait(0.5)
-                
-                if CompleteBoardEvent then
-                    local boardSuccess, boardResult = pcall(function()
-                        return CompleteBoardEvent:InvokeServer()
-                    end)
-                end
-            end)
-        end
-    end)
-end
-
-if not isInLobby then
-    task.spawn(function()
-        task.wait(1)
-        local Purchase = RS:WaitForChild("Events"):WaitForChild("Hallowen2025"):WaitForChild("Purchase")
-        local OpenCapsule = RS:WaitForChild("Remotes"):WaitForChild("OpenCapsule")
-        
-        local function clickButton(button)
-            if not button then return false end
-            getgenv()._SkipRecordingNextCall = true
+        local function getAvailableBreaches()
             local events = {"Activated", "MouseButton1Click", "MouseButton1Down", "MouseButton1Up"}
             for _, ev in ipairs(events) do
                 pcall(function()
@@ -23760,6 +22991,7 @@ do
             end
         end
     end)
+end
 end
 
 getgenv()._InitializeGameSystems()
