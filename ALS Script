@@ -4331,6 +4331,13 @@ Tabs.BossRush = ErrorHandler:wrap(function()
     })
 end, "Create BossRush tab")()
 
+Tabs.DivineCrafter = ErrorHandler:wrap(function()
+    return TabGroup2:Tab({ 
+        Name = "Divine Crafter", 
+        Image = "rbxassetid://10734952273" 
+    })
+end, "Create DivineCrafter tab")()
+
 Tabs.Breach = ErrorHandler:wrap(function()
     return TabGroup2:Tab({ 
         Name = "Breach", 
@@ -4524,6 +4531,9 @@ Sections.PortalsRight = createSection(Tabs.Portals, "Portals", "Right")
 
 Sections.BossRushLeft = createSection(Tabs.BossRush, "BossRush", "Left")
 Sections.BossRushRight = createSection(Tabs.BossRush, "BossRush", "Right")
+
+Sections.DivineCrafterLeft = createSection(Tabs.DivineCrafter, "DivineCrafter", "Left")
+Sections.DivineCrafterRight = createSection(Tabs.DivineCrafter, "DivineCrafter", "Right")
 
 Sections.BreachLeft = createSection(Tabs.Breach, "Breach", "Left")
 Sections.BreachRight = createSection(Tabs.Breach, "Breach", "Right")
@@ -5341,6 +5351,38 @@ local ClientDataCache = {
     cacheTimeout = 5
 }
 
+local SoulInfoCache = {
+    module = nil,
+    lastUpdate = 0,
+    cacheTimeout = 30
+}
+
+local function getSoulInfo()
+    local currentTime = tick()
+    
+    if SoulInfoCache.module and (currentTime - SoulInfoCache.lastUpdate) < SoulInfoCache.cacheTimeout then
+        return SoulInfoCache.module
+    end
+    
+    local ok, data = pcall(function()
+        local modules = getRSModules()
+        if not modules then return nil end
+        local modulePath = modules:FindFirstChild("SoulInfo")
+        if modulePath and modulePath:IsA("ModuleScript") then
+            return require(modulePath)
+        end
+        return nil
+    end)
+    
+    if ok and data then
+        SoulInfoCache.module = data
+        SoulInfoCache.lastUpdate = currentTime
+        return data
+    end
+    
+    return SoulInfoCache.module
+end
+
 local function getClientData()
     local currentTime = tick()
     
@@ -5817,6 +5859,75 @@ getgenv().WebhookIncludePlayerNames = getgenv().Config.toggles.WebhookIncludePla
 getgenv().GetClientData = getClientData
 getgenv().GetTowerInfo = getTowerInfo
 getgenv().GetAllAbilities = getAllAbilities
+
+task.spawn(function()
+    while true do
+        task.wait(1)
+        
+        pcall(function()
+            local remotes = RS:FindFirstChild("Remotes")
+            if not remotes then return end
+            
+            local divineCrafterRemotes = remotes:FindFirstChild("DivineCrafter")
+            if not divineCrafterRemotes then return end
+            
+            local craftItemRemote = divineCrafterRemotes:FindFirstChild("CraftItem")
+            local craftSoulRemote = divineCrafterRemotes:FindFirstChild("CraftSoul")
+            
+            if getgenv().AutoCraftEmptyHelixEnabled and craftItemRemote then
+                pcall(function()
+                    craftItemRemote:InvokeServer(1, 1)
+                end)
+            end
+            
+            if getgenv().AutoCraftEmptyVialEnabled and craftItemRemote then
+                pcall(function()
+                    craftItemRemote:InvokeServer(2, 1)
+                end)
+            end
+            
+            if getgenv().AutoCraftCosmicEssenceEnabled and craftItemRemote then
+                local amount = getgenv().CosmicEssenceCraftAmount or 1
+                pcall(function()
+                    craftItemRemote:InvokeServer(19, amount)
+                end)
+            end
+            
+            if getgenv().AutoCraftPerfectStatCubeEnabled and craftItemRemote then
+                local amount = getgenv().PerfectStatCubeCraftAmount or 1
+                pcall(function()
+                    craftItemRemote:InvokeServer(20, amount)
+                end)
+            end
+            
+            if getgenv().AutoCraftSoulsEnabled and craftSoulRemote then
+                local clientData = getClientData()
+                if clientData and clientData.SoulData then
+                    for _, soulName in ipairs(getgenv().SelectedSoulsToCraft or {}) do
+                        local soulKey = getSoulKeyFromName(soulName)
+                        
+                        if soulKey then
+                            local ownsSoul = false
+                            
+                            if clientData.SoulData[soulKey] then
+                                ownsSoul = true
+                            elseif clientData.SoulData[soulName] then
+                                ownsSoul = true
+                            end
+                            
+                            if not ownsSoul then
+                                pcall(function()
+                                    craftSoulRemote:InvokeServer(soulKey)
+                                end)
+                                task.wait(0.5)
+                            end
+                        end
+                    end
+                end
+            end
+        end)
+    end
+end)
 
 local function cacheRemotes()
     if next(getgenv().MacroRemoteCache) then return true end
@@ -10025,6 +10136,161 @@ pcall(function()
     end
 end)
 
+
+Sections.DivineCrafterLeft:Header({ Text = "🔨 Divine Crafter - Auto Craft" })
+Sections.DivineCrafterLeft:SubLabel({ Text = "Automatically craft items from the Divine Crafter" })
+Sections.DivineCrafterLeft:Divider()
+
+getgenv().AutoCraftEmptyHelixEnabled = getgenv().Config.toggles.AutoCraftEmptyHelixToggle or false
+createToggle(
+    Sections.DivineCrafterLeft,
+    "Auto Craft Empty Helix",
+    "AutoCraftEmptyHelixToggle",
+    function(value)
+        getgenv().AutoCraftEmptyHelixEnabled = value
+    end,
+    getgenv().AutoCraftEmptyHelixEnabled
+)
+
+getgenv().AutoCraftEmptyVialEnabled = getgenv().Config.toggles.AutoCraftEmptyVialToggle or false
+createToggle(
+    Sections.DivineCrafterLeft,
+    "Auto Craft Empty Vial",
+    "AutoCraftEmptyVialToggle",
+    function(value)
+        getgenv().AutoCraftEmptyVialEnabled = value
+    end,
+    getgenv().AutoCraftEmptyVialEnabled
+)
+
+Sections.DivineCrafterLeft:Divider()
+
+getgenv().AutoCraftCosmicEssenceEnabled = getgenv().Config.toggles.AutoCraftCosmicEssenceToggle or false
+createToggle(
+    Sections.DivineCrafterLeft,
+    "Auto Craft Cosmic Essence",
+    "AutoCraftCosmicEssenceToggle",
+    function(value)
+        getgenv().AutoCraftCosmicEssenceEnabled = value
+    end,
+    getgenv().AutoCraftCosmicEssenceEnabled
+)
+
+getgenv().CosmicEssenceCraftAmount = tonumber(getgenv().Config.inputs.CosmicEssenceCraftAmount) or 1
+createInput(
+    Sections.DivineCrafterLeft,
+    "Cosmic Essence Amount",
+    "CosmicEssenceCraftAmount",
+    "Amount to craft",
+    "Numeric",
+    function(value)
+        local num = tonumber(value)
+        if num and num > 0 then
+            getgenv().CosmicEssenceCraftAmount = num
+        end
+    end,
+    tostring(getgenv().CosmicEssenceCraftAmount)
+)
+
+Sections.DivineCrafterLeft:SubLabel({ Text = "Amount = how many to craft per cycle." })
+
+Sections.DivineCrafterLeft:Divider()
+
+getgenv().AutoCraftPerfectStatCubeEnabled = getgenv().Config.toggles.AutoCraftPerfectStatCubeToggle or false
+createToggle(
+    Sections.DivineCrafterLeft,
+    "Auto Craft Perfect Stat Cube",
+    "AutoCraftPerfectStatCubeToggle",
+    function(value)
+        getgenv().AutoCraftPerfectStatCubeEnabled = value
+    end,
+    getgenv().AutoCraftPerfectStatCubeEnabled
+)
+
+getgenv().PerfectStatCubeCraftAmount = tonumber(getgenv().Config.inputs.PerfectStatCubeCraftAmount) or 1
+createInput(
+    Sections.DivineCrafterLeft,
+    "Perfect Stat Cube Amount",
+    "PerfectStatCubeCraftAmount",
+    "Amount to craft",
+    "Numeric",
+    function(value)
+        local num = tonumber(value)
+        if num and num > 0 then
+            getgenv().PerfectStatCubeCraftAmount = num
+        end
+    end,
+    tostring(getgenv().PerfectStatCubeCraftAmount)
+)
+
+Sections.DivineCrafterLeft:SubLabel({ Text = "Amount = how many to craft per cycle." })
+
+
+Sections.DivineCrafterRight:Header({ Text = "✨ Auto Craft Souls" })
+Sections.DivineCrafterRight:SubLabel({ Text = "Automatically craft selected souls you don't own" })
+Sections.DivineCrafterRight:Divider()
+
+local function getSoulDropdownOptions()
+    local options = {}
+    local soulInfo = getSoulInfo()
+    
+    if soulInfo then
+        for soulKey, soulData in pairs(soulInfo) do
+            if soulData.Name then
+                table.insert(options, soulData.Name)
+            end
+        end
+        table.sort(options)
+    end
+    
+    return options
+end
+
+local function getSoulKeyFromName(soulName)
+    local soulInfo = getSoulInfo()
+    if not soulInfo then return nil end
+    
+    for soulKey, soulData in pairs(soulInfo) do
+        if soulData.Name == soulName then
+            return soulKey
+        end
+    end
+    return nil
+end
+
+getgenv().AutoCraftSoulsEnabled = getgenv().Config.toggles.AutoCraftSoulsToggle or false
+getgenv().SelectedSoulsToCraft = getgenv().Config.dropdowns.SelectedSoulsToCraft or {}
+
+local soulDropdown = Sections.DivineCrafterRight:Dropdown({
+    Name = "Select Souls to Craft",
+    Search = true,
+    Multi = true,
+    Required = false,
+    Options = getSoulDropdownOptions(),
+    Default = getgenv().SelectedSoulsToCraft,
+    Callback = function(value)
+        local selected = {}
+        for soulName, isSelected in pairs(value) do
+            if isSelected then
+                table.insert(selected, soulName)
+            end
+        end
+        getgenv().SelectedSoulsToCraft = selected
+        getgenv().Config.dropdowns.SelectedSoulsToCraft = selected
+    end
+}, "SelectedSoulsToCraft")
+
+createToggle(
+    Sections.DivineCrafterRight,
+    "Enable Auto Craft Souls",
+    "AutoCraftSoulsToggle",
+    function(value)
+        getgenv().AutoCraftSoulsEnabled = value
+    end,
+    getgenv().AutoCraftSoulsEnabled
+)
+
+Sections.DivineCrafterRight:SubLabel({ Text = "Will only craft souls you don't own yet based on ClientData." })
 
 
 local UnitNames = nil
