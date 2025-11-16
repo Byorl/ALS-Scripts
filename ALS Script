@@ -18613,6 +18613,25 @@ do
         getgenv()._lastWebhookTime = 0
     end
     
+    if not getgenv()._GameEndedTime then
+        getgenv()._GameEndedTime = 0
+    end
+    
+    task.spawn(function()
+        local gameEndedValue = RS:WaitForChild("GameEnded", 10)
+        if gameEndedValue then
+            gameEndedValue:GetPropertyChangedSignal("Value"):Connect(function()
+                if gameEndedValue.Value == true then
+                    local elapsedValue = RS:FindFirstChild("ElapsedTime")
+                    if elapsedValue and elapsedValue.Value then
+                        getgenv()._GameEndedTime = elapsedValue.Value
+                        print("[Webhook] Game ended, captured time:", getgenv()._GameEndedTime)
+                    end
+                end
+            end)
+        end
+    end)
+    
     local WEBHOOK_COOLDOWN = 10
     
     getgenv()._SendWebhookFunction = function()
@@ -18732,12 +18751,20 @@ do
             
             if not matchTime or matchTime == "00:00:00" or matchTime == "" then
                 pcall(function()
-                    local elapsed = RS:FindFirstChild("ElapsedTime")
-                    if elapsed and elapsed.Value and elapsed.Value > 0 then
-                        local roundTime = elapsed.Value
+                    local timeToUse = getgenv()._GameEndedTime
+                    
+                    if not timeToUse or timeToUse == 0 then
+                        local elapsed = RS:FindFirstChild("ElapsedTime")
+                        if elapsed and elapsed.Value and elapsed.Value > 0 then
+                            timeToUse = elapsed.Value
+                        end
+                    end
+                    
+                    if timeToUse and timeToUse > 0 then
+                        local roundTime = timeToUse
                         
-                        if getgenv()._RoundStartTime and getgenv()._RoundStartTime > 0 and getgenv()._RoundStartTime < elapsed.Value then
-                            roundTime = elapsed.Value - getgenv()._RoundStartTime
+                        if getgenv()._RoundStartTime and getgenv()._RoundStartTime > 0 and getgenv()._RoundStartTime < timeToUse then
+                            roundTime = timeToUse - getgenv()._RoundStartTime
                         end
                         
                         local timeScale = 1
