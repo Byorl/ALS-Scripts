@@ -18248,12 +18248,16 @@ do
     if not getgenv()._RoundStartTime then
         getgenv()._RoundStartTime = 0
         task.spawn(function()
-            task.wait(2)
+            task.wait(3)
             
             pcall(function()
                 local elapsed = RS:FindFirstChild("ElapsedTime")
-                if elapsed and elapsed.Value then
+                if elapsed and elapsed.Value and elapsed.Value > 0 then
                     getgenv()._RoundStartTime = elapsed.Value
+                    print("[Webhook] Set round start time:", getgenv()._RoundStartTime)
+                else
+                    getgenv()._RoundStartTime = 0
+                    print("[Webhook] Round start time set to 0 (elapsed not ready)")
                 end
             end)
             
@@ -18431,36 +18435,31 @@ do
             if not matchTime or matchTime == "00:00:00" or matchTime == "" then
                 pcall(function()
                     local elapsed = RS:FindFirstChild("ElapsedTime")
-                    if elapsed and elapsed.Value then
+                    if elapsed and elapsed.Value and elapsed.Value > 0 then
                         local roundTime = elapsed.Value
                         
-                        if getgenv()._RoundStartTime and getgenv()._RoundStartTime > 0 then
+                        if getgenv()._RoundStartTime and getgenv()._RoundStartTime > 0 and getgenv()._RoundStartTime < elapsed.Value then
                             roundTime = elapsed.Value - getgenv()._RoundStartTime
-                            if roundTime < 0 or roundTime > elapsed.Value then
-                                roundTime = elapsed.Value
-                            end
                         end
                         
                         local timeScale = 1
                         pcall(function()
                             local timeScaleValue = RS:FindFirstChild("TimeScale")
-                            if timeScaleValue and timeScaleValue:IsA("NumberValue") then
-                                timeScale = timeScaleValue.Value or 1
+                            if timeScaleValue and timeScaleValue:IsA("NumberValue") and timeScaleValue.Value > 0 then
+                                timeScale = timeScaleValue.Value
                             end
                         end)
                         
                         local realTime = roundTime / timeScale
-                        local seconds = math.floor(realTime)
-                        local hours = math.floor(seconds / 3600)
-                        local minutes = math.floor((seconds % 3600) / 60)
-                        local secs = seconds % 60
-                        matchTime = string.format("%02d:%02d:%02d", hours, minutes, secs)
+                        if realTime > 0 then
+                            local seconds = math.floor(realTime)
+                            local hours = math.floor(seconds / 3600)
+                            local minutes = math.floor((seconds % 3600) / 60)
+                            local secs = seconds % 60
+                            matchTime = string.format("%02d:%02d:%02d", hours, minutes, secs)
+                        end
                     end
                 end)
-            end
-            
-            if not matchTime or matchTime == "00:00:00" or matchTime == "" then
-                matchTime = "00:00:00"
             end
             
             
@@ -18587,10 +18586,61 @@ do
                 return false
             end
             
+            local gamemodeTokens = {
+                ["ChainsawTokens"] = {"Chainsaw Man"},
+                ["DivineTokens"] = {"Divine"},
+                ["GrailRushTokens"] = {"Grail Rush"},
+                ["PirateBountyTokens"] = {"Pirate Bounty"},
+                ["BossRushTokens"] = {"Boss Rush"},
+                ["SoulTokens"] = {"Soul"},
+                ["FlowerTokens"] = {"Flower"},
+                ["BlackChakraRod"] = {"Shinobi"},
+                ["ShinobiTokens"] = {"Shinobi"},
+                ["PirateTokens"] = {"Pirate"},
+                ["MonarchTokens"] = {"Monarch"},
+                ["CloverTokens"] = {"Clover"},
+                ["ZeneTokens"] = {"Zene"},
+                ["FateTokens"] = {"Fate"},
+                ["MagmaEssence"] = {"Magma"},
+                ["PirateMeat"] = {"Pirate"},
+                ["RaidTokens"] = {"Raid"},
+                ["SoulCoin"] = {"Raid"},
+                ["EmberTokens"] = {"Ember"},
+                ["BlazeTokens"] = {"Blaze"},
+                ["HorseTokens"] = {"Horse"},
+                ["DevilDogTokens"] = {"Devil Dog"},
+                ["TitanRushTokens"] = {"Titan Rush"},
+                ["SoccerTokens"] = {"Soccer"},
+                ["SummerCorals"] = {"Summer"},
+                ["CandyCanes"] = {"Christmas"},
+                ["AlchemyTokens"] = {"Alchemy"},
+                ["NationalTokens"] = {"National"},
+                ["SwordsmanOrbs"] = {"Swordsman"},
+                ["DragonScales"] = {"Dragon"},
+                ["CursedEnergyTokens"] = {"Cursed"},
+                ["CursedBreachTokens"] = {"Breach"},
+                ["VisionaryToken"] = {"Visionary"},
+                ["LuckyTokens"] = {"Lucky"},
+                ["RevolutionTokens"] = {"Revolution"},
+                ["ManaRushTokens"] = {"Mana Rush"},
+                ["SummerPrepTokens"] = {"Summer Prep"},
+            }
+            
             for _, currency in ipairs(currencyKeys) do
-                if currency.key == "RaidTokens" or currency.key == "SoulCoin" then
-                    local isRaidMode = currentGamemode == "Raids" or currentGamemode == "Raid" or currentGamemode:find("Raid") ~= nil
-                    if not isRaidMode then
+                local isTokenType = gamemodeTokens[currency.key] ~= nil
+                
+                if isTokenType then
+                    local validGamemodes = gamemodeTokens[currency.key]
+                    local isValidForCurrentMode = false
+                    
+                    for _, validMode in ipairs(validGamemodes) do
+                        if currentGamemode and currentGamemode:find(validMode) then
+                            isValidForCurrentMode = true
+                            break
+                        end
+                    end
+                    
+                    if not isValidForCurrentMode then
                         continue
                     end
                 end
