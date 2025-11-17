@@ -6036,6 +6036,12 @@ task.spawn(function()
                 local interactRemote = teleporterRemote:FindFirstChild("Interact")
                 if not interactRemote then return end
                 
+                local clientData = getClientData()
+                if not clientData then return end
+                
+                local weeklyTime = clientData.LastChallengeWeeklyTime or 0
+                local dailyTime = clientData.LastChallengeDailyTime or 0
+                
                 local teleporterFolder = workspace:FindFirstChild("TeleporterFolder")
                 if teleporterFolder then
                     local challengeFolder = teleporterFolder:FindFirstChild("Challenge")
@@ -6051,25 +6057,19 @@ task.spawn(function()
                     end
                 end
                 
-                if getgenv().ChallengeRegularEnabled then
+                if getgenv().ChallengeWeeklyEnabled and weeklyTime == 0 then
+                    interactRemote:FireServer("Select", "Challenge", "Weekly", 1)
+                    print("[Challenge] Joined Weekly - Act 1")
+                    task.wait(3)
+                elseif getgenv().ChallengeDailyEnabled and dailyTime == 0 then
+                    interactRemote:FireServer("Select", "Challenge", "Daily", 1)
+                    print("[Challenge] Joined Daily - Act 1")
+                    task.wait(3)
+                elseif getgenv().ChallengeRegularEnabled and dailyTime > 0 then
                     local challengeType = getgenv().ChallengeRegularType or "Pearl"
                     local act = tonumber(getgenv().ChallengeRegularAct) or 1
                     interactRemote:FireServer("Select", "Challenge", challengeType, act)
                     print("[Challenge] Joined Regular - " .. challengeType .. " Act " .. act)
-                    task.wait(3)
-                end
-                
-                if getgenv().ChallengeDailyEnabled then
-                    local act = tonumber(getgenv().ChallengeDailyAct) or 1
-                    interactRemote:FireServer("Select", "Challenge", "Daily", act)
-                    print("[Challenge] Joined Daily - Act " .. act)
-                    task.wait(3)
-                end
-                
-                if getgenv().ChallengeWeeklyEnabled then
-                    local act = tonumber(getgenv().ChallengeWeeklyAct) or 1
-                    interactRemote:FireServer("Select", "Challenge", "Weekly", act)
-                    print("[Challenge] Joined Weekly - Act " .. act)
                     task.wait(3)
                 end
             end)
@@ -10292,14 +10292,14 @@ createToggle(
 
 Sections.ExtremeBoostLeft:Divider()
 
-Sections.ExtremeBoostLeft:SubLabel({ Text = "Select unit to use Divine Tokens on:" })
+Sections.ExtremeBoostLeft:SubLabel({ Text = "Select unit for Divine Token Extreme Boost:" })
 
 Sections.ExtremeBoostLeft:Dropdown({
     Name = "Divine Token Unit",
     Search = true,
     Multi = false,
     Required = false,
-    Options = divineTokenUnits,
+    Options = ezaUnitOptions,
     Default = getgenv().ExtremeBoostDivineUnit,
     Callback = function(value)
         getgenv().ExtremeBoostDivineUnit = value
@@ -10310,14 +10310,14 @@ Sections.ExtremeBoostLeft:Dropdown({
 
 Sections.ExtremeBoostLeft:Divider()
 
-Sections.ExtremeBoostLeft:SubLabel({ Text = "Select unit to use Infernal Tokens on:" })
+Sections.ExtremeBoostLeft:SubLabel({ Text = "Select unit for Infernal Token Extreme Boost:" })
 
 Sections.ExtremeBoostLeft:Dropdown({
     Name = "Infernal Token Unit",
     Search = true,
     Multi = false,
     Required = false,
-    Options = infernalTokenUnits,
+    Options = ezaUnitOptions,
     Default = getgenv().ExtremeBoostInfernalUnit,
     Callback = function(value)
         getgenv().ExtremeBoostInfernalUnit = value
@@ -10325,10 +10325,6 @@ Sections.ExtremeBoostLeft:Dropdown({
         getgenv().SaveConfig(getgenv().Config)
     end
 }, "ExtremeBoostInfernalUnit")
-
-Sections.ExtremeBoostLeft:Divider()
-
-Sections.ExtremeBoostLeft:SubLabel({ Text = "How it works: Will teleport to Extreme Boost door and use stored tokens." })
 
 end
 
@@ -10426,8 +10422,6 @@ getgenv().ChallengeDailyEnabled = getgenv().Config.toggles.ChallengeDailyToggle 
 getgenv().ChallengeWeeklyEnabled = getgenv().Config.toggles.ChallengeWeeklyToggle or false
 getgenv().ChallengeRegularType = getgenv().Config.dropdowns.ChallengeRegularType or "Pearl"
 getgenv().ChallengeRegularAct = getgenv().Config.inputs.ChallengeRegularAct or "1"
-getgenv().ChallengeDailyAct = getgenv().Config.inputs.ChallengeDailyAct or "1"
-getgenv().ChallengeWeeklyAct = getgenv().Config.inputs.ChallengeWeeklyAct or "1"
 
 createToggle(
     Sections.ChallengeLeft,
@@ -10490,21 +10484,6 @@ createToggle(
     getgenv().ChallengeDailyEnabled
 )
 
-createInput(
-    Sections.ChallengeLeft,
-    "Daily Challenge Act",
-    "ChallengeDailyAct",
-    "Act number (1-6)",
-    "Numeric",
-    function(value)
-        local num = tonumber(value)
-        if num and num >= 1 and num <= 6 then
-            getgenv().ChallengeDailyAct = tostring(num)
-        end
-    end,
-    getgenv().ChallengeDailyAct
-)
-
 Sections.ChallengeLeft:Divider()
 
 createToggle(
@@ -10521,25 +10500,6 @@ createToggle(
     end,
     getgenv().ChallengeWeeklyEnabled
 )
-
-createInput(
-    Sections.ChallengeLeft,
-    "Weekly Challenge Act",
-    "ChallengeWeeklyAct",
-    "Act number (1-6)",
-    "Numeric",
-    function(value)
-        local num = tonumber(value)
-        if num and num >= 1 and num <= 6 then
-            getgenv().ChallengeWeeklyAct = tostring(num)
-        end
-    end,
-    getgenv().ChallengeWeeklyAct
-)
-
-Sections.ChallengeLeft:Divider()
-
-Sections.ChallengeLeft:SubLabel({ Text = "How it works: Will teleport to Challenge door and join selected types." })
 
 end
 
