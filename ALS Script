@@ -5892,15 +5892,29 @@ task.spawn(function()
             local craftItemRemote = divineCrafterRemotes:FindFirstChild("CraftItem")
             local craftSoulRemote = divineCrafterRemotes:FindFirstChild("CraftSoul")
             
+            local clientData = getClientData()
+            
             if getgenv().AutoCraftEmptyHelixEnabled and craftItemRemote then
                 pcall(function()
-                    craftItemRemote:InvokeServer(1, 1)
+                    if clientData and clientData.ItemData and clientData.ItemData.BottledIchor then
+                        local bottledIchorAmount = clientData.ItemData.BottledIchor.Amount or 0
+                        if bottledIchorAmount >= 1 then
+                            craftItemRemote:InvokeServer(1, 1)
+                        end
+                    end
                 end)
             end
             
             if getgenv().AutoCraftEmptyVialEnabled and craftItemRemote then
                 pcall(function()
-                    craftItemRemote:InvokeServer(2, 1)
+                    if clientData and clientData.ItemData and clientData.ItemData.EmptyBottle then
+                        local emptyBottleAmount = clientData.ItemData.EmptyBottle.Amount or 0
+                        if emptyBottleAmount == 0 then
+                            craftItemRemote:InvokeServer(2, 1)
+                        end
+                    else
+                        craftItemRemote:InvokeServer(2, 1)
+                    end
                 end)
             end
             
