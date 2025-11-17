@@ -4373,6 +4373,20 @@ Tabs.DivineCrafter = ErrorHandler:wrap(function()
     })
 end, "Create DivineCrafter tab")()
 
+Tabs.ExtremeBoost = ErrorHandler:wrap(function()
+    return TabGroup3:Tab({ 
+        Name = "Extreme Boost", 
+        Image = "rbxassetid://10723407389" 
+    })
+end, "Create ExtremeBoost tab")()
+
+Tabs.Challenge = ErrorHandler:wrap(function()
+    return TabGroup3:Tab({ 
+        Name = "Challenge", 
+        Image = "rbxassetid://10723407389" 
+    })
+end, "Create Challenge tab")()
+
 Tabs.AutoTrade = ErrorHandler:wrap(function()
     return TabGroup3:Tab({ 
         Name = "Auto Trade", 
@@ -4533,6 +4547,10 @@ Sections.BossRushLeft = createSection(Tabs.BossRush, "BossRush", "Left")
 Sections.BossRushRight = createSection(Tabs.BossRush, "BossRush", "Right")
 
 Sections.DivineCrafterLeft = createSection(Tabs.DivineCrafter, "DivineCrafter", "Left")
+
+Sections.ExtremeBoostLeft = createSection(Tabs.ExtremeBoost, "ExtremeBoost", "Left")
+
+Sections.ChallengeLeft = createSection(Tabs.Challenge, "Challenge", "Left")
 Sections.DivineCrafterRight = createSection(Tabs.DivineCrafter, "DivineCrafter", "Right")
 
 Sections.BreachLeft = createSection(Tabs.Breach, "Breach", "Left")
@@ -5929,6 +5947,136 @@ task.spawn(function()
     end
 end)
 
+task.spawn(function()
+    while true do
+        task.wait(5)
+        
+        if getgenv().ExtremeBoostEnabled then
+            pcall(function()
+                local remotes = RS:FindFirstChild("Remotes")
+                if not remotes then return end
+                
+                local extremeBoostsRemote = remotes:FindFirstChild("ExtremeBoosts")
+                if not extremeBoostsRemote then return end
+                
+                local enterRemote = extremeBoostsRemote:FindFirstChild("Enter")
+                if not enterRemote then return end
+                
+                local clientData = getClientData()
+                if not clientData then return end
+                
+                local divineTokens = clientData.DivineTokens or 0
+                local infernalTokens = clientData.InfernalTokens or 0
+                
+                local unitToBoost = nil
+                local mapName = "Unknown"
+                local act = 1
+                
+                if divineTokens > 0 and getgenv().ExtremeBoostDivineUnit and getgenv().ExtremeBoostDivineUnit ~= "" then
+                    unitToBoost = getUnitFileName(getgenv().ExtremeBoostDivineUnit)
+                    
+                    local ezaModule = RS:FindFirstChild("Modules") and RS.Modules:FindFirstChild("EZAUnits")
+                    if ezaModule then
+                        local EZAUnits = require(ezaModule)
+                        if EZAUnits[unitToBoost] and EZAUnits[unitToBoost].DivineTokens then
+                            mapName = "Unknown"
+                            act = 1
+                        end
+                    end
+                elseif infernalTokens > 0 and getgenv().ExtremeBoostInfernalUnit and getgenv().ExtremeBoostInfernalUnit ~= "" then
+                    unitToBoost = getUnitFileName(getgenv().ExtremeBoostInfernalUnit)
+                    
+                    local ezaModule = RS:FindFirstChild("Modules") and RS.Modules:FindFirstChild("EZAUnits")
+                    if ezaModule then
+                        local EZAUnits = require(ezaModule)
+                        if EZAUnits[unitToBoost] and EZAUnits[unitToBoost].InfernalTokens then
+                            mapName = "Unknown"
+                            act = 1
+                        end
+                    end
+                end
+                
+                if unitToBoost then
+                    local teleporterFolder = workspace:FindFirstChild("TeleporterFolder")
+                    if teleporterFolder then
+                        local extremeBoostFolder = teleporterFolder:FindFirstChild("ExtremeBoost")
+                        if extremeBoostFolder then
+                            local teleporter = extremeBoostFolder:FindFirstChild("Teleporter")
+                            if teleporter then
+                                local door = teleporter:FindFirstChild("Door")
+                                if door and door:IsA("BasePart") then
+                                    LocalPlayer.Character:WaitForChild("HumanoidRootPart").CFrame = door.CFrame
+                                    task.wait(0.5)
+                                end
+                            end
+                        end
+                    end
+                    
+                    enterRemote:FireServer(mapName, act, unitToBoost)
+                    print("[Extreme Boost] Joined with unit: " .. unitToBoost)
+                    task.wait(5)
+                end
+            end)
+        end
+    end
+end)
+
+task.spawn(function()
+    while true do
+        task.wait(5)
+        
+        if getgenv().ChallengeRegularEnabled or getgenv().ChallengeDailyEnabled or getgenv().ChallengeWeeklyEnabled then
+            pcall(function()
+                local remotes = RS:FindFirstChild("Remotes")
+                if not remotes then return end
+                
+                local teleporterRemote = remotes:FindFirstChild("Teleporter")
+                if not teleporterRemote then return end
+                
+                local interactRemote = teleporterRemote:FindFirstChild("Interact")
+                if not interactRemote then return end
+                
+                local teleporterFolder = workspace:FindFirstChild("TeleporterFolder")
+                if teleporterFolder then
+                    local challengeFolder = teleporterFolder:FindFirstChild("Challenge")
+                    if challengeFolder then
+                        local teleporter = challengeFolder:FindFirstChild("Teleporter")
+                        if teleporter then
+                            local door = teleporter:FindFirstChild("Door")
+                            if door and door:IsA("BasePart") then
+                                LocalPlayer.Character:WaitForChild("HumanoidRootPart").CFrame = door.CFrame
+                                task.wait(0.5)
+                            end
+                        end
+                    end
+                end
+                
+                if getgenv().ChallengeRegularEnabled then
+                    local challengeType = getgenv().ChallengeRegularType or "Pearl"
+                    local act = tonumber(getgenv().ChallengeRegularAct) or 1
+                    interactRemote:FireServer("Select", "Challenge", challengeType, act)
+                    print("[Challenge] Joined Regular - " .. challengeType .. " Act " .. act)
+                    task.wait(3)
+                end
+                
+                if getgenv().ChallengeDailyEnabled then
+                    local act = tonumber(getgenv().ChallengeDailyAct) or 1
+                    interactRemote:FireServer("Select", "Challenge", "Daily", act)
+                    print("[Challenge] Joined Daily - Act " .. act)
+                    task.wait(3)
+                end
+                
+                if getgenv().ChallengeWeeklyEnabled then
+                    local act = tonumber(getgenv().ChallengeWeeklyAct) or 1
+                    interactRemote:FireServer("Select", "Challenge", "Weekly", act)
+                    print("[Challenge] Joined Weekly - Act " .. act)
+                    task.wait(3)
+                end
+            end)
+        end
+    end
+end)
+
 local function cacheRemotes()
     if next(getgenv().MacroRemoteCache) then return true end
     
@@ -7072,6 +7220,7 @@ getgenv().executeCardSelectionAction = function(action)
         end
         
         local fireSuccess, fireErr = pcall(function()
+            task.wait(math.random(1, 3))
             abilitySelectionRemote:FireServer(action.Args[1], matchedCard.name)
         end)
         
@@ -7267,6 +7416,25 @@ local function executeAction(action, retryCount)
         print("[Macro] Upgrading " .. action.TowerName .. ezaInfo .. " from level " .. oldLevel .. " (method: " .. selectionMethod .. ")")
         
         local method = remote:IsA("RemoteFunction") and "InvokeServer" or "FireServer"
+        
+        local isTransformUnit = action.TowerName:find("Pucci") or action.TowerName:find("Gogeta") or action.TowerName:find("Vegito") or action.TowerName:find("Zamasu")
+        
+        if isTransformUnit and oldLevel >= 3 then
+            for attempt = 1, 5 do
+                local callSuccess, callResult = getgenv()._ConnectionStability_safeRemoteCall(remote, method, tower)
+                task.wait(0.2)
+                
+                local newLevel = tower:FindFirstChild("Upgrade") and tower.Upgrade.Value or oldLevel
+                if newLevel > oldLevel then
+                    print("[Macro] ✅ Transform unit upgrade successful (" .. oldLevel .. " → " .. newLevel .. ")")
+                    return true, "Upgraded to level " .. newLevel
+                end
+            end
+            
+            print("[Macro] ⚠️ Transform unit upgrade bar filling (level " .. oldLevel .. ", spammed 5 attempts)")
+            return true, "Upgrade attempts sent (bar filling)"
+        end
+        
         local callSuccess, callResult = getgenv()._ConnectionStability_safeRemoteCall(remote, method, tower)
         
         if not callSuccess then
@@ -10071,6 +10239,100 @@ createCardPriorityInputs(Sections.SlimeRushRight, getgenv().SlimeRushSacrifice, 
 end
 
 do
+Sections.ExtremeBoostLeft:Header({ Text = "🚀 Extreme Boost Auto-Join" })
+Sections.ExtremeBoostLeft:SubLabel({ Text = "Automatically join Extreme Boosts using Divine/Infernal tokens" })
+Sections.ExtremeBoostLeft:Divider()
+
+local EZAUnits = nil
+local ezaUnitOptions = {}
+local divineTokenUnits = {}
+local infernalTokenUnits = {}
+
+pcall(function()
+    local ezaModule = RS:FindFirstChild("Modules") and RS.Modules:FindFirstChild("EZAUnits")
+    if ezaModule and ezaModule:IsA("ModuleScript") then
+        EZAUnits = require(ezaModule)
+        
+        for unitName, tokenData in pairs(EZAUnits) do
+            local displayName = getUnitDisplayName(unitName)
+            table.insert(ezaUnitOptions, displayName)
+            
+            if tokenData.DivineTokens then
+                table.insert(divineTokenUnits, displayName)
+            end
+            if tokenData.InfernalTokens then
+                table.insert(infernalTokenUnits, displayName)
+            end
+        end
+        
+        table.sort(ezaUnitOptions)
+        table.sort(divineTokenUnits)
+        table.sort(infernalTokenUnits)
+    end
+end)
+
+getgenv().ExtremeBoostEnabled = getgenv().Config.toggles.ExtremeBoostToggle or false
+getgenv().ExtremeBoostDivineUnit = getgenv().Config.dropdowns.ExtremeBoostDivineUnit or (divineTokenUnits[1] or "")
+getgenv().ExtremeBoostInfernalUnit = getgenv().Config.dropdowns.ExtremeBoostInfernalUnit or (infernalTokenUnits[1] or "")
+
+createToggle(
+    Sections.ExtremeBoostLeft,
+    "Enable Extreme Boost Auto-Join",
+    "ExtremeBoostToggle",
+    function(value)
+        getgenv().ExtremeBoostEnabled = value
+        Window:Notify({
+            Title = "Extreme Boost",
+            Description = value and "Enabled" or "Disabled",
+            Lifetime = 3
+        })
+    end,
+    getgenv().ExtremeBoostEnabled
+)
+
+Sections.ExtremeBoostLeft:Divider()
+
+Sections.ExtremeBoostLeft:SubLabel({ Text = "Select unit to use Divine Tokens on:" })
+
+Sections.ExtremeBoostLeft:Dropdown({
+    Name = "Divine Token Unit",
+    Search = true,
+    Multi = false,
+    Required = false,
+    Options = divineTokenUnits,
+    Default = getgenv().ExtremeBoostDivineUnit,
+    Callback = function(value)
+        getgenv().ExtremeBoostDivineUnit = value
+        getgenv().Config.dropdowns.ExtremeBoostDivineUnit = value
+        getgenv().SaveConfig(getgenv().Config)
+    end
+}, "ExtremeBoostDivineUnit")
+
+Sections.ExtremeBoostLeft:Divider()
+
+Sections.ExtremeBoostLeft:SubLabel({ Text = "Select unit to use Infernal Tokens on:" })
+
+Sections.ExtremeBoostLeft:Dropdown({
+    Name = "Infernal Token Unit",
+    Search = true,
+    Multi = false,
+    Required = false,
+    Options = infernalTokenUnits,
+    Default = getgenv().ExtremeBoostInfernalUnit,
+    Callback = function(value)
+        getgenv().ExtremeBoostInfernalUnit = value
+        getgenv().Config.dropdowns.ExtremeBoostInfernalUnit = value
+        getgenv().SaveConfig(getgenv().Config)
+    end
+}, "ExtremeBoostInfernalUnit")
+
+Sections.ExtremeBoostLeft:Divider()
+
+Sections.ExtremeBoostLeft:SubLabel({ Text = "How it works: Will teleport to Extreme Boost door and use stored tokens." })
+
+end
+
+do
 Sections.BossRushLeft:Header({ Text = "⚔️ Boss Rush Settings" })
 Sections.BossRushLeft:SubLabel({ Text = "Automatic card selection for Boss Rush" })
 
@@ -10153,6 +10415,133 @@ pcall(function()
     end
 end)
 
+
+do
+Sections.ChallengeLeft:Header({ Text = "🎯 Challenge Auto-Join" })
+Sections.ChallengeLeft:SubLabel({ Text = "Automatically join Challenge mode with selected types" })
+Sections.ChallengeLeft:Divider()
+
+getgenv().ChallengeRegularEnabled = getgenv().Config.toggles.ChallengeRegularToggle or false
+getgenv().ChallengeDailyEnabled = getgenv().Config.toggles.ChallengeDailyToggle or false
+getgenv().ChallengeWeeklyEnabled = getgenv().Config.toggles.ChallengeWeeklyToggle or false
+getgenv().ChallengeRegularType = getgenv().Config.dropdowns.ChallengeRegularType or "Pearl"
+getgenv().ChallengeRegularAct = getgenv().Config.inputs.ChallengeRegularAct or "1"
+getgenv().ChallengeDailyAct = getgenv().Config.inputs.ChallengeDailyAct or "1"
+getgenv().ChallengeWeeklyAct = getgenv().Config.inputs.ChallengeWeeklyAct or "1"
+
+createToggle(
+    Sections.ChallengeLeft,
+    "Enable Regular Challenge",
+    "ChallengeRegularToggle",
+    function(value)
+        getgenv().ChallengeRegularEnabled = value
+        Window:Notify({
+            Title = "Regular Challenge",
+            Description = value and "Enabled" or "Disabled",
+            Lifetime = 3
+        })
+    end,
+    getgenv().ChallengeRegularEnabled
+)
+
+Sections.ChallengeLeft:Dropdown({
+    Name = "Regular Challenge Type",
+    Search = false,
+    Multi = false,
+    Required = false,
+    Options = {"Pearl", "Rerolls", "StatCube", "UnitEXP"},
+    Default = getgenv().ChallengeRegularType,
+    Callback = function(value)
+        getgenv().ChallengeRegularType = value
+        getgenv().Config.dropdowns.ChallengeRegularType = value
+        getgenv().SaveConfig(getgenv().Config)
+    end
+}, "ChallengeRegularType")
+
+createInput(
+    Sections.ChallengeLeft,
+    "Regular Challenge Act",
+    "ChallengeRegularAct",
+    "Act number (1-6)",
+    "Numeric",
+    function(value)
+        local num = tonumber(value)
+        if num and num >= 1 and num <= 6 then
+            getgenv().ChallengeRegularAct = tostring(num)
+        end
+    end,
+    getgenv().ChallengeRegularAct
+)
+
+Sections.ChallengeLeft:Divider()
+
+createToggle(
+    Sections.ChallengeLeft,
+    "Enable Daily Challenge",
+    "ChallengeDailyToggle",
+    function(value)
+        getgenv().ChallengeDailyEnabled = value
+        Window:Notify({
+            Title = "Daily Challenge",
+            Description = value and "Enabled" or "Disabled",
+            Lifetime = 3
+        })
+    end,
+    getgenv().ChallengeDailyEnabled
+)
+
+createInput(
+    Sections.ChallengeLeft,
+    "Daily Challenge Act",
+    "ChallengeDailyAct",
+    "Act number (1-6)",
+    "Numeric",
+    function(value)
+        local num = tonumber(value)
+        if num and num >= 1 and num <= 6 then
+            getgenv().ChallengeDailyAct = tostring(num)
+        end
+    end,
+    getgenv().ChallengeDailyAct
+)
+
+Sections.ChallengeLeft:Divider()
+
+createToggle(
+    Sections.ChallengeLeft,
+    "Enable Weekly Challenge",
+    "ChallengeWeeklyToggle",
+    function(value)
+        getgenv().ChallengeWeeklyEnabled = value
+        Window:Notify({
+            Title = "Weekly Challenge",
+            Description = value and "Enabled" or "Disabled",
+            Lifetime = 3
+        })
+    end,
+    getgenv().ChallengeWeeklyEnabled
+)
+
+createInput(
+    Sections.ChallengeLeft,
+    "Weekly Challenge Act",
+    "ChallengeWeeklyAct",
+    "Act number (1-6)",
+    "Numeric",
+    function(value)
+        local num = tonumber(value)
+        if num and num >= 1 and num <= 6 then
+            getgenv().ChallengeWeeklyAct = tostring(num)
+        end
+    end,
+    getgenv().ChallengeWeeklyAct
+)
+
+Sections.ChallengeLeft:Divider()
+
+Sections.ChallengeLeft:SubLabel({ Text = "How it works: Will teleport to Challenge door and join selected types." })
+
+end
 
 Sections.DivineCrafterLeft:Header({ Text = "🔨 Divine Crafter - Auto Craft" })
 Sections.DivineCrafterLeft:SubLabel({ Text = "Automatically craft items from the Divine Crafter" })
@@ -12010,7 +12399,7 @@ for i = 1, 6 do
         "Place Cap " .. i,
         "AutoPlayPlaceCap" .. i,
         0,
-        5,
+        30,
         getgenv().AutoPlayConfig.placeCaps[i],
         function(value)
             getgenv().AutoPlayConfig.placeCaps[i] = math.floor(value)
@@ -12826,6 +13215,8 @@ getgenv().WebhookEnabled = getgenv().Config.toggles.WebhookToggle or false
 getgenv().WebhookURL = getgenv().Config.inputs.WebhookURL or ""
 getgenv().DiscordUserID = getgenv().Config.inputs.DiscordUserID or ""
 getgenv().PingOnSecretDrop = getgenv().Config.toggles.PingOnSecretToggle or false
+getgenv().WebhookSeparateUnitDrop = getgenv().Config.toggles.WebhookSeparateUnitDrop or false
+getgenv().WebhookPingOnUnit = getgenv().Config.toggles.WebhookPingOnUnit or false
 
 createToggle(
     Sections.WebhookLeft,
@@ -12908,6 +13299,39 @@ createToggle(
         })
     end,
     getgenv().PingOnSecretDrop
+)
+
+getgenv().WebhookSeparateUnitDrop = getgenv().Config.toggles.WebhookSeparateUnitDrop or false
+getgenv().WebhookPingOnUnit = getgenv().Config.toggles.WebhookPingOnUnit or false
+
+createToggle(
+    Sections.WebhookLeft,
+    "Separate Webhook for Unit Drops",
+    "WebhookSeparateUnitDrop",
+    function(value)
+        getgenv().WebhookSeparateUnitDrop = value
+        Window:Notify({
+            Title = "Separate Unit Webhook",
+            Description = value and "Enabled" or "Disabled",
+            Lifetime = 3
+        })
+    end,
+    getgenv().WebhookSeparateUnitDrop
+)
+
+createToggle(
+    Sections.WebhookLeft,
+    "Ping on Unit Drop (Separate Webhook)",
+    "WebhookPingOnUnit",
+    function(value)
+        getgenv().WebhookPingOnUnit = value
+        Window:Notify({
+            Title = "Ping on Unit",
+            Description = value and "Enabled" or "Disabled",
+            Lifetime = 3
+        })
+    end,
+    getgenv().WebhookPingOnUnit
 )
 
 Sections.WebhookLeft:Divider()
@@ -19240,7 +19664,46 @@ do
             end
             
             table.insert(embedFields, { name = "Units", value = truncateField(unitsText ~= "" and unitsText or "No units", 1024), inline = false })
-            table.insert(embedFields, { name = "Match Result", value = truncateField((matchTime or "00:00:00") .. " - Wave " .. tostring(matchWave or "0") .. "\n" .. (mapName or "Unknown Map") .. ((mapDifficulty and mapDifficulty ~= "Unknown") and (" [" .. mapDifficulty .. "]") or "") .. " - " .. (matchResult or "Unknown"), 1024), inline = false })
+            
+            local matchResultValue = ""
+            local actNumber = "Unknown"
+            
+            local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+            if playerGui then
+                local rightFrame = playerGui:FindFirstChild("Right")
+                if rightFrame then
+                    local frame1 = rightFrame:FindFirstChild("Frame")
+                    if frame1 then
+                        local frame2 = frame1:FindFirstChild("Frame")
+                        if frame2 then
+                            local frame3 = frame2:FindFirstChild("Frame")
+                            if frame3 then
+                                local textLabel = frame3:FindFirstChild("TextLabel")
+                                if textLabel and textLabel.Text then
+                                    local actMatch = textLabel.Text:match("Act (%d+)")
+                                    if actMatch then
+                                        actNumber = actMatch
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+            
+            if currentGamemode and currentGamemode ~= "Unknown" and mapName and mapName ~= "Unknown Map" then
+                matchResultValue = currentGamemode .. " " .. mapName .. " Act " .. actNumber
+            else
+                matchResultValue = (mapName or "Unknown Map")
+            end
+            
+            if mapDifficulty and mapDifficulty ~= "Unknown" then
+                matchResultValue = matchResultValue .. " [" .. mapDifficulty .. "]"
+            end
+            
+            matchResultValue = matchResultValue .. " - " .. (matchTime or "00:00:00") .. " - Wave " .. tostring(matchWave or "0") .. "\n" .. (matchResult or "Unknown")
+            
+            table.insert(embedFields, { name = "Match Result", value = truncateField(matchResultValue, 1024), inline = false })
             
             if getgenv().WebhookIncludePlayerCount or getgenv().WebhookIncludePlayerNames then
                 local playerInfo = ""
@@ -19372,6 +19835,50 @@ do
             if not sendSuccess then
                 warn("[Webhook] ❌ Failed to send after " .. maxAttempts .. " attempts")
                 warn("[Webhook] Check webhook URL and network connection")
+            end
+            
+            if sendSuccess and hasUnitDrop and getgenv().WebhookSeparateUnitDrop then
+                task.wait(1)
+                
+                local unitWebhookContent = ""
+                if getgenv().WebhookPingOnUnit and getgenv().DiscordUserID and getgenv().DiscordUserID ~= "" then
+                    unitWebhookContent = "<@" .. getgenv().DiscordUserID .. "> 🎁 **UNIT DROP DETECTED**"
+                end
+                
+                local unitEmbed = {
+                    title = "🎁 Unit Drop Alert",
+                    description = "**A new unit has been obtained!**\n\n**Unit:** " .. unitDropName .. "\n**Username:** ||" .. LocalPlayer.Name .. "||\n**Map:** " .. (mapName or "Unknown") .. "\n**Time:** " .. (matchTime or "00:00:00"),
+                    color = 0xFFD700,
+                    fields = {
+                        { name = "Match Result", value = (matchResult or "Unknown"), inline = true },
+                        { name = "Wave", value = tostring(matchWave or "0"), inline = true }
+                    },
+                    footer = { text = (getgenv()._MemoryProfiler and getgenv()._MemoryProfiler.stat0x1 or "Byorl Last Stand") .. " | " .. (getgenv()._MemoryProfiler and getgenv()._MemoryProfiler.stat0x2 or "https://discord.gg/V3WcdHpd3J") }
+                }
+                
+                print("[Webhook] Sending separate unit drop webhook...")
+                local unitSendSuccess = false
+                local unitAttempts = 0
+                
+                while not unitSendSuccess and unitAttempts < 2 do
+                    unitAttempts = unitAttempts + 1
+                    local ok, result = pcall(function()
+                        if unitWebhookContent ~= "" then
+                            return SendMessageEMBED(getgenv().WebhookURL, unitEmbed, unitWebhookContent)
+                        else
+                            return SendMessageEMBED(getgenv().WebhookURL, unitEmbed)
+                        end
+                    end)
+                    
+                    if ok and result then
+                        unitSendSuccess = true
+                        print("[Webhook] ✅ Separate unit webhook sent!")
+                    else
+                        if unitAttempts < 2 then
+                            task.wait(1)
+                        end
+                    end
+                end
             end
         end)
         
