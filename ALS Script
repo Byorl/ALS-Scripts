@@ -8631,14 +8631,26 @@ local modeSuccess, modeErr = pcall(function()
             if #maps == 0 then
                 maps = {"No Maps Available"}
             end
+            
+            local savedMap = getgenv().AutoJoinConfig.map
+            local mapIndex = 1
+            if savedMap and savedMap ~= "" then
+                for i, mapName in ipairs(maps) do
+                    if mapName == savedMap then
+                        mapIndex = i
+                        break
+                    end
+                end
+            end
+            
             if getgenv()._autoJoinMapDropdown then
                 pcall(function()
                     getgenv()._autoJoinMapDropdown:ClearOptions()
                     getgenv()._autoJoinMapDropdown:InsertOptions(maps)
                     if #maps > 0 then
-                        getgenv()._autoJoinMapDropdown:UpdateSelection(1)
-                        getgenv().AutoJoinConfig.map = maps[1]
-                        getgenv().Config.autoJoin.map = maps[1]
+                        getgenv()._autoJoinMapDropdown:UpdateSelection(mapIndex)
+                        getgenv().AutoJoinConfig.map = maps[mapIndex]
+                        getgenv().Config.autoJoin.map = maps[mapIndex]
                         saveConfig(getgenv().Config)
                     end
                 end)
@@ -9023,6 +9035,11 @@ task.spawn(function()
         end
         
         pcall(function()
+            local joinDelay = getgenv().AutoJoinDelay or 0
+            if joinDelay > 0 then
+                task.wait(joinDelay)
+            end
+            
             local mode = getgenv().AutoJoinConfig.mode
             local map = getgenv().AutoJoinConfig.map
             local act = getgenv().AutoJoinConfig.act or 1
