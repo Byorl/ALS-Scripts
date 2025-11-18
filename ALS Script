@@ -7306,25 +7306,20 @@ local function executeAction(action, retryCount)
         
         local towerNameToFind = getgenv()._GetActualTowerName(action.TowerName)
         local ezaDisplayName = action.TowerName
+        local isEZAUnit = ezaDisplayName:match("EZA$")
         
         for _, t in pairs(workspace.Towers:GetChildren()) do
             local owner = t:FindFirstChild("Owner")
             if owner and owner.Value == LocalPlayer then
-                local matches = (t.Name == towerNameToFind)
+                local matches = false
                 
-                if not matches and ezaDisplayName:match("EZA$") then
-                    local clientData = getClientData()
-                    if clientData and clientData.Slots then
-                        for _, slotData in pairs(clientData.Slots) do
-                            if slotData and slotData.Value == towerNameToFind and slotData.UnitID then
-                                local unitData = clientData.UnitData and clientData.UnitData[slotData.UnitID]
-                                if unitData and unitData.EZA == true then
-                                    matches = (t.Name == towerNameToFind)
-                                    break
-                                end
-                            end
-                        end
+                if isEZAUnit then
+                    matches = (t.Name == towerNameToFind .. "EZA")
+                    if not matches then
+                        matches = (t.Name == towerNameToFind)
                     end
+                else
+                    matches = (t.Name == towerNameToFind)
                 end
                 
                 if matches then
