@@ -7304,8 +7304,9 @@ local function executeAction(action, retryCount)
         local towers = {}
         local allTowers = {}
         
-        local isEZAUnit = action.TowerName:match("EZA$")
         local towerNameToFind = getgenv()._GetActualTowerName(action.TowerName)
+        local ezaDisplayName = action.TowerName
+        local isEZAUnit = ezaDisplayName:match("EZA$")
         
         for _, t in pairs(workspace.Towers:GetChildren()) do
             local owner = t:FindFirstChild("Owner")
@@ -7313,7 +7314,10 @@ local function executeAction(action, retryCount)
                 local matches = false
                 
                 if isEZAUnit then
-                    matches = (t.Name == towerNameToFind .. "EZA") or (t.Name == towerNameToFind)
+                    matches = (t.Name == towerNameToFind .. "EZA")
+                    if not matches then
+                        matches = (t.Name == towerNameToFind)
+                    end
                 else
                     matches = (t.Name == towerNameToFind)
                 end
