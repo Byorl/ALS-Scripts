@@ -14386,6 +14386,63 @@ Sections.FinalExpeditionRight:SubLabel({
     Text = "1 = Highest priority, 3 = Lowest priority"
 })
 
+Sections.FinalExpeditionRight:Divider()
+
+Sections.FinalExpeditionRight:Header({ Text = "📦 Auto Open Chests" })
+Sections.FinalExpeditionRight:SubLabel({ Text = "Automatically open Final Expedition chests" })
+
+getgenv().FinalExpAutoOpenChestsEnabled = getgenv().Config.toggles.FinalExpAutoOpenChestsToggle or false
+getgenv().FinalExpChestType = getgenv().Config.dropdowns.FinalExpChestType or "Prismatic Loot Chest"
+getgenv().FinalExpChestAmount = getgenv().Config.inputs.FinalExpChestAmount or "1"
+
+createToggle(
+    Sections.FinalExpeditionRight,
+    "Auto Open Chests",
+    "FinalExpAutoOpenChestsToggle",
+    function(value)
+        getgenv().FinalExpAutoOpenChestsEnabled = value
+        Window:Notify({
+            Title = "Final Expedition",
+            Description = value and "Auto Open Chests Enabled" or "Auto Open Chests Disabled",
+            Lifetime = 3
+        })
+    end,
+    getgenv().FinalExpAutoOpenChestsEnabled
+)
+
+Sections.FinalExpeditionRight:Dropdown({
+    Name = "Chest Type",
+    Search = false,
+    Multi = false,
+    Required = false,
+    Options = {"Prismatic Loot Chest", "Godly Loot Chest", "Standard Loot Chest", "Shabby Loot Chest"},
+    Default = getgenv().FinalExpChestType,
+    Callback = function(value)
+        getgenv().FinalExpChestType = value
+        getgenv().Config.dropdowns.FinalExpChestType = value
+        getgenv().SaveConfig(getgenv().Config)
+    end
+}, "FinalExpChestType")
+
+createInput(
+    Sections.FinalExpeditionRight,
+    "Amount to Open",
+    "FinalExpChestAmount",
+    "Number of chests",
+    "Numeric",
+    function(value)
+        local num = tonumber(value)
+        if num and num >= 1 then
+            getgenv().FinalExpChestAmount = tostring(num)
+        end
+    end,
+    getgenv().FinalExpChestAmount
+)
+
+Sections.FinalExpeditionRight:SubLabel({
+    Text = "Opens chests when in lobby"
+})
+
 
 Sections.SeamlessFixLeft:Header({ Text = "🔄 Automation Settings" })
 Sections.SeamlessFixLeft:Divider()
@@ -17853,6 +17910,39 @@ task.spawn(function()
                 end
             end
         end)
+    end
+end)
+
+task.spawn(function()
+    while true do
+        task.wait(5)
+        
+        if getgenv().FinalExpAutoOpenChestsEnabled then
+            pcall(function()
+                local currentlyInLobby = false
+                pcall(function()
+                    local lobbyCheck = workspace:FindFirstChild("Lobby")
+                    currentlyInLobby = lobbyCheck ~= nil
+                end)
+                
+                if not currentlyInLobby then
+                    return
+                end
+                
+                local remotes = RS:FindFirstChild("Remotes")
+                if not remotes then return end
+                
+                local chestRemote = remotes:FindFirstChild("RedeemFinalExpeditionChestEvent")
+                if not chestRemote then return end
+                
+                local chestType = getgenv().FinalExpChestType or "Prismatic Loot Chest"
+                local amount = tonumber(getgenv().FinalExpChestAmount) or 1
+                
+                chestRemote:FireServer(chestType, amount)
+                print("[Final Expedition] Opened " .. amount .. "x " .. chestType)
+                task.wait(2)
+            end)
+        end
     end
 end)
 
