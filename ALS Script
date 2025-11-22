@@ -5965,6 +5965,10 @@ task.spawn(function()
     while true do
         task.wait(5)
         
+        if getgenv()._ChallengePriorityActive then
+            continue
+        end
+        
         if getgenv().ExtremeBoostEnabled then
             pcall(function()
                 local remotes = RS:FindFirstChild("Remotes")
@@ -6035,12 +6039,67 @@ task.spawn(function()
     end
 end)
 
+getgenv()._ChallengePriorityActive = false
+
 task.spawn(function()
     while true do
         task.wait(5)
         
+        local clientData = getClientData()
+        if not clientData then
+            task.wait(5)
+            continue
+        end
+        
+        local halfHourlyTime = clientData.LastChallengeHalfHourlyTime or 0
+        local weeklyTime = clientData.LastChallengeWeeklyTime or 0
+        local dailyTime = clientData.LastChallengeDailyTime or 0
+        
+        local challengeReady = halfHourlyTime == 0
+        local shouldPrioritizeChallenge = getgenv().ChallengeReturnToLobbyEnabled and challengeReady and getgenv().ChallengeRegularEnabled
+        
+        if shouldPrioritizeChallenge then
+            local currentlyInLobby = false
+            pcall(function()
+                local lobbyCheck = workspace:FindFirstChild("Lobby")
+                currentlyInLobby = lobbyCheck ~= nil
+            end)
+            
+            if not currentlyInLobby then
+                local gameStarted = false
+                pcall(function()
+                    local gs = RS:FindFirstChild("GameStarted")
+                    if gs and gs.Value ~= nil then
+                        gameStarted = gs.Value
+                    end
+                end)
+                
+                if gameStarted and not getgenv()._ChallengePriorityActive then
+                    getgenv()._ChallengePriorityActive = true
+                    print("[Challenge Priority] Challenge ready! Waiting for game to end to return to lobby...")
+                end
+                
+                task.wait(5)
+                continue
+            end
+            
+            getgenv()._ChallengePriorityActive = false
+        else
+            getgenv()._ChallengePriorityActive = false
+        end
+        
         if getgenv().ChallengeRegularEnabled or getgenv().ChallengeDailyEnabled or getgenv().ChallengeWeeklyEnabled then
             pcall(function()
+                local currentlyInLobby = false
+                pcall(function()
+                    local lobbyCheck = workspace:FindFirstChild("Lobby")
+                    currentlyInLobby = lobbyCheck ~= nil
+                end)
+                
+                if not currentlyInLobby then
+                    return
+                end
+                
                 local remotes = RS:FindFirstChild("Remotes")
                 if not remotes then return end
                 
@@ -6049,12 +6108,6 @@ task.spawn(function()
                 
                 local interactRemote = teleporterRemote:FindFirstChild("Interact")
                 if not interactRemote then return end
-                
-                local clientData = getClientData()
-                if not clientData then return end
-                
-                local weeklyTime = clientData.LastChallengeWeeklyTime or 0
-                local dailyTime = clientData.LastChallengeDailyTime or 0
                 
                 local teleporterFolder = workspace:FindFirstChild("TeleporterFolder")
                 if teleporterFolder then
@@ -6079,11 +6132,10 @@ task.spawn(function()
                     interactRemote:FireServer("Select", "Challenge", "Daily", 1)
                     print("[Challenge] Joined Daily - Act 1")
                     task.wait(3)
-                elseif getgenv().ChallengeRegularEnabled and dailyTime > 0 then
+                elseif getgenv().ChallengeRegularEnabled and halfHourlyTime == 0 then
                     local challengeType = getgenv().ChallengeRegularType or "Pearl"
-                    local act = tonumber(getgenv().ChallengeRegularAct) or 1
-                    interactRemote:FireServer("Select", "Challenge", challengeType, act)
-                    print("[Challenge] Joined Regular - " .. challengeType .. " Act " .. act)
+                    interactRemote:FireServer("Select", "Challenge", challengeType, 1)
+                    print("[Challenge] Joined Regular - " .. challengeType .. " Act 1")
                     task.wait(3)
                 end
             end)
@@ -7306,20 +7358,25 @@ local function executeAction(action, retryCount)
         
         local towerNameToFind = getgenv()._GetActualTowerName(action.TowerName)
         local ezaDisplayName = action.TowerName
-        local isEZAUnit = ezaDisplayName:match("EZA$")
         
         for _, t in pairs(workspace.Towers:GetChildren()) do
             local owner = t:FindFirstChild("Owner")
             if owner and owner.Value == LocalPlayer then
-                local matches = false
+                local matches = (t.Name == towerNameToFind)
                 
-                if isEZAUnit then
-                    matches = (t.Name == towerNameToFind .. "EZA")
-                    if not matches then
-                        matches = (t.Name == towerNameToFind)
+                if not matches and ezaDisplayName:match("EZA$") then
+                    local clientData = getClientData()
+                    if clientData and clientData.Slots then
+                        for _, slotData in pairs(clientData.Slots) do
+                            if slotData and slotData.Value == towerNameToFind and slotData.UnitID then
+                                local unitData = clientData.UnitData and clientData.UnitData[slotData.UnitID]
+                                if unitData and unitData.EZA == true then
+                                    matches = (t.Name == towerNameToFind)
+                                    break
+                                end
+                            end
+                        end
                     end
-                else
-                    matches = (t.Name == towerNameToFind)
                 end
                 
                 if matches then
@@ -9158,6 +9215,10 @@ task.spawn(function()
     while true do
         task.wait(pollingInterval)
         
+        if getgenv()._ChallengePriorityActive then
+            continue
+        end
+        
         if getgenv().AutoJoinConfig and getgenv().AutoJoinConfig.enabled then
             pcall(function()
                 local mode = getgenv().AutoJoinConfig.mode
@@ -9207,6 +9268,10 @@ task.spawn(function()
     local pollingInterval = MobileOptimizer:getPollingInterval(2)
     
     while task.wait(pollingInterval) do
+        if getgenv()._ChallengePriorityActive then
+            continue
+        end
+        
         if not getgenv().AutoJoinConfig or not getgenv().AutoJoinConfig.enabled then
             continue
         end
@@ -9955,6 +10020,10 @@ task.spawn(function()
     while true do
         task.wait(pollingInterval)
         
+        if getgenv()._ChallengePriorityActive then
+            continue
+        end
+        
         if getgenv().InfinityCastleAutoJoinEnabled then
             ErrorHandler:wrapAsync(function()
                 local remotes = RS:FindFirstChild("Remotes")
@@ -10430,7 +10499,6 @@ getgenv().ChallengeRegularEnabled = getgenv().Config.toggles.ChallengeRegularTog
 getgenv().ChallengeDailyEnabled = getgenv().Config.toggles.ChallengeDailyToggle or false
 getgenv().ChallengeWeeklyEnabled = getgenv().Config.toggles.ChallengeWeeklyToggle or false
 getgenv().ChallengeRegularType = getgenv().Config.dropdowns.ChallengeRegularType or "Pearl"
-getgenv().ChallengeRegularAct = getgenv().Config.inputs.ChallengeRegularAct or "1"
 
 createToggle(
     Sections.ChallengeLeft,
@@ -10447,6 +10515,22 @@ createToggle(
     getgenv().ChallengeRegularEnabled
 )
 
+getgenv().ChallengeReturnToLobbyEnabled = getgenv().Config.toggles.ChallengeReturnToLobbyToggle or false
+createToggle(
+    Sections.ChallengeLeft,
+    "Return to Lobby when Challenge Ready",
+    "ChallengeReturnToLobbyToggle",
+    function(value)
+        getgenv().ChallengeReturnToLobbyEnabled = value
+        Window:Notify({
+            Title = "Challenge Priority",
+            Description = value and "Will prioritize Challenge over other modes" or "Normal mode priority",
+            Lifetime = 3
+        })
+    end,
+    getgenv().ChallengeReturnToLobbyEnabled
+)
+
 Sections.ChallengeLeft:Dropdown({
     Name = "Regular Challenge Type",
     Search = false,
@@ -10461,20 +10545,7 @@ Sections.ChallengeLeft:Dropdown({
     end
 }, "ChallengeRegularType")
 
-createInput(
-    Sections.ChallengeLeft,
-    "Regular Challenge Act",
-    "ChallengeRegularAct",
-    "Act number (1-6)",
-    "Numeric",
-    function(value)
-        local num = tonumber(value)
-        if num and num >= 1 and num <= 6 then
-            getgenv().ChallengeRegularAct = tostring(num)
-        end
-    end,
-    getgenv().ChallengeRegularAct
-)
+
 
 Sections.ChallengeLeft:Divider()
 
@@ -15343,14 +15414,38 @@ task.spawn(function()
                 end
             end
             
-            if getgenv().AutoSmartEnabled then
-                if nextButton and nextButton.Visible then
+            local shouldForceLeave = false
+            if getgenv()._ChallengePriorityActive and leaveButton and leaveButton.Visible then
+                shouldForceLeave = true
+                buttonToPress = leaveButton
+                actionName = "Leave (Challenge Priority)"
+                print("[Challenge Priority] Forcing Leave to return to lobby for challenge")
+            end
+            
+            if not shouldForceLeave then
+                if getgenv().AutoSmartEnabled then
+                    if nextButton and nextButton.Visible then
+                        buttonToPress = nextButton
+                        actionName = "Next"
+                    elseif retryButton and retryButton.Visible then
+                        buttonToPress = retryButton
+                        actionName = "Retry"
+                    elseif leaveButton and leaveButton.Visible then
+                        if isFinalExpedition and nextButton and nextButton.Visible then
+                            buttonToPress = nextButton
+                            actionName = "Next"
+                        else
+                            buttonToPress = leaveButton
+                            actionName = "Leave"
+                        end
+                    end
+                elseif getgenv().AutoNextEnabled and nextButton and nextButton.Visible then
                     buttonToPress = nextButton
                     actionName = "Next"
-                elseif retryButton and retryButton.Visible then
+                elseif getgenv().AutoFastRetryEnabled and retryButton and retryButton.Visible then
                     buttonToPress = retryButton
                     actionName = "Retry"
-                elseif leaveButton and leaveButton.Visible then
+                elseif getgenv().AutoLeaveEnabled and leaveButton and leaveButton.Visible then
                     if isFinalExpedition and nextButton and nextButton.Visible then
                         buttonToPress = nextButton
                         actionName = "Next"
@@ -15358,20 +15453,6 @@ task.spawn(function()
                         buttonToPress = leaveButton
                         actionName = "Leave"
                     end
-                end
-            elseif getgenv().AutoNextEnabled and nextButton and nextButton.Visible then
-                buttonToPress = nextButton
-                actionName = "Next"
-            elseif getgenv().AutoFastRetryEnabled and retryButton and retryButton.Visible then
-                buttonToPress = retryButton
-                actionName = "Retry"
-            elseif getgenv().AutoLeaveEnabled and leaveButton and leaveButton.Visible then
-                if isFinalExpedition and nextButton and nextButton.Visible then
-                    buttonToPress = nextButton
-                    actionName = "Next"
-                else
-                    buttonToPress = leaveButton
-                    actionName = "Leave"
                 end
             end
             
@@ -16595,12 +16676,32 @@ do
                             return
                         end
                         
+                        local hasAbility = false
+                        pcall(function()
+                            local abilities = bulma:FindFirstChild("Abilities")
+                            if abilities then
+                                for _, ability in pairs(abilities:GetChildren()) do
+                                    if ability.Name == "Summon Wish Dragon" then
+                                        hasAbility = true
+                                        break
+                                    end
+                                end
+                            end
+                        end)
+                        
+                        if not hasAbility then
+                            getgenv().BulmaWishUsedThisRound = false
+                            return
+                        end
+                        
                         local summonSuccess, summonErr = pcall(function()
                             abilityRemote:InvokeServer(bulma, "Summon Wish Dragon")
                         end)
                         
                         if not summonSuccess then
-                            warn("[Bulma] Failed to summon wish dragon: " .. tostring(summonErr))
+                            if not tostring(summonErr):find("function could not be found") then
+                                warn("[Bulma] Failed to summon wish dragon: " .. tostring(summonErr))
+                            end
                             getgenv().BulmaWishUsedThisRound = false
                             return
                         end
@@ -16613,7 +16714,9 @@ do
                         end)
                         
                         if not wishSuccess then
-                            warn("[Bulma] Failed to use wish: " .. tostring(wishErr))
+                            if not tostring(wishErr):find("function could not be found") then
+                                warn("[Bulma] Failed to use wish: " .. tostring(wishErr))
+                            end
                             getgenv().BulmaWishUsedThisRound = false
                             return
                         end
@@ -17782,6 +17885,10 @@ end)
 task.spawn(function()
     while true do
         task.wait(2)
+        
+        if getgenv()._ChallengePriorityActive then
+            continue
+        end
         
         local currentlyInLobby = false
         pcall(function()
