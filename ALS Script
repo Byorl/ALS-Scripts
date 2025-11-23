@@ -3176,25 +3176,29 @@ if not getgenv()._AutoRejoinSetup then
         
         local GAME_PLACE_ID = 12886143095
         
-        local success, err = pcall(function()
-            TeleportService:Teleport(GAME_PLACE_ID, LocalPlayer)
-        end)
+        local retryCount = 0
+        local maxRetries = math.huge
         
-        if success then
-            getgenv()._LastAutoRejoinTime = tick()
-        else
-            local errorMsg = tostring(err)
-            if errorMsg:find("277") or errorMsg:find("Disconnected") then
-                warn("[Auto Rejoin] Error 277 detected, waiting longer before retry...")
-                task.wait(15)
-            else
-                debugPrint("[Auto Rejoin] Retrying in 5s...")
-                task.wait(5)
-            end
-            
-            pcall(function()
+        while retryCount < maxRetries do
+            local success, err = pcall(function()
                 TeleportService:Teleport(GAME_PLACE_ID, LocalPlayer)
             end)
+            
+            if success then
+                getgenv()._LastAutoRejoinTime = tick()
+                break
+            else
+                retryCount = retryCount + 1
+                local errorMsg = tostring(err)
+                
+                if errorMsg:find("277") or errorMsg:find("Disconnected") then
+                    warn("[Auto Rejoin] Error 277 detected, retry #" .. retryCount .. " in 15s...")
+                    task.wait(15)
+                else
+                    warn("[Auto Rejoin] Retry #" .. retryCount .. " in 5s...")
+                    task.wait(5)
+                end
+            end
         end
     end
     
@@ -16674,7 +16678,7 @@ do
             lastWave = currentWave
             
             if getgenv().BulmaEnabled then
-                local success, err = pcall(function()
+                pcall(function()
                     local towers = workspace:FindFirstChild("Towers")
                     if not towers then return end
                     
@@ -16769,10 +16773,6 @@ do
                         })
                     end
                 end)
-                
-                if not success then
-                    warn("[Bulma] Error: " .. tostring(err))
-                end
             end
         end
     end)
@@ -21324,10 +21324,24 @@ task.spawn(function()
                         end
                     end
                     
-                    openRemote:FireServer("TreatCandyBag", candyBagAmount)
-                    print("[Auto Open Candy Bag] Opened " .. candyBagAmount .. " bags")
-                    task.wait(0.5)
-                    clickAllPromptButtons()
+                    local totalOpened = 0
+                    local remaining = candyBagAmount
+                    local batchSize = 1000
+                    
+                    while remaining > 0 do
+                        local toOpen = math.min(remaining, batchSize)
+                        openRemote:FireServer("TreatCandyBag", toOpen)
+                        totalOpened = totalOpened + toOpen
+                        remaining = remaining - toOpen
+                        
+                        print("[Auto Open Candy Bag] Opened " .. toOpen .. " bags (" .. totalOpened .. "/" .. candyBagAmount .. ")")
+                        task.wait(0.5)
+                        clickAllPromptButtons()
+                        
+                        if remaining > 0 then
+                            task.wait(1)
+                        end
+                    end
                     
                     local waitTime = math.min(3 + (candyBagAmount / 10000), 10)
                     task.wait(waitTime)
@@ -21386,10 +21400,24 @@ task.spawn(function()
                         end
                     end
                     
-                    openRemote:FireServer("BigTreatCandyBag", bigCandyBagAmount)
-                    print("[Auto Open Big Candy Bag] Opened " .. bigCandyBagAmount .. " bags")
-                    task.wait(0.5)
-                    clickAllPromptButtons()
+                    local totalOpened = 0
+                    local remaining = bigCandyBagAmount
+                    local batchSize = 1000
+                    
+                    while remaining > 0 do
+                        local toOpen = math.min(remaining, batchSize)
+                        openRemote:FireServer("BigTreatCandyBag", toOpen)
+                        totalOpened = totalOpened + toOpen
+                        remaining = remaining - toOpen
+                        
+                        print("[Auto Open Big Candy Bag] Opened " .. toOpen .. " bags (" .. totalOpened .. "/" .. bigCandyBagAmount .. ")")
+                        task.wait(0.5)
+                        clickAllPromptButtons()
+                        
+                        if remaining > 0 then
+                            task.wait(1)
+                        end
+                    end
                     
                     local waitTime = math.min(3 + (bigCandyBagAmount / 10000), 10)
                     task.wait(waitTime)
@@ -23857,33 +23885,24 @@ if not isInLobby then
                 
                 if getgenv().AutoPlayConfig.autoUpgradePriority then
                     for _, data in ipairs(allUnits) do
-                        if upgraded then break end
-                        
                         currentCash = tonumber(getgenv().MacroCurrentCash) or 0
                         
-                        
                         if data.cost > 0 and currentCash >= data.cost then
-                            local prefix = data.isFarm and "[FARM] " or ""
                             if upgradeTower(data.tower) then
                                 upgraded = true
                                 task.wait(0.05)
-
                             end
                         end
                     end
                 else
                     for _, data in ipairs(allUnits) do
-                        if upgraded then break end
                         currentCash = tonumber(getgenv().MacroCurrentCash) or 0
-                        
                         
                         if data.cost > 0 and currentCash >= data.cost then
                             if upgradeTower(data.tower) then
                                 upgraded = true
                                 task.wait(0.05)
-
                             end
-                       
                         end
                     end
                 end
