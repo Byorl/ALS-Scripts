@@ -10777,6 +10777,10 @@ getgenv().BulmaWishUsedThisRound = false
 getgenv().WukongEnabled = getgenv().Config.toggles.WukongToggle or false
 getgenv().WukongTrackedClones = {}
 
+getgenv().BurningHeroEnabled = getgenv().Config.toggles.BurningHeroToggle or false
+
+getgenv().PocheEnabled = getgenv().Config.toggles.PocheToggle or false
+
 getgenv().SkeletonKnightEnabled = getgenv().Config.toggles.SkeletonKnightToggle or false
 getgenv().SkeletonKnightTargetUnit = getgenv().Config.dropdowns.SkeletonKnightTargetUnit or ""
 getgenv().SkeletonKnightLastUse = 0
@@ -11392,6 +11396,8 @@ local function buildAutoAbilityUI()
                         "BurningHeroToggle",
                         function(value)
                             getgenv().BurningHeroEnabled = value
+                            getgenv().Config.toggles.BurningHeroToggle = value
+                            saveConfig(getgenv().Config)
                             Window:Notify({
                                 Title = "Auto Burning Hero",
                                 Description = value and "Enabled" or "Disabled",
@@ -11411,6 +11417,8 @@ local function buildAutoAbilityUI()
                         "PocheToggle",
                         function(value)
                             getgenv().PocheEnabled = value
+                            getgenv().Config.toggles.PocheToggle = value
+                            saveConfig(getgenv().Config)
                             Window:Notify({
                                 Title = "Auto Poche",
                                 Description = value and "Enabled" or "Disabled",
@@ -17152,8 +17160,21 @@ do
                 
                 if spa.Value ~= 1 then return end
                 
+                local meters = burningHero:FindFirstChild("Meters")
+                if not meters then return end
+                
+                local hyperDriver = meters:FindFirstChild("HyperDriver")
+                if not hyperDriver then return end
+                
+                local hyperValue = hyperDriver:GetAttribute("Value") or 0
+                local hyperMax = hyperDriver:GetAttribute("MaxValue") or 100
+                
+                if hyperValue ~= hyperMax then return end
+                
                 local currentTime = tick()
                 if currentTime - lastSPAUseTime >= 5 then
+                    task.wait(math.random(10, 20) / 10)
+                    
                     local remotes = RS:FindFirstChild("Remotes")
                     if not remotes then return end
                     
@@ -17242,6 +17263,8 @@ do
                 if gravityValue >= 101 then
                     local currentTime = tick()
                     if currentTime - lastResetUseTime >= 5 then
+                        task.wait(math.random(10, 20) / 10)
+                        
                         local remotes = RS:FindFirstChild("Remotes")
                         if not remotes then return end
                         
