@@ -11270,15 +11270,6 @@ local function buildAutoAbilityUI()
         local clientData = getClientData()
         if clientData and clientData.Slots then
             local hasBulma = false
-            for _, slotName in ipairs({"Slot1", "Slot2", "Slot3", "Slot4", "Slot5", "Slot6"}) do
-                local slotData = clientData.Slots[slotName]
-                if slotData and slotData.Value == "Bulma" then
-                    hasBulma = true
-                    break
-                end
-            end
-            
-            local hasBulma = false
             local hasWukong = false
             local hasSkeletonKnightEZA = false
             
@@ -11325,6 +11316,10 @@ local function buildAutoAbilityUI()
                     hasAlucardEvo = true
                     break
                 end
+            end
+            
+            if hasBulma or hasWukong or hasSkeletonKnightEZA or hasEtoEvo or hasGriffithEclipse or hasAlucardEvo then
+                anyBuilt = true
             end
             
             local specialSection = Tabs.Abilities:Section({ Side = "Left" })
@@ -11385,6 +11380,44 @@ local function buildAutoAbilityUI()
                             })
                         end,
                         getgenv().WukongEnabled
+                    )
+                end
+                
+                specialSection:Divider()
+                
+                do
+                    createToggle(
+                        specialSection,
+                        "Auto Burning Hero (Fused)",
+                        "BurningHeroToggle",
+                        function(value)
+                            getgenv().BurningHeroEnabled = value
+                            Window:Notify({
+                                Title = "Auto Burning Hero",
+                                Description = value and "Enabled" or "Disabled",
+                                Lifetime = 2
+                            })
+                        end,
+                        getgenv().BurningHeroEnabled
+                    )
+                end
+                
+                specialSection:Divider()
+                
+                do
+                    createToggle(
+                        specialSection,
+                        "Auto Poche (Made In Heaven)",
+                        "PocheToggle",
+                        function(value)
+                            getgenv().PocheEnabled = value
+                            Window:Notify({
+                                Title = "Auto Poche",
+                                Description = value and "Enabled" or "Disabled",
+                                Lifetime = 2
+                            })
+                        end,
+                        getgenv().PocheEnabled
                     )
                 end
                 
@@ -11819,9 +11852,33 @@ task.spawn(function()
             local clientData = getClientData()
             if not clientData or not clientData.Slots then return false end
             
+            local baseUnitName = unitName:gsub("EZA$", ""):gsub("Eza$", "")
+            
             for _, slotData in pairs(clientData.Slots) do
-                if slotData and slotData.Value == unitName then
-                    return false
+                if slotData and slotData.Value then
+                    local slotValue = slotData.Value
+                    
+                    if slotValue == unitName or slotValue == baseUnitName then
+                        return false
+                    end
+                    
+                    if slotData.UnitID and clientData.UnitData and clientData.UnitData[slotData.UnitID] then
+                        local unitData = clientData.UnitData[slotData.UnitID]
+                        if unitData.EZA == true then
+                            local ezaName = slotValue .. "EZA"
+                            if ezaName == unitName or ezaName == baseUnitName then
+                                return false
+                            end
+                        end
+                    elseif slotData.UnitID and clientData[slotData.UnitID] then
+                        local unitData = clientData[slotData.UnitID]
+                        if unitData.EZA == true then
+                            local ezaName = slotValue .. "EZA"
+                            if ezaName == unitName or ezaName == baseUnitName then
+                                return false
+                            end
+                        end
+                    end
                 end
             end
             
@@ -14541,6 +14598,31 @@ Sections.SeamlessFixRight:SubLabel({
 })
 
 Sections.SeamlessFixRight:Divider()
+Sections.SeamlessFixRight:Header({ Text = "🧪 Auto Vial Farm" })
+Sections.SeamlessFixRight:SubLabel({
+    Text = "Automatically return to lobby when match ends to farm vials"
+})
+
+if not getgenv().AutoVialFarmEnabled then
+    getgenv().AutoVialFarmEnabled = getgenv().Config.toggles.AutoVialFarmToggle or false
+end
+
+createToggle(
+    Sections.SeamlessFixRight,
+    "Auto Vial Farm",
+    "AutoVialFarmToggle",
+    function(value)
+        getgenv().AutoVialFarmEnabled = value
+        Window:Notify({
+            Title = "Auto Vial Farm",
+            Description = value and "Enabled - Will return to lobby on match end" or "Disabled",
+            Lifetime = 3
+        })
+    end,
+    getgenv().AutoVialFarmEnabled
+)
+
+Sections.SeamlessFixRight:Divider()
 Sections.SeamlessFixRight:Header({ Text = "🔮 Auto Enchant" })
 Sections.SeamlessFixRight:SubLabel({
     Text = "Automatically reroll enchants on your units until you get the desired one"
@@ -15348,6 +15430,24 @@ task.spawn(function()
             if not lastEndGameUIInstance then
                 lastEndGameUIInstance = endGameUI
                 endGameUIDetectedTime = tick()
+                
+                if getgenv().AutoVialFarmEnabled then
+                    task.spawn(function()
+                        task.wait(0.5)
+                        
+                        local TeleportService = game:GetService("TeleportService")
+                        local Players = game:GetService("Players")
+                        local LocalPlayer = Players.LocalPlayer
+                        
+                        print("[Auto Vial Farm] EndGameUI detected, returning to lobby...")
+                        
+                        task.wait(0.5)
+                        
+                        pcall(function()
+                            TeleportService:Teleport(12886143095, LocalPlayer)
+                        end)
+                    end)
+                end
             end
             
             if hasProcessedCurrentUI then
@@ -15470,9 +15570,15 @@ task.spawn(function()
             if not shouldForceLeave then
                 if getgenv().AutoSmartEnabled then
                     if nextButton and nextButton.Visible then
+                        if getgenv().WebhookEnabled and getgenv().WebhookProcessing then
+                            return
+                        end
                         buttonToPress = nextButton
                         actionName = "Next"
                     elseif retryButton and retryButton.Visible then
+                        if getgenv().WebhookEnabled and getgenv().WebhookProcessing then
+                            return
+                        end
                         buttonToPress = retryButton
                         actionName = "Retry"
                     elseif leaveButton and leaveButton.Visible then
@@ -15485,9 +15591,15 @@ task.spawn(function()
                         end
                     end
                 elseif getgenv().AutoNextEnabled and nextButton and nextButton.Visible then
+                    if getgenv().WebhookEnabled and getgenv().WebhookProcessing then
+                        return
+                    end
                     buttonToPress = nextButton
                     actionName = "Next"
                 elseif getgenv().AutoFastRetryEnabled and retryButton and retryButton.Visible then
+                    if getgenv().WebhookEnabled and getgenv().WebhookProcessing then
+                        return
+                    end
                     buttonToPress = retryButton
                     actionName = "Retry"
                 elseif getgenv().AutoLeaveEnabled and leaveButton and leaveButton.Visible then
@@ -16010,8 +16122,7 @@ getgenv()._AbilityHelpers2a.isOnCooldown = function(towerUniqueId, abilityName, 
     local scale = helpers1.getCurrentTimeScale()
     local effectiveCd = d.cooldown / scale
     local timeSinceUse = tick() - last
-    local cooldownRemaining = effectiveCd - timeSinceUse
-    return cooldownRemaining > 0.5
+    return timeSinceUse < (effectiveCd - 3)
 end
 
 getgenv()._AbilityHelpers2a.setAbilityUsed = function(towerUniqueId, abilityName)
@@ -16246,8 +16357,11 @@ getgenv()._ProcessAbility = function(tower, unitName, abilityName, cfg, currentW
     end
     
     if not funcs.isOnCooldown(infoName, abilityName, unitName) then
-        funcs.useAbility(tower, abilityName)
-        funcs.setAbilityUsed(infoName, abilityName)
+        task.wait(2.5)
+        if not funcs.isOnCooldown(infoName, abilityName, unitName) then
+            funcs.useAbility(tower, abilityName)
+            funcs.setAbilityUsed(infoName, abilityName)
+        end
     end
 end
 
@@ -16310,17 +16424,28 @@ task.spawn(function()
             if not getgenv().UnitAbilities or type(getgenv().UnitAbilities) ~= "table" then return end
             
             for unitName, abilitiesConfig in pairs(getgenv().UnitAbilities) do
-                local towerNameToFind = unitName
-                
-                if getgenv().EZAUnitMapping and getgenv().EZAUnitMapping[unitName] then
-                    towerNameToFind = getgenv().EZAUnitMapping[unitName]
-                end
-                
                 for _, tower in pairs(getgenv()._AbilitySystem_Towers:GetChildren()) do
                     local owner = tower:FindFirstChild("Owner")
-                    if tower.Name == towerNameToFind and owner and owner.Value == LocalPlayer then
-                        for abilityName, cfg in pairs(abilitiesConfig) do
-                            getgenv()._ProcessAbility(tower, unitName, abilityName, cfg, currentWave, hasBoss)
+                    if owner and owner.Value == LocalPlayer then
+                        local towerName = tower.Name
+                        local towerBaseName = towerName:gsub("EZA$", ""):gsub("Eza$", "")
+                        local unitBaseName = unitName:gsub("EZA$", ""):gsub("Eza$", "")
+                        
+                        local isMatch = false
+                        if towerName == unitName then
+                            isMatch = true
+                        elseif towerBaseName == unitBaseName then
+                            isMatch = true
+                        elseif towerName .. "EZA" == unitName then
+                            isMatch = true
+                        elseif unitName:find("EZA$") and towerBaseName == unitBaseName then
+                            isMatch = true
+                        end
+                        
+                        if isMatch then
+                            for abilityName, cfg in pairs(abilitiesConfig) do
+                                getgenv()._ProcessAbility(tower, unitName, abilityName, cfg, currentWave, hasBoss)
+                            end
                         end
                     end
                 end
@@ -16701,8 +16826,16 @@ do
                     
                     local ballCount = 0
                     pcall(function()
-                        ballCount = wishBalls:GetAttribute("Value") or 0
+                        ballCount = wishBalls:GetAttribute("Value") or wishBalls.Value or 0
                     end)
+                    
+                    if not pcall(function() return wishBalls:GetAttribute("Value") end) then
+                        pcall(function()
+                            if wishBalls:IsA("IntValue") or wishBalls:IsA("NumberValue") then
+                                ballCount = wishBalls.Value or 0
+                            end
+                        end)
+                    end
                     
                     if ballCount == 7 and not getgenv().BulmaWishUsedThisRound then
                         getgenv().BulmaWishUsedThisRound = true
@@ -16717,24 +16850,6 @@ do
                         local abilityRemote = remotes:FindFirstChild("Ability")
                         if not abilityRemote then
                             warn("[Bulma] Ability remote not found")
-                            getgenv().BulmaWishUsedThisRound = false
-                            return
-                        end
-                        
-                        local hasAbility = false
-                        pcall(function()
-                            local abilities = bulma:FindFirstChild("Abilities")
-                            if abilities then
-                                for _, ability in pairs(abilities:GetChildren()) do
-                                    if ability.Name == "Summon Wish Dragon" then
-                                        hasAbility = true
-                                        break
-                                    end
-                                end
-                            end
-                        end)
-                        
-                        if not hasAbility then
                             getgenv().BulmaWishUsedThisRound = false
                             return
                         end
@@ -16976,6 +17091,179 @@ do
             end
         end
     end
+    end)
+end
+
+do
+    task.spawn(function()
+        task.wait(2)
+        
+        local RS = game:GetService("ReplicatedStorage")
+        local lastWave = 0
+        local lastSPAUseTime = 0
+        
+        while true do
+            task.wait(0.5)
+            
+            local currentWave = 0
+            pcall(function()
+                local wave = RS:FindFirstChild("Wave")
+                if wave and wave.Value then
+                    currentWave = wave.Value
+                end
+            end)
+            
+            if currentWave < lastWave and currentWave <= 5 then
+                lastSPAUseTime = 0
+            end
+            
+            if getgenv().SeamlessFixEnabled and lastWave >= 50 and currentWave < 50 then
+                lastSPAUseTime = 0
+            end
+            
+            if currentWave == 1 and lastWave > 10 then
+                lastSPAUseTime = 0
+            end
+            
+            lastWave = currentWave
+            
+            if not getgenv().BurningHeroEnabled then continue end
+            
+            pcall(function()
+                local towers = workspace:FindFirstChild("Towers")
+                if not towers then return end
+                
+                local burningHero = nil
+                for _, tower in pairs(towers:GetChildren()) do
+                    local owner = tower:FindFirstChild("Owner")
+                    if tower.Name == "ShinraGodlyEZA" and owner and owner.Value == LocalPlayer then
+                        burningHero = tower
+                        break
+                    end
+                end
+                
+                if not burningHero then return end
+                
+                local stats = burningHero:FindFirstChild("Stats")
+                if not stats then return end
+                
+                local spa = stats:FindFirstChild("SPA")
+                if not spa then return end
+                
+                if spa.Value ~= 1 then return end
+                
+                local currentTime = tick()
+                if currentTime - lastSPAUseTime >= 5 then
+                    local remotes = RS:FindFirstChild("Remotes")
+                    if not remotes then return end
+                    
+                    local abilityEvent = remotes:FindFirstChild("Ability")
+                    if not abilityEvent then return end
+                    
+                    local success = pcall(function()
+                        abilityEvent:InvokeServer(burningHero, "Lightning Shower!")
+                    end)
+                    
+                    if success then
+                        lastSPAUseTime = currentTime
+                        Window:Notify({
+                            Title = "Auto Burning Hero",
+                            Description = "Lightning Shower used!",
+                            Lifetime = 2
+                        })
+                    end
+                end
+            end)
+        end
+    end)
+end
+
+do
+    task.spawn(function()
+        task.wait(2)
+        
+        local RS = game:GetService("ReplicatedStorage")
+        local lastWave = 0
+        local lastResetUseTime = 0
+        
+        while true do
+            task.wait(0.5)
+            
+            local currentWave = 0
+            pcall(function()
+                local wave = RS:FindFirstChild("Wave")
+                if wave and wave.Value then
+                    currentWave = wave.Value
+                end
+            end)
+            
+            if currentWave < lastWave and currentWave <= 5 then
+                lastResetUseTime = 0
+            end
+            
+            if getgenv().SeamlessFixEnabled and lastWave >= 50 and currentWave < 50 then
+                lastResetUseTime = 0
+            end
+            
+            if currentWave == 1 and lastWave > 10 then
+                lastResetUseTime = 0
+            end
+            
+            lastWave = currentWave
+            
+            if not getgenv().PocheEnabled then continue end
+            
+            pcall(function()
+                local towers = workspace:FindFirstChild("Towers")
+                if not towers then return end
+                
+                local poche = towers:FindFirstChild("Pucci Made In HeavenEZA")
+                if not poche then return end
+                
+                local owner = poche:FindFirstChild("Owner")
+                if not owner or owner.Value ~= LocalPlayer then return end
+                
+                local stats = poche:FindFirstChild("Stats")
+                if not stats then return end
+                
+                local spa = stats:FindFirstChild("SPA")
+                if not spa then return end
+                
+                if spa.Value ~= 1 then return end
+                
+                local meters = poche:FindFirstChild("Meters")
+                if not meters then return end
+                
+                local gravityCounter = meters:FindFirstChild("GravityCounter")
+                if not gravityCounter then return end
+                
+                local gravityValue = gravityCounter:GetAttribute("Value") or 0
+                
+                if gravityValue >= 101 then
+                    local currentTime = tick()
+                    if currentTime - lastResetUseTime >= 5 then
+                        local remotes = RS:FindFirstChild("Remotes")
+                        if not remotes then return end
+                        
+                        local abilityEvent = remotes:FindFirstChild("Ability")
+                        if not abilityEvent then return end
+                        
+                        local success = pcall(function()
+                            abilityEvent:InvokeServer(poche, "Universal Reset")
+                        end)
+                        
+                        if success then
+                            lastResetUseTime = currentTime
+                            Window:Notify({
+                                Title = "Auto Poche",
+                                Description = "Universal Reset used!",
+                                Lifetime = 2
+                            })
+                        end
+                    end
+                end
+            end)
+        end
     end)
 end
 
@@ -19292,11 +19580,6 @@ do
             
             if isSeamlessRestart then
                 pcall(function()
-                    local wave = RS:FindFirstChild("Wave")
-                    if wave and wave.Value then
-                        matchWave = tostring(wave.Value)
-                    end
-                    
                     local elapsed = RS:FindFirstChild("ElapsedTime")
                     if elapsed and elapsed.Value then
                         local roundTime = elapsed.Value
@@ -19861,6 +20144,21 @@ do
                 matchResultValue = matchResultValue .. " [" .. mapDifficulty .. "]"
             end
             
+            if currentGamemode == "FinalExpedition" then
+                pcall(function()
+                    local mapDifficultyValue = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("MapDifficulty")
+                    if mapDifficultyValue and mapDifficultyValue.Value then
+                        local difficulty = mapDifficultyValue.Value
+                        if clientData.FinalExpeditionProgress and clientData.FinalExpeditionProgress[difficulty] then
+                            local floor = clientData.FinalExpeditionProgress[difficulty].Floor
+                            if floor then
+                                matchResultValue = matchResultValue .. " Floor " .. tostring(floor)
+                            end
+                        end
+                    end
+                end)
+            end
+            
             matchResultValue = matchResultValue .. " - " .. (matchTime or "00:00:00") .. " - Wave " .. tostring(matchWave or "0") .. "\n" .. (matchResult or "Unknown")
             
             table.insert(embedFields, { name = "Match Result", value = truncateField(matchResultValue, 1024), inline = false })
@@ -20199,11 +20497,15 @@ do
                         end)
                         
                         local realTime = roundTime / timeScale
-                        local seconds = math.floor(realTime)
-                        local hours = math.floor(seconds / 3600)
-                        local minutes = math.floor((seconds % 3600) / 60)
-                        local secs = seconds % 60
-                        getgenv()._CachedMatchTime = string.format("%02d:%02d:%02d", hours, minutes, secs)
+                        if realTime > 0 then
+                            local seconds = math.floor(realTime)
+                            local hours = math.floor(seconds / 3600)
+                            local minutes = math.floor((seconds % 3600) / 60)
+                            local secs = seconds % 60
+                            getgenv()._CachedMatchTime = string.format("%02d:%02d:%02d", hours, minutes, secs)
+                        else
+                            getgenv()._CachedMatchTime = nil
+                        end
                     end
                     
                     if wave and wave.Value then
@@ -23823,10 +24125,18 @@ if not isInLobby then
                             local upgradeCost = getgenv().GetUpgradeCost and getgenv().GetUpgradeCost(unitName, level) or 999999999
                             local priority = slotPriorities[unitName] or 999
                             
-                            if isFarmUnit(unitName) then
-                                table.insert(farmUnits, {tower = tower, level = level, cap = effectiveCap, unitName = unitName, cost = upgradeCost, priority = priority})
-                            else
-                                table.insert(normalUnits, {tower = tower, level = level, cap = effectiveCap, unitName = unitName, cost = upgradeCost, priority = priority})
+                            local towerNameToCheck = getEZATowerName(unitName)
+                            local nextLevel = level + 1
+                            local hasNextLevel = getgenv().MacroTowerInfoCache and 
+                                                 getgenv().MacroTowerInfoCache[towerNameToCheck] and 
+                                                 getgenv().MacroTowerInfoCache[towerNameToCheck][nextLevel]
+                            
+                            if hasNextLevel then
+                                if isFarmUnit(unitName) then
+                                    table.insert(farmUnits, {tower = tower, level = level, cap = effectiveCap, unitName = unitName, cost = upgradeCost, priority = priority})
+                                else
+                                    table.insert(normalUnits, {tower = tower, level = level, cap = effectiveCap, unitName = unitName, cost = upgradeCost, priority = priority})
+                                end
                             end
                         end
                     end
@@ -23887,7 +24197,7 @@ if not isInLobby then
                     for _, data in ipairs(allUnits) do
                         currentCash = tonumber(getgenv().MacroCurrentCash) or 0
                         
-                        if data.cost > 0 and currentCash >= data.cost then
+                        if currentCash >= data.cost then
                             if upgradeTower(data.tower) then
                                 upgraded = true
                                 task.wait(0.05)
@@ -23898,7 +24208,7 @@ if not isInLobby then
                     for _, data in ipairs(allUnits) do
                         currentCash = tonumber(getgenv().MacroCurrentCash) or 0
                         
-                        if data.cost > 0 and currentCash >= data.cost then
+                        if currentCash >= data.cost then
                             if upgradeTower(data.tower) then
                                 upgraded = true
                                 task.wait(0.05)
