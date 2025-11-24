@@ -16316,10 +16316,6 @@ getgenv()._ProcessAbility = function(tower, unitName, abilityName, cfg, currentW
         return
     end
     
-    if funcs.isOnCooldown(infoName, abilityName, unitName) then
-        return
-    end
-    
     if cfg.useOnWave and cfg.specificWave then
         if currentWave ~= cfg.specificWave then
             return
@@ -16364,13 +16360,7 @@ getgenv()._ProcessAbility = function(tower, unitName, abilityName, cfg, currentW
         end
     end
     
-    if not funcs.isOnCooldown(infoName, abilityName, unitName) then
-        task.wait(2.5)
-        if not funcs.isOnCooldown(infoName, abilityName, unitName) then
-            funcs.useAbility(tower, abilityName)
-            funcs.setAbilityUsed(infoName, abilityName)
-        end
-    end
+    funcs.useAbility(tower, abilityName)
 end
 
 getgenv()._lastGameStartedForAbilities = true
@@ -16393,7 +16383,7 @@ end
 
 task.spawn(function()
     while true do
-        task.wait(0.3)
+        task.wait(1)
         
         if getgenv()._checkIfInLobby() then
             task.wait(2)
@@ -17287,6 +17277,99 @@ do
                 end
             end)
         end
+    end)
+end
+
+do
+    task.spawn(function()
+        local function shouldDelete(text)
+            if not text then return false end
+            if text:find("on CD") then return true end
+            if text:find("ability") or text:find("Ability") then
+                if text:find("cooldown") or text:find("per-player") then
+                    return true
+                end
+            end
+            return false
+        end
+        
+        local function checkAndDeleteNotif(notifFrame)
+            if not notifFrame or not notifFrame.Parent then return end
+            if notifFrame:IsA("Frame") then
+                local textLabel = notifFrame:FindFirstChild("TextLabel")
+                if textLabel and textLabel:IsA("TextLabel") then
+                    if shouldDelete(textLabel.Text) then
+                        notifFrame:Destroy()
+                        return
+                    end
+                    textLabel:GetPropertyChangedSignal("Text"):Connect(function()
+                        if shouldDelete(textLabel.Text) then
+                            notifFrame:Destroy()
+                        end
+                    end)
+                end
+                
+                notifFrame.ChildAdded:Connect(function(child)
+                    if child.Name == "TextLabel" and child:IsA("TextLabel") then
+                        if shouldDelete(child.Text) then
+                            notifFrame:Destroy()
+                            return
+                        end
+                        child:GetPropertyChangedSignal("Text"):Connect(function()
+                            if shouldDelete(child.Text) then
+                                notifFrame:Destroy()
+                            end
+                        end)
+                    end
+                end)
+            end
+        end
+        
+        task.spawn(function()
+            while true do
+                pcall(function()
+                    local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+                    if playerGui then
+                        local bottom = playerGui:FindFirstChild("Bottom")
+                        if bottom then
+                            local function checkAllFrames(parent)
+                                for _, child in pairs(parent:GetChildren()) do
+                                    if child:IsA("Frame") then
+                                        local textLabel = child:FindFirstChild("TextLabel")
+                                        if textLabel and textLabel:IsA("TextLabel") then
+                                            if shouldDelete(textLabel.Text) then
+                                                child:Destroy()
+                                            end
+                                        else
+                                            checkAllFrames(child)
+                                        end
+                                    end
+                                end
+                            end
+                            checkAllFrames(bottom)
+                        end
+                    end
+                end)
+                task.wait()
+            end
+        end)
+        
+        pcall(function()
+            local playerGui = LocalPlayer:WaitForChild("PlayerGui", 10)
+            local bottom = playerGui:WaitForChild("Bottom", 10)
+            local frame1 = bottom:WaitForChild("Frame", 10)
+            local frame2 = frame1:WaitForChild("Frame", 10)
+            local frame3 = frame2:WaitForChild("Frame", 10)
+            local frame4 = frame3:WaitForChild("Frame", 10)
+            
+            for _, notifFrame in pairs(frame4:GetChildren()) do
+                checkAndDeleteNotif(notifFrame)
+            end
+            
+            frame4.ChildAdded:Connect(function(notifFrame)
+                checkAndDeleteNotif(notifFrame)
+            end)
+        end)
     end)
 end
 
@@ -18561,10 +18644,23 @@ local function findBestPortalFromClientData()
                 local mapMatch = (selectedMap == "" or portalData.Map == selectedMap)
                 
                 if mapMatch then
+                    local challenge = portalData.Challenges or ""
+                    
+                    pcall(function()
+                        local RS = game:GetService("ReplicatedStorage")
+                        local challengeInfo = RS:FindFirstChild("Modules") and RS.Modules:FindFirstChild("ChallengeInfo")
+                        if challengeInfo and challenge ~= "" then
+                            local challengeData = require(challengeInfo)
+                            if challengeData[challenge] then
+                                challenge = challenge
+                            end
+                        end
+                    end)
+                    
                     table.insert(matchingPortals, {
                         id = portalID,
                         tier = portalData.Tier or 0,
-                        challenge = portalData.Challenges or "",
+                        challenge = challenge,
                         map = portalData.Map or ""
                     })
                 end
@@ -18907,7 +19003,6 @@ task.spawn(function()
             end)
             
             if not success then
-                warn("[Portal Reward] Error in detection loop:", err)
                 isProcessing = false
             end
         end
