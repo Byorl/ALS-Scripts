@@ -12266,7 +12266,7 @@ pathSlider = createSlider(
     "Path Waypoint",
     "AutoPlayPathPercentage",
     1,
-    50,
+    200,
     getgenv().AutoPlayConfig.pathPercentage or 1,
     function(value)
         getgenv().AutoPlayConfig.pathPercentage = value
@@ -13523,6 +13523,35 @@ createToggle(
 
 createToggle(
     Sections.MiscLeft,
+    "Clean SpawnedUnits",
+    "CleanSpawnedUnitsToggle",
+    function(value)
+        getgenv().CleanSpawnedUnitsEnabled = value
+        getgenv().Config.toggles.CleanSpawnedUnitsToggle = value
+        saveConfig(getgenv().Config)
+        
+        if value then
+            pcall(function()
+                local spawnedUnits = workspace:FindFirstChild("SpawnedUnits")
+                if spawnedUnits then
+                    for _, child in pairs(spawnedUnits:GetChildren()) do
+                        child:Destroy()
+                    end
+                end
+            end)
+        end
+        
+        Window:Notify({
+            Title = "Clean SpawnedUnits",
+            Description = value and "Enabled - Cleared all units" or "Disabled",
+            Lifetime = 2
+        })
+    end,
+    getgenv().Config.toggles.CleanSpawnedUnitsToggle or false
+)
+
+createToggle(
+    Sections.MiscLeft,
     "Black Screen Mode",
     "BlackScreenToggle",
     function(value)
@@ -14269,6 +14298,56 @@ Sections.BreachRight:Divider()
 
 Sections.BreachRight:SubLabel({
     Text = "When enabled, the script will automatically teleport to and interact with the shrine to unleash Sukuna's fingers."
+})
+
+Sections.BreachRight:Divider()
+
+getgenv().AutoDodgeTrueSpiralEnabled = getgenv().Config.toggles.AutoDodgeTrueSpiralToggle or false
+
+createToggle(
+    Sections.BreachRight,
+    "Auto Dodge True Spiral",
+    "AutoDodgeTrueSpiralToggle",
+    function(value)
+        getgenv().AutoDodgeTrueSpiralEnabled = value
+        getgenv().Config.toggles.AutoDodgeTrueSpiralToggle = value
+        saveConfig(getgenv().Config)
+        Window:Notify({
+            Title = "Auto Dodge True Spiral",
+            Description = value and "Enabled" or "Disabled",
+            Lifetime = 2
+        })
+    end,
+    getgenv().AutoDodgeTrueSpiralEnabled
+)
+
+Sections.BreachRight:SubLabel({
+    Text = "Automatically dodges True Spiral attack by teleporting away and back"
+})
+
+Sections.BreachRight:Divider()
+
+getgenv().AutoAvoidLightningEnabled = getgenv().Config.toggles.AutoAvoidLightningToggle or false
+
+createToggle(
+    Sections.BreachRight,
+    "Auto Avoid Lightning",
+    "AutoAvoidLightningToggle",
+    function(value)
+        getgenv().AutoAvoidLightningEnabled = value
+        getgenv().Config.toggles.AutoAvoidLightningToggle = value
+        saveConfig(getgenv().Config)
+        Window:Notify({
+            Title = "Auto Avoid Lightning",
+            Description = value and "Enabled" or "Disabled",
+            Lifetime = 2
+        })
+    end,
+    getgenv().AutoAvoidLightningEnabled
+)
+
+Sections.BreachRight:SubLabel({
+    Text = "Automatically dodges lightning attacks by teleporting away and back"
 })
 
 
@@ -15439,23 +15518,7 @@ task.spawn(function()
                 lastEndGameUIInstance = endGameUI
                 endGameUIDetectedTime = tick()
                 
-                if getgenv().AutoVialFarmEnabled then
-                    task.spawn(function()
-                        task.wait(0.5)
-                        
-                        local TeleportService = game:GetService("TeleportService")
-                        local Players = game:GetService("Players")
-                        local LocalPlayer = Players.LocalPlayer
-                        
-                        print("[Auto Vial Farm] EndGameUI detected, returning to lobby...")
-                        
-                        task.wait(0.5)
-                        
-                        pcall(function()
-                            TeleportService:Teleport(12886143095, LocalPlayer)
-                        end)
-                    end)
-                end
+
             end
             
             if hasProcessedCurrentUI then
@@ -16459,6 +16522,134 @@ end
 
 do
     task.spawn(function()
+        while true do
+            task.wait(0.5)
+            
+            if not getgenv().CleanSpawnedUnitsEnabled then continue end
+            
+            pcall(function()
+                local spawnedUnits = workspace:FindFirstChild("SpawnedUnits")
+                if spawnedUnits then
+                    for _, child in pairs(spawnedUnits:GetChildren()) do
+                        child:Destroy()
+                    end
+                end
+            end)
+        end
+    end)
+end
+
+do
+    task.spawn(function()
+        pcall(function()
+            local effects = workspace:WaitForChild("Effects", 10)
+            if not effects then return end
+            
+            local partCount = 0
+            local originalPosition = nil
+            local isDodging = false
+            
+            effects.ChildAdded:Connect(function(child)
+                if child.Name ~= "Part" or not child:IsA("BasePart") then return end
+                
+                partCount = partCount + 1
+                
+                local shouldDodge = false
+                if getgenv().AutoDodgeTrueSpiralEnabled and partCount >= 5 then
+                    shouldDodge = true
+                elseif getgenv().AutoAvoidLightningEnabled and partCount == 1 then
+                    shouldDodge = true
+                end
+                
+                if shouldDodge and not isDodging then
+                    isDodging = true
+                    
+                    pcall(function()
+                        local character = LocalPlayer.Character
+                        if not character then return end
+                        
+                        local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+                        if not humanoidRootPart then return end
+                        
+                        originalPosition = humanoidRootPart.CFrame
+                        
+                        local dodgePositions = {
+                            Vector3.new(-263, -55, 967),
+                            Vector3.new(-508, -55, 663)
+                        }
+                        local dodgePos = dodgePositions[math.random(1, 2)]
+                        
+                        humanoidRootPart.CFrame = CFrame.new(dodgePos)
+                    end)
+                end
+            end)
+            
+            effects.ChildRemoved:Connect(function(child)
+                if child.Name ~= "Part" or not child:IsA("BasePart") then return end
+                
+                partCount = math.max(0, partCount - 1)
+                
+                if partCount == 0 and isDodging and originalPosition then
+                    task.wait(0.2)
+                    
+                    pcall(function()
+                        local character = LocalPlayer.Character
+                        if not character then return end
+                        
+                        local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+                        if not humanoidRootPart then return end
+                        
+                        humanoidRootPart.CFrame = originalPosition
+                    end)
+                    
+                    isDodging = false
+                    originalPosition = nil
+                end
+            end)
+        end)
+    end)
+end
+
+do
+    task.spawn(function()
+        while true do
+            task.wait(30)
+            
+            if not getgenv().AutoVialFarmEnabled then continue end
+            
+            pcall(function()
+                local clientData = getClientData()
+                if not clientData or not clientData.ItemData then return end
+                
+                local hasEmptyVial = clientData.ItemData.EmptyBottle and clientData.ItemData.EmptyBottle.Amount > 0
+                local hasFilledVial = clientData.ItemData.BottledIchor and clientData.ItemData.BottledIchor.Amount >= 1
+                
+                if not hasEmptyVial then
+                    local RS = game:GetService("ReplicatedStorage")
+                    local remotes = RS:FindFirstChild("Remotes")
+                    if remotes then
+                        local craftItemRemote = remotes:FindFirstChild("CraftItem")
+                        if craftItemRemote then
+                            craftItemRemote:InvokeServer(2, 1)
+                            task.wait(1)
+                        end
+                    end
+                end
+                
+                if hasFilledVial then
+                    local TeleportService = game:GetService("TeleportService")
+                    local Players = game:GetService("Players")
+                    local LocalPlayer = Players.LocalPlayer
+                    
+                    TeleportService:Teleport(12886143095, LocalPlayer)
+                end
+            end)
+        end
+    end)
+end
+
+do
+    task.spawn(function()
         local lastCheckTime = 0
         
         while true do
@@ -17285,6 +17476,7 @@ do
         local function shouldDelete(text)
             if not text then return false end
             if text:find("on CD") then return true end
+            if text:find("Unit Currently Stunned!") then return true end
             if text:find("ability") or text:find("Ability") then
                 if text:find("cooldown") or text:find("per-player") then
                     return true
