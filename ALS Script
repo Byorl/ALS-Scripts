@@ -6128,18 +6128,29 @@ task.spawn(function()
                     end
                 end
                 
+                local startRemote = teleporterRemote:FindFirstChild("Start")
+                
                 if getgenv().ChallengeWeeklyEnabled and weeklyTime == 0 then
                     interactRemote:FireServer("Select", "Challenge", "Weekly", 1)
-                    print("[Challenge] Joined Weekly - Act 1")
+                    task.wait(0.5)
+                    if startRemote then
+                        startRemote:FireServer()
+                    end
                     task.wait(3)
                 elseif getgenv().ChallengeDailyEnabled and dailyTime == 0 then
                     interactRemote:FireServer("Select", "Challenge", "Daily", 1)
-                    print("[Challenge] Joined Daily - Act 1")
+                    task.wait(0.5)
+                    if startRemote then
+                        startRemote:FireServer()
+                    end
                     task.wait(3)
                 elseif getgenv().ChallengeRegularEnabled and halfHourlyTime == 0 then
                     local challengeType = getgenv().ChallengeRegularType or "Pearl"
                     interactRemote:FireServer("Select", "Challenge", challengeType, 1)
-                    print("[Challenge] Joined Regular - " .. challengeType .. " Act 1")
+                    task.wait(0.5)
+                    if startRemote then
+                        startRemote:FireServer()
+                    end
                     task.wait(3)
                 end
             end)
@@ -14325,6 +14336,7 @@ createToggle(
 )
 
 getgenv().SpiralTrialWaitForPlayersEnabled = getgenv().Config.toggles.SpiralTrialWaitForPlayersToggle or false
+getgenv().SpiralTrialWaitForPlayerCount = tonumber(getgenv().Config.inputs.SpiralTrialWaitForPlayerCount) or 1
 
 createToggle(
     Sections.BreachRight,
@@ -14336,11 +14348,35 @@ createToggle(
         saveConfig(getgenv().Config)
         Window:Notify({
             Title = "Spiral Trial Wait",
-            Description = value and "Enabled" or "Disabled",
+            Description = value and "Enabled - Will wait for " .. getgenv().SpiralTrialWaitForPlayerCount .. " players" or "Disabled",
             Lifetime = 2
         })
     end,
     getgenv().SpiralTrialWaitForPlayersEnabled
+)
+
+local spiralPlayerCountOptions = {}
+for i = 1, 12 do
+    table.insert(spiralPlayerCountOptions, tostring(i))
+end
+
+createDropdown(
+    Sections.BreachRight,
+    "Player Count",
+    "SpiralTrialWaitForPlayerCount",
+    spiralPlayerCountOptions,
+    false,
+    function(value)
+        getgenv().SpiralTrialWaitForPlayerCount = tonumber(value) or 1
+        getgenv().Config.inputs.SpiralTrialWaitForPlayerCount = value
+        saveConfig(getgenv().Config)
+        Window:Notify({
+            Title = "Spiral Trial Player Count",
+            Description = "Will wait for " .. value .. " players",
+            Lifetime = 2
+        })
+    end,
+    tostring(getgenv().SpiralTrialWaitForPlayerCount)
 )
 
 Sections.BreachRight:Divider()
@@ -16711,7 +16747,7 @@ do
                                     
                                     if current and max then
                                         local currentPlayers = tonumber(current)
-                                        local targetCount = getgenv().WaitForPlayerCount or 1
+                                        local targetCount = getgenv().SpiralTrialWaitForPlayerCount or 1
                                         
                                         if currentPlayers >= targetCount then
                                             break
@@ -16734,6 +16770,12 @@ do
                     
                     if spiralPart then
                         enterEvent:FireServer(spiralPart)
+                        task.wait(0.5)
+                        
+                        local startRemote = spiralTrialRemotes:FindFirstChild("Start")
+                        if startRemote then
+                            startRemote:FireServer()
+                        end
                         
                         Window:Notify({
                             Title = "Spiral Trial",
