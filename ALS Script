@@ -14302,52 +14302,27 @@ Sections.BreachRight:SubLabel({
 
 Sections.BreachRight:Divider()
 
-getgenv().AutoDodgeTrueSpiralEnabled = getgenv().Config.toggles.AutoDodgeTrueSpiralToggle or false
+getgenv().AutoDodgeSpiralTrialEnabled = getgenv().Config.toggles.AutoDodgeSpiralTrialToggle or false
 
 createToggle(
     Sections.BreachRight,
-    "Auto Dodge True Spiral",
-    "AutoDodgeTrueSpiralToggle",
+    "Auto Dodge Spiral Trial",
+    "AutoDodgeSpiralTrialToggle",
     function(value)
-        getgenv().AutoDodgeTrueSpiralEnabled = value
-        getgenv().Config.toggles.AutoDodgeTrueSpiralToggle = value
+        getgenv().AutoDodgeSpiralTrialEnabled = value
+        getgenv().Config.toggles.AutoDodgeSpiralTrialToggle = value
         saveConfig(getgenv().Config)
         Window:Notify({
-            Title = "Auto Dodge True Spiral",
+            Title = "Auto Dodge Spiral Trial",
             Description = value and "Enabled" or "Disabled",
             Lifetime = 2
         })
     end,
-    getgenv().AutoDodgeTrueSpiralEnabled
+    getgenv().AutoDodgeSpiralTrialEnabled
 )
 
 Sections.BreachRight:SubLabel({
-    Text = "Automatically dodges True Spiral attack by teleporting away and back"
-})
-
-Sections.BreachRight:Divider()
-
-getgenv().AutoAvoidLightningEnabled = getgenv().Config.toggles.AutoAvoidLightningToggle or false
-
-createToggle(
-    Sections.BreachRight,
-    "Auto Avoid Lightning",
-    "AutoAvoidLightningToggle",
-    function(value)
-        getgenv().AutoAvoidLightningEnabled = value
-        getgenv().Config.toggles.AutoAvoidLightningToggle = value
-        saveConfig(getgenv().Config)
-        Window:Notify({
-            Title = "Auto Avoid Lightning",
-            Description = value and "Enabled" or "Disabled",
-            Lifetime = 2
-        })
-    end,
-    getgenv().AutoAvoidLightningEnabled
-)
-
-Sections.BreachRight:SubLabel({
-    Text = "Automatically dodges lightning attacks by teleporting away and back"
+    Text = "Automatically dodges all Spiral Trial attacks by teleporting to safe spots"
 })
 
 
@@ -16558,20 +16533,52 @@ do
             local partCount = 0
             local originalPosition = nil
             local isDodging = false
+            local damageParts = {}
+            
+            task.spawn(function()
+                while task.wait(1) do
+                    pcall(function()
+                        if not getgenv().AutoDodgeSpiralTrialEnabled then return end
+                        
+                        local placeOn = workspace:FindFirstChild("PlaceOn")
+                        if not placeOn then return end
+                        
+                        local ground = placeOn:FindFirstChild("Ground")
+                        if not ground then return end
+                        
+                        local groundddd = ground:FindFirstChild("groundddd")
+                        if groundddd and groundddd:IsA("BasePart") then
+                            groundddd.Size = Vector3.new(1024, 0.001, 1024)
+                        end
+                        
+                        local cube = ground:FindFirstChild("Cube")
+                        if cube and cube:IsA("BasePart") then
+                            cube.Size = Vector3.new(1024, 0.001, 1024)
+                        end
+                        
+                        local plane = ground:FindFirstChild("Plane.002")
+                        if plane and plane:IsA("BasePart") then
+                            plane.Size = Vector3.new(1024, 0.001, 1024)
+                        end
+                    end)
+                end
+            end)
+            
+            local dodgePositions = {
+                Vector3.new(-262, -55, 212),
+                Vector3.new(110, -22, 660),
+                Vector3.new(-262, -49, 1113),
+                Vector3.new(-684, -49, 671)
+            }
             
             effects.ChildAdded:Connect(function(child)
                 if child.Name ~= "Part" or not child:IsA("BasePart") then return end
+                if not getgenv().AutoDodgeSpiralTrialEnabled then return end
                 
                 partCount = partCount + 1
+                damageParts[child] = {part = child, addedTime = tick()}
                 
-                local shouldDodge = false
-                if getgenv().AutoDodgeTrueSpiralEnabled and partCount >= 5 then
-                    shouldDodge = true
-                elseif getgenv().AutoAvoidLightningEnabled and partCount == 1 then
-                    shouldDodge = true
-                end
-                
-                if shouldDodge and not isDodging then
+                if partCount > 0 and not isDodging then
                     isDodging = true
                     
                     pcall(function()
@@ -16583,12 +16590,7 @@ do
                         
                         originalPosition = humanoidRootPart.CFrame
                         
-                        local dodgePositions = {
-                            Vector3.new(-263, -55, 967),
-                            Vector3.new(-508, -55, 663)
-                        }
-                        local dodgePos = dodgePositions[math.random(1, 2)]
-                        
+                        local dodgePos = dodgePositions[math.random(1, #dodgePositions)]
                         humanoidRootPart.CFrame = CFrame.new(dodgePos)
                     end)
                 end
@@ -16598,6 +16600,7 @@ do
                 if child.Name ~= "Part" or not child:IsA("BasePart") then return end
                 
                 partCount = math.max(0, partCount - 1)
+                damageParts[child] = nil
                 
                 if partCount == 0 and isDodging and originalPosition then
                     task.wait(0.2)
@@ -20799,15 +20802,6 @@ do
                             getgenv()._RoundStartTime = elapsed.Value
                         end
                         
-                        local roundTime = elapsed.Value
-                        
-                        if getgenv()._RoundStartTime and getgenv()._RoundStartTime > 0 then
-                            roundTime = elapsed.Value - getgenv()._RoundStartTime
-                            if roundTime < 0 or roundTime > elapsed.Value then
-                                roundTime = elapsed.Value
-                            end
-                        end
-                        
                         local timeScale = 1
                         pcall(function()
                             local timeScaleValue = RS:FindFirstChild("TimeScale")
@@ -20816,15 +20810,13 @@ do
                             end
                         end)
                         
-                        local realTime = roundTime / timeScale
+                        local realTime = elapsed.Value / timeScale
                         if realTime > 0 then
                             local seconds = math.floor(realTime)
                             local hours = math.floor(seconds / 3600)
                             local minutes = math.floor((seconds % 3600) / 60)
                             local secs = seconds % 60
                             getgenv()._CachedMatchTime = string.format("%02d:%02d:%02d", hours, minutes, secs)
-                        else
-                            getgenv()._CachedMatchTime = nil
                         end
                     end
                     
@@ -21043,19 +21035,6 @@ do
                             local wave = RS:FindFirstChild("Wave")
                             
                             if elapsed and elapsed.Value then
-                                if not getgenv()._RoundStartTime or getgenv()._RoundStartTime <= 0 then
-                                    getgenv()._RoundStartTime = elapsed.Value
-                                end
-                                
-                                local roundTime = elapsed.Value
-                                
-                                if getgenv()._RoundStartTime and getgenv()._RoundStartTime > 0 then
-                                    roundTime = elapsed.Value - getgenv()._RoundStartTime
-                                    if roundTime < 0 or roundTime > elapsed.Value then
-                                        roundTime = elapsed.Value
-                                    end
-                                end
-                                
                                 local timeScale = 1
                                 pcall(function()
                                     local timeScaleValue = RS:FindFirstChild("TimeScale")
@@ -21064,7 +21043,7 @@ do
                                     end
                                 end)
                                 
-                                local realTime = roundTime / timeScale
+                                local realTime = elapsed.Value / timeScale
                                 local seconds = math.floor(realTime)
                                 local hours = math.floor(seconds / 3600)
                                 local minutes = math.floor((seconds % 3600) / 60)
@@ -21155,19 +21134,12 @@ do
                         pcall(function()
                             local elapsed = RS:FindFirstChild("ElapsedTime")
                             if elapsed and elapsed.Value then
-                                local roundTime = elapsed.Value
-                                if getgenv()._RoundStartTime and getgenv()._RoundStartTime > 0 then
-                                    roundTime = elapsed.Value - getgenv()._RoundStartTime
-                                    if roundTime < 0 or roundTime > elapsed.Value then
-                                        roundTime = elapsed.Value
-                                    end
-                                end
                                 local timeScale = 1
                                 local timeScaleValue = RS:FindFirstChild("TimeScale")
                                 if timeScaleValue and timeScaleValue:IsA("NumberValue") then
                                     timeScale = timeScaleValue.Value or 1
                                 end
-                                local realTime = roundTime / timeScale
+                                local realTime = elapsed.Value / timeScale
                                 local seconds = math.floor(realTime)
                                 local hours = math.floor(seconds / 3600)
                                 local minutes = math.floor((seconds % 3600) / 60)
