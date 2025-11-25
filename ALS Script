@@ -15632,10 +15632,20 @@ task.spawn(function()
             
             local shouldForceLeave = false
             if getgenv()._ChallengePriorityActive and leaveButton and leaveButton.Visible then
-                shouldForceLeave = true
-                buttonToPress = leaveButton
-                actionName = "Leave (Challenge Priority)"
-                print("[Challenge Priority] Forcing Leave to return to lobby for challenge")
+                local isInChallenge = false
+                pcall(function()
+                    local gamemode = RS:FindFirstChild("Gamemode")
+                    if gamemode and gamemode.Value == "Challenge" then
+                        isInChallenge = true
+                    end
+                end)
+                
+                if not isInChallenge then
+                    shouldForceLeave = true
+                    buttonToPress = leaveButton
+                    actionName = "Leave (Challenge Priority)"
+                    print("[Challenge Priority] Forcing Leave to return to lobby for challenge")
+                end
             end
             
             if not shouldForceLeave then
