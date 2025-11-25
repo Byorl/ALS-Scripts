@@ -14302,6 +14302,49 @@ Sections.BreachRight:SubLabel({
 
 Sections.BreachRight:Divider()
 
+Sections.BreachRight:Header({ Text = "🌀 Spiral Trial" })
+Sections.BreachRight:SubLabel({ Text = "Automatically join and dodge Spiral Trial" })
+
+getgenv().AutoJoinSpiralTrialEnabled = getgenv().Config.toggles.AutoJoinSpiralTrialToggle or false
+
+createToggle(
+    Sections.BreachRight,
+    "Auto Join Spiral Trial",
+    "AutoJoinSpiralTrialToggle",
+    function(value)
+        getgenv().AutoJoinSpiralTrialEnabled = value
+        getgenv().Config.toggles.AutoJoinSpiralTrialToggle = value
+        saveConfig(getgenv().Config)
+        Window:Notify({
+            Title = "Auto Join Spiral Trial",
+            Description = value and "Enabled" or "Disabled",
+            Lifetime = 2
+        })
+    end,
+    getgenv().AutoJoinSpiralTrialEnabled
+)
+
+getgenv().SpiralTrialWaitForPlayersEnabled = getgenv().Config.toggles.SpiralTrialWaitForPlayersToggle or false
+
+createToggle(
+    Sections.BreachRight,
+    "Wait For Players",
+    "SpiralTrialWaitForPlayersToggle",
+    function(value)
+        getgenv().SpiralTrialWaitForPlayersEnabled = value
+        getgenv().Config.toggles.SpiralTrialWaitForPlayersToggle = value
+        saveConfig(getgenv().Config)
+        Window:Notify({
+            Title = "Spiral Trial Wait",
+            Description = value and "Enabled" or "Disabled",
+            Lifetime = 2
+        })
+    end,
+    getgenv().SpiralTrialWaitForPlayersEnabled
+)
+
+Sections.BreachRight:Divider()
+
 getgenv().AutoDodgeSpiralTrialEnabled = getgenv().Config.toggles.AutoDodgeSpiralTrialToggle or false
 
 createToggle(
@@ -16603,7 +16646,7 @@ do
                 damageParts[child] = nil
                 
                 if partCount == 0 and isDodging and originalPosition then
-                    task.wait(0.2)
+                    task.wait(3)
                     
                     pcall(function()
                         local character = LocalPlayer.Character
@@ -16620,6 +16663,89 @@ do
                 end
             end)
         end)
+    end)
+end
+
+do
+    task.spawn(function()
+        while true do
+            local pollingInterval = 2
+            task.wait(pollingInterval)
+            
+            if not getgenv().AutoJoinSpiralTrialEnabled then continue end
+            if not getgenv()._checkIfInLobby() then continue end
+            
+            ErrorHandler:wrapAsync(function()
+                local remotes = RS:FindFirstChild("Remotes")
+                local spiralTrialRemotes = remotes and remotes:FindFirstChild("SpiralTrial")
+                local enterEvent = spiralTrialRemotes and spiralTrialRemotes:FindFirstChild("Enter")
+                
+                if enterEvent then
+                    if getgenv().SpiralTrialWaitForPlayersEnabled then
+                        local entryUI = nil
+                        for _, gui in ipairs(LocalPlayer.PlayerGui:GetChildren()) do
+                            if gui.Name:find("Entry") or gui.Name:find("Spiral") then
+                                entryUI = gui
+                                break
+                            end
+                        end
+                        
+                        if entryUI then
+                            local function findTextLabel(parent)
+                                for _, child in ipairs(parent:GetDescendants()) do
+                                    if child:IsA("TextLabel") and child.Text:find("Players") then
+                                        return child
+                                    end
+                                end
+                                return nil
+                            end
+                            
+                            local textLabel = findTextLabel(entryUI)
+                            if textLabel then
+                                local waitStartTime = tick()
+                                local maxWaitTime = 300
+                                
+                                while tick() - waitStartTime < maxWaitTime do
+                                    local text = textLabel.Text
+                                    local current, max = text:match("%((%d+)/(%d+)%)")
+                                    
+                                    if current and max then
+                                        local currentPlayers = tonumber(current)
+                                        local targetCount = getgenv().WaitForPlayerCount or 1
+                                        
+                                        if currentPlayers >= targetCount then
+                                            break
+                                        end
+                                    end
+                                    
+                                    task.wait(1)
+                                end
+                            end
+                        end
+                    end
+                    
+                    local spiralPart = workspace:FindFirstChild("Lobby")
+                    if spiralPart then
+                        spiralPart = spiralPart:FindFirstChild("SpiralTrials")
+                        if spiralPart then
+                            spiralPart = spiralPart:FindFirstChild("Part")
+                        end
+                    end
+                    
+                    if spiralPart then
+                        enterEvent:FireServer(spiralPart)
+                        
+                        Window:Notify({
+                            Title = "Spiral Trial",
+                            Description = "Joining Spiral Trial...",
+                            Lifetime = 3
+                        })
+                        
+                        task.wait(5)
+                    end
+                end
+            end)
+        end
     end)
 end
 
