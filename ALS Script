@@ -6075,7 +6075,21 @@ task.spawn(function()
             
             if not currentlyInLobby then
                 getgenv()._ChallengePriorityActive = true
-                print("[Challenge Priority] Challenge ready! Will force leave current game to join challenge...")
+                print("[Challenge Priority] Challenge ready! Returning to lobby...")
+                
+                pcall(function()
+                    if game.PlaceId == 12900046592 then
+                        local remotes = RS:FindFirstChild("Remotes")
+                        if remotes then
+                            local teleportBack = remotes:FindFirstChild("TeleportBackEvent")
+                            if teleportBack then
+                                teleportBack:FireServer()
+                                print("[Challenge Priority] Fired TeleportBackEvent")
+                            end
+                        end
+                    end
+                end)
+                
                 task.wait(5)
                 continue
             else
