@@ -3375,11 +3375,16 @@ pcall(function()
 end)
 
 getgenv()._checkIfInLobby = function()
-    local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
-    if not playerGui then return false end
-    
-    local lobbyUI = playerGui:FindFirstChild("LobbyUI")
-    return lobbyUI ~= nil
+    local placeId = game.PlaceId
+    local isLobby = placeId == 12886143095 or placeId == 18583778121
+    if not isLobby then
+        local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+        if playerGui then
+            local lobbyUI = playerGui:FindFirstChild("LobbyUI")
+            isLobby = lobbyUI ~= nil
+        end
+    end
+    return isLobby
 end
 
 if not isMac then
@@ -6049,6 +6054,16 @@ task.spawn(function()
     while true do
         task.wait(5)
         
+        local regularEnabled = getgenv().ChallengeRegularEnabled == true
+        local dailyEnabled = getgenv().ChallengeDailyEnabled == true
+        local weeklyEnabled = getgenv().ChallengeWeeklyEnabled == true
+        local anyChallengeEnabled = regularEnabled or dailyEnabled or weeklyEnabled
+        
+        if not anyChallengeEnabled then
+            getgenv()._ChallengePriorityActive = false
+            continue
+        end
+        
         local clientData = getClientData()
         if not clientData then
             task.wait(5)
@@ -6059,12 +6074,11 @@ task.spawn(function()
         local weeklyTime = clientData.LastChallengeWeeklyTime or 0
         local dailyTime = clientData.LastChallengeDailyTime or 0
         
-        local regularReady = (getgenv().ChallengeRegularEnabled and halfHourlyTime == 0)
-        local weeklyReady = (getgenv().ChallengeWeeklyEnabled and weeklyTime == 0)
-        local dailyReady = (getgenv().ChallengeDailyEnabled and dailyTime == 0)
+        local regularReady = (regularEnabled and halfHourlyTime == 0)
+        local weeklyReady = (weeklyEnabled and weeklyTime == 0)
+        local dailyReady = (dailyEnabled and dailyTime == 0)
         local challengeReady = regularReady or weeklyReady or dailyReady
-        local anyChallengeEnabled = getgenv().ChallengeRegularEnabled or getgenv().ChallengeDailyEnabled or getgenv().ChallengeWeeklyEnabled
-        local shouldPrioritizeChallenge = challengeReady and anyChallengeEnabled
+        local shouldPrioritizeChallenge = challengeReady
         
         if shouldPrioritizeChallenge then
             local currentlyInLobby = false
@@ -9301,7 +9315,9 @@ task.spawn(function()
             continue
         end
         
-        if not getgenv()._checkIfInLobby() then continue end
+        if not getgenv()._checkIfInLobby() then 
+            continue 
+        end
         
         if not getgenv().AutoJoinConfig or not getgenv().AutoJoinConfig.enabled then
             continue
@@ -9318,7 +9334,9 @@ task.spawn(function()
             local act = getgenv().AutoJoinConfig.act or 1
             local difficulty = getgenv().AutoJoinConfig.difficulty or "Normal"
             
-            if not mode or not map then return end
+            if not mode or not map then 
+                return 
+            end
             
             local remotes = getRSRemotes()
             local teleporter = remotes and remotes:FindFirstChild("Teleporter")
@@ -9355,16 +9373,71 @@ task.spawn(function()
                 
             elseif mode == "Raids" then
                 act = math.min(act or 1, 6)
+                
+                local teleporterFolder = workspace:FindFirstChild("TeleporterFolder")
+                if teleporterFolder then
+                    local raidsFolder = teleporterFolder:FindFirstChild("Raids")
+                    if raidsFolder then
+                        local teleporterModel = raidsFolder:FindFirstChild("Teleporter")
+                        if teleporterModel then
+                            local door = teleporterModel:FindFirstChild("Door")
+                            if door then
+                                local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                                if hrp then
+                                    hrp.CFrame = door.CFrame
+                                    task.wait(0.3)
+                                end
+                            end
+                        end
+                    end
+                end
+                
                 ErrorHandler:wrapAsync(function()
                     teleporter.Interact:FireServer("Select", map, act)
                 end, "Select Raids mode")
                 
             elseif mode == "Dungeon" then
+                local teleporterFolder = workspace:FindFirstChild("TeleporterFolder")
+                if teleporterFolder then
+                    local dungeonFolder = teleporterFolder:FindFirstChild("Dungeon")
+                    if dungeonFolder then
+                        local teleporterModel = dungeonFolder:FindFirstChild("Teleporter")
+                        if teleporterModel then
+                            local door = teleporterModel:FindFirstChild("Door")
+                            if door then
+                                local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                                if hrp then
+                                    hrp.CFrame = door.CFrame
+                                    task.wait(0.3)
+                                end
+                            end
+                        end
+                    end
+                end
+                
                 ErrorHandler:wrapAsync(function()
                     teleporter.Interact:FireServer("Select", map)
                 end, "Select Dungeon mode")
                 
             elseif mode == "Survival" then
+                local teleporterFolder = workspace:FindFirstChild("TeleporterFolder")
+                if teleporterFolder then
+                    local survivalFolder = teleporterFolder:FindFirstChild("Survival")
+                    if survivalFolder then
+                        local teleporterModel = survivalFolder:FindFirstChild("Teleporter")
+                        if teleporterModel then
+                            local door = teleporterModel:FindFirstChild("Door")
+                            if door then
+                                local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                                if hrp then
+                                    hrp.CFrame = door.CFrame
+                                    task.wait(0.3)
+                                end
+                            end
+                        end
+                    end
+                end
+                
                 ErrorHandler:wrapAsync(function()
                     teleporter.Interact:FireServer("Select", map)
                 end, "Select Survival mode")
@@ -13035,6 +13108,18 @@ getgenv().MacroRecordToggle = createToggleNoSave(
     "MacroRecordToggle",
     function(value)
         if value then
+            if getgenv()._checkIfInLobby() then
+                Window:Notify({
+                    Title = "Macro System",
+                    Description = "Cannot record in lobby",
+                    Lifetime = 3
+                })
+                pcall(function()
+                    getgenv().MacroRecordToggle:UpdateState(false)
+                end)
+                return
+            end
+            
             if not getgenv().CurrentMacro or getgenv().CurrentMacro == "" then
                 Window:Notify({
                     Title = "Macro System",
@@ -16800,6 +16885,17 @@ do
                     end
                     
                     if spiralPart then
+                        local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                        if hrp then
+                            local spiralPrompt = spiralPart:FindFirstChild("SpiralTrialPrompt")
+                            if spiralPrompt then
+                                hrp.CFrame = spiralPrompt.CFrame
+                            else
+                                hrp.CFrame = spiralPart.CFrame
+                            end
+                            task.wait(0.3)
+                        end
+                        
                         enterEvent:FireServer(spiralPart)
                         task.wait(0.5)
                         
@@ -23487,6 +23583,11 @@ if not isInLobby then
         while true do
             task.wait(0.3)
             
+            if getgenv()._checkIfInLobby() then
+                task.wait(2)
+                continue
+            end
+            
             if tick() - lastSettingsCheck > 2 then
                 updateSeamlessSettings()
                 lastSettingsCheck = tick()
@@ -24377,6 +24478,12 @@ if not isInLobby then
             
             while true do
                 task.wait(2)  
+                
+                if getgenv()._checkIfInLobby() then
+                    clearHolograms()
+                    task.wait(2)
+                    continue
+                end
                 
                 if not getgenv().AutoPlayConfig.hologram then
                     clearHolograms()
