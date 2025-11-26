@@ -6064,19 +6064,25 @@ task.spawn(function()
         local dailyReady = (getgenv().ChallengeDailyEnabled and dailyTime == 0)
         local challengeReady = regularReady or weeklyReady or dailyReady
         local anyChallengeEnabled = getgenv().ChallengeRegularEnabled or getgenv().ChallengeDailyEnabled or getgenv().ChallengeWeeklyEnabled
-        local shouldPrioritizeChallenge = getgenv().ChallengeReturnToLobbyEnabled and challengeReady and anyChallengeEnabled
-        
-        print("[Challenge Priority Debug] Regular:", getgenv().ChallengeRegularEnabled, "Timer:", halfHourlyTime, "Ready:", regularReady)
-        print("[Challenge Priority Debug] Return Toggle:", getgenv().ChallengeReturnToLobbyEnabled, "Should Prioritize:", shouldPrioritizeChallenge)
+        local shouldPrioritizeChallenge = challengeReady and anyChallengeEnabled
         
         if shouldPrioritizeChallenge then
             local currentlyInLobby = false
+            local currentlyInChallenge = false
+            
             pcall(function()
                 local lobbyCheck = workspace:FindFirstChild("Lobby")
                 currentlyInLobby = lobbyCheck ~= nil
+                
+                local gamemode = RS:FindFirstChild("Gamemode")
+                if gamemode and gamemode:IsA("StringValue") then
+                    currentlyInChallenge = gamemode.Value == "Challenge"
+                end
             end)
             
-            if not currentlyInLobby then
+            if currentlyInChallenge then
+                getgenv()._ChallengePriorityActive = false
+            elseif not currentlyInLobby then
                 getgenv()._ChallengePriorityActive = true
                 
                 local teleportSuccess = false
@@ -6091,10 +6097,10 @@ task.spawn(function()
                     end
                 end)
                 
-                if teleportSuccess then
-                    print("[Challenge Priority] Challenge ready! Returning to lobby...")
-                else
-                    print("[Challenge Priority] Challenge ready but TeleportBackEvent not found")
+                if not teleportSuccess then
+                    pcall(function()
+                        game:GetService("TeleportService"):Teleport(12886143095, LocalPlayer)
+                    end)
                 end
                 
                 task.wait(5)
@@ -9240,6 +9246,8 @@ task.spawn(function()
             continue
         end
         
+        if not getgenv()._checkIfInLobby() then continue end
+        
         if getgenv().AutoJoinConfig and getgenv().AutoJoinConfig.enabled then
             pcall(function()
                 local mode = getgenv().AutoJoinConfig.mode
@@ -9292,6 +9300,8 @@ task.spawn(function()
         if getgenv()._ChallengePriorityActive then
             continue
         end
+        
+        if not getgenv()._checkIfInLobby() then continue end
         
         if not getgenv().AutoJoinConfig or not getgenv().AutoJoinConfig.enabled then
             continue
@@ -10057,6 +10067,8 @@ task.spawn(function()
         if getgenv()._ChallengePriorityActive then
             continue
         end
+        
+        if not getgenv()._checkIfInLobby() then continue end
         
         if getgenv().InfinityCastleAutoJoinEnabled then
             ErrorHandler:wrapAsync(function()
@@ -16726,6 +16738,7 @@ do
             local pollingInterval = 2
             task.wait(pollingInterval)
             
+            if getgenv()._ChallengePriorityActive then continue end
             if not getgenv().AutoJoinSpiralTrialEnabled then continue end
             if not getgenv()._checkIfInLobby() then continue end
             
@@ -22272,6 +22285,7 @@ do
         
         while true do
             task.wait(1)
+            if getgenv()._ChallengePriorityActive then continue end
             if getgenv().BreachEnabled then
                 local availableBreaches = getAvailableBreaches()
                 for _, breach in ipairs(availableBreaches) do
