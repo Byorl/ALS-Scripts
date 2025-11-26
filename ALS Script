@@ -6059,8 +6059,12 @@ task.spawn(function()
         local weeklyTime = clientData.LastChallengeWeeklyTime or 0
         local dailyTime = clientData.LastChallengeDailyTime or 0
         
-        local challengeReady = halfHourlyTime == 0
-        local shouldPrioritizeChallenge = getgenv().ChallengeReturnToLobbyEnabled and challengeReady and getgenv().ChallengeRegularEnabled
+        local regularReady = (getgenv().ChallengeRegularEnabled and halfHourlyTime == 0)
+        local weeklyReady = (getgenv().ChallengeWeeklyEnabled and weeklyTime == 0)
+        local dailyReady = (getgenv().ChallengeDailyEnabled and dailyTime == 0)
+        local challengeReady = regularReady or weeklyReady or dailyReady
+        local anyChallengeEnabled = getgenv().ChallengeRegularEnabled or getgenv().ChallengeDailyEnabled or getgenv().ChallengeWeeklyEnabled
+        local shouldPrioritizeChallenge = getgenv().ChallengeReturnToLobbyEnabled and challengeReady and anyChallengeEnabled
         
         if shouldPrioritizeChallenge then
             local currentlyInLobby = false
@@ -6070,29 +6074,18 @@ task.spawn(function()
             end)
             
             if not currentlyInLobby then
-                local gameStarted = false
-                pcall(function()
-                    local gs = RS:FindFirstChild("GameStarted")
-                    if gs and gs.Value ~= nil then
-                        gameStarted = gs.Value
-                    end
-                end)
-                
-                if gameStarted and not getgenv()._ChallengePriorityActive then
-                    getgenv()._ChallengePriorityActive = true
-                    print("[Challenge Priority] Challenge ready! Waiting for game to end to return to lobby...")
-                end
-                
+                getgenv()._ChallengePriorityActive = true
+                print("[Challenge Priority] Challenge ready! Will force leave current game to join challenge...")
                 task.wait(5)
                 continue
+            else
+                getgenv()._ChallengePriorityActive = false
             end
-            
-            getgenv()._ChallengePriorityActive = false
         else
             getgenv()._ChallengePriorityActive = false
         end
         
-        if getgenv().ChallengeRegularEnabled or getgenv().ChallengeDailyEnabled or getgenv().ChallengeWeeklyEnabled then
+        if anyChallengeEnabled then
             pcall(function()
                 local currentlyInLobby = false
                 pcall(function()
