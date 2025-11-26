@@ -6066,6 +6066,9 @@ task.spawn(function()
         local anyChallengeEnabled = getgenv().ChallengeRegularEnabled or getgenv().ChallengeDailyEnabled or getgenv().ChallengeWeeklyEnabled
         local shouldPrioritizeChallenge = getgenv().ChallengeReturnToLobbyEnabled and challengeReady and anyChallengeEnabled
         
+        print("[Challenge Priority Debug] Regular:", getgenv().ChallengeRegularEnabled, "Timer:", halfHourlyTime, "Ready:", regularReady)
+        print("[Challenge Priority Debug] Return Toggle:", getgenv().ChallengeReturnToLobbyEnabled, "Should Prioritize:", shouldPrioritizeChallenge)
+        
         if shouldPrioritizeChallenge then
             local currentlyInLobby = false
             pcall(function()
@@ -6075,20 +6078,24 @@ task.spawn(function()
             
             if not currentlyInLobby then
                 getgenv()._ChallengePriorityActive = true
-                print("[Challenge Priority] Challenge ready! Returning to lobby...")
                 
+                local teleportSuccess = false
                 pcall(function()
-                    if game.PlaceId == 12900046592 then
-                        local remotes = RS:FindFirstChild("Remotes")
-                        if remotes then
-                            local teleportBack = remotes:FindFirstChild("TeleportBackEvent")
-                            if teleportBack then
-                                teleportBack:FireServer()
-                                print("[Challenge Priority] Fired TeleportBackEvent")
-                            end
+                    local remotes = RS:FindFirstChild("Remotes")
+                    if remotes then
+                        local teleportBack = remotes:FindFirstChild("TeleportBack")
+                        if teleportBack then
+                            teleportBack:FireServer()
+                            teleportSuccess = true
                         end
                     end
                 end)
+                
+                if teleportSuccess then
+                    print("[Challenge Priority] Challenge ready! Returning to lobby...")
+                else
+                    print("[Challenge Priority] Challenge ready but TeleportBackEvent not found")
+                end
                 
                 task.wait(5)
                 continue
