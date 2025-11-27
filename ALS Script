@@ -9651,13 +9651,14 @@ getgenv()._getPlayerUnits = function()
         if not data or not data.UnitData then return end
         
         for unitID, unitInfo in pairs(data.UnitData) do
-            if unitInfo.UnitName and unitInfo.Level and unitInfo.Quirk then
+            if unitInfo.UnitName and unitInfo.Level then
                 local inGameName = unitInfo.UnitName
                 if UnitNames and UnitNames[unitInfo.UnitName] then
                     inGameName = UnitNames[unitInfo.UnitName]
                 end
                 
-                local displayName = string.format("%s (Lv%d, %s)", inGameName, unitInfo.Level, unitInfo.Quirk)
+                local quirkDisplay = unitInfo.Quirk or "No Trait"
+                local displayName = string.format("%s (Lv%d, %s)", inGameName, unitInfo.Level, quirkDisplay)
                 table.insert(units, {
                     display = displayName,
                     unitID = unitID,
@@ -9694,9 +9695,22 @@ getgenv()._getUnitEnchant = function(unitID)
 end
 
 getgenv()._findUnitByDisplay = function(displayName)
+    if not displayName then return nil end
     local units = getgenv()._getPlayerUnits()
     for _, unit in ipairs(units) do
         if unit.display == displayName then
+            return unit
+        end
+    end
+    for _, unit in ipairs(units) do
+        if unit.display:find(displayName, 1, true) or displayName:find(unit.display, 1, true) then
+            return unit
+        end
+    end
+    local searchName = displayName:match("^([^%(]+)") or displayName
+    searchName = searchName:gsub("%s+$", "")
+    for _, unit in ipairs(units) do
+        if unit.display:find(searchName, 1, true) then
             return unit
         end
     end
@@ -10640,6 +10654,7 @@ pcall(function()
     end
 end)
 
+end
 
 do
 Sections.ChallengeLeft:Header({ Text = "🎯 Challenge Auto-Join" })
@@ -14942,17 +14957,20 @@ getgenv()._autoEnchantSuccess, getgenv()._autoEnchantErr = pcall(function()
         false
     )
     
-    getgenv()._autoEnchantUnitDropdown = createDropdown(
-        Sections.SeamlessFixRight,
-        "Unit Selection",
-        "AutoEnchantUnit",
-        {"Loading units..."},
-        false,
-        function(value)
+    getgenv()._autoEnchantUnitDropdown = Sections.SeamlessFixRight:Dropdown({
+        Name = "Unit Selection",
+        Search = true,
+        Multi = false,
+        Required = false,
+        Options = {"Loading units..."},
+        Default = getgenv().AutoEnchantUnit,
+        Callback = function(value)
             getgenv().AutoEnchantUnit = value
-        end,
-        getgenv().AutoEnchantUnit
-    )
+            getgenv().Config.inputs = getgenv().Config.inputs or {}
+            getgenv().Config.inputs.AutoEnchantUnit = value
+            saveConfig(getgenv().Config)
+        end
+    }, "AutoEnchantUnit")
     
     task.spawn(function()
         task.wait(3)
@@ -14967,10 +14985,13 @@ getgenv()._autoEnchantSuccess, getgenv()._autoEnchantErr = pcall(function()
             table.insert(unitOptions, "No units found")
         end
         
-        if getgenv()._autoEnchantUnitDropdown and getgenv()._autoEnchantUnitDropdown.ClearOptions and getgenv()._autoEnchantUnitDropdown.InsertOptions then
+        if getgenv()._autoEnchantUnitDropdown then
             pcall(function()
                 getgenv()._autoEnchantUnitDropdown:ClearOptions()
                 getgenv()._autoEnchantUnitDropdown:InsertOptions(unitOptions)
+                if getgenv().AutoEnchantUnit then
+                    getgenv()._autoEnchantUnitDropdown:UpdateSelection(getgenv().AutoEnchantUnit)
+                end
             end)
         end
     end)
@@ -15013,7 +15034,9 @@ Sections.SeamlessFixRight:SubLabel({
 })
 
 getgenv()._autoTraitSuccess, getgenv()._autoTraitErr = pcall(function()
-    getgenv().AutoTraitEnabled = getgenv().Config.toggles.AutoTraitToggle or false
+    getgenv().Config.toggles = getgenv().Config.toggles or {}
+    getgenv().Config.inputs = getgenv().Config.inputs or {}
+    getgenv().AutoTraitEnabled = false
     getgenv().AutoTraitUnit = getgenv().Config.inputs.AutoTraitUnit or nil
     getgenv().AutoTraitDesiredTrait1 = getgenv().Config.inputs.AutoTraitDesiredTrait1 or nil
     getgenv().AutoTraitDesiredTrait2 = getgenv().Config.inputs.AutoTraitDesiredTrait2 or nil
@@ -15047,19 +15070,20 @@ getgenv()._autoTraitSuccess, getgenv()._autoTraitErr = pcall(function()
         getgenv().AutoTraitEnabled
     )
     
-    getgenv()._autoTraitUnitDropdown = createDropdown(
-        Sections.SeamlessFixRight,
-        "Unit Selection",
-        "AutoTraitUnit",
-        {"Loading units..."},
-        false,
-        function(value)
+    getgenv()._autoTraitUnitDropdown = Sections.SeamlessFixRight:Dropdown({
+        Name = "Unit Selection",
+        Search = true,
+        Multi = false,
+        Required = false,
+        Options = {"Loading units..."},
+        Default = getgenv().AutoTraitUnit,
+        Callback = function(value)
             getgenv().AutoTraitUnit = value
+            getgenv().Config.inputs = getgenv().Config.inputs or {}
             getgenv().Config.inputs.AutoTraitUnit = value
             saveConfig(getgenv().Config)
-        end,
-        getgenv().AutoTraitUnit
-    )
+        end
+    }, "AutoTraitUnit")
     
     task.spawn(function()
         task.wait(3)
@@ -15074,41 +15098,46 @@ getgenv()._autoTraitSuccess, getgenv()._autoTraitErr = pcall(function()
             table.insert(unitOptions, "No units found")
         end
         
-        if getgenv()._autoTraitUnitDropdown and getgenv()._autoTraitUnitDropdown.ClearOptions and getgenv()._autoTraitUnitDropdown.InsertOptions then
+        if getgenv()._autoTraitUnitDropdown then
             pcall(function()
                 getgenv()._autoTraitUnitDropdown:ClearOptions()
                 getgenv()._autoTraitUnitDropdown:InsertOptions(unitOptions)
+                if getgenv().AutoTraitUnit then
+                    getgenv()._autoTraitUnitDropdown:UpdateSelection(getgenv().AutoTraitUnit)
+                end
             end)
         end
     end)
     
-    createDropdown(
-        Sections.SeamlessFixRight,
-        "Desired Trait 1",
-        "AutoTraitDesiredTrait1",
-        allTraits,
-        false,
-        function(value)
+    Sections.SeamlessFixRight:Dropdown({
+        Name = "Desired Trait 1",
+        Search = true,
+        Multi = false,
+        Required = false,
+        Options = allTraits,
+        Default = getgenv().AutoTraitDesiredTrait1,
+        Callback = function(value)
             getgenv().AutoTraitDesiredTrait1 = value
+            getgenv().Config.inputs = getgenv().Config.inputs or {}
             getgenv().Config.inputs.AutoTraitDesiredTrait1 = value
             saveConfig(getgenv().Config)
-        end,
-        getgenv().AutoTraitDesiredTrait1
-    )
+        end
+    }, "AutoTraitDesiredTrait1")
     
-    createDropdown(
-        Sections.SeamlessFixRight,
-        "Desired Trait 2",
-        "AutoTraitDesiredTrait2",
-        allTraits,
-        false,
-        function(value)
+    Sections.SeamlessFixRight:Dropdown({
+        Name = "Desired Trait 2",
+        Search = true,
+        Multi = false,
+        Required = false,
+        Options = allTraits,
+        Default = getgenv().AutoTraitDesiredTrait2,
+        Callback = function(value)
             getgenv().AutoTraitDesiredTrait2 = value
+            getgenv().Config.inputs = getgenv().Config.inputs or {}
             getgenv().Config.inputs.AutoTraitDesiredTrait2 = value
             saveConfig(getgenv().Config)
-        end,
-        getgenv().AutoTraitDesiredTrait2
-    )
+        end
+    }, "AutoTraitDesiredTrait2")
     
     createToggle(
         Sections.SeamlessFixRight,
@@ -16381,13 +16410,14 @@ task.spawn(function()
                 return
             end
             
-            print("[AutoEnchant] Attempting to roll enchant for " .. unit.unitName .. " (ID: " .. unit.unitID .. ") using " .. getgenv().AutoEnchantMaterial)
-            print("[AutoEnchant] Current enchant: " .. tostring(currentEnchant))
-            
             lastRollTime = tick()
             
             local rollSuccess, rollResult = pcall(function()
-                return rollEnchant:InvokeServer(unit.unitID, getgenv().AutoEnchantMaterial, currentEnchant)
+                if currentEnchant and currentEnchant ~= "None" then
+                    return rollEnchant:InvokeServer(unit.unitID, getgenv().AutoEnchantMaterial, currentEnchant)
+                else
+                    return rollEnchant:InvokeServer(unit.unitID, getgenv().AutoEnchantMaterial)
+                end
             end)
             
             if rollSuccess and rollResult then
@@ -16441,62 +16471,51 @@ task.spawn(function()
         task.wait()
         
         if not getgenv().AutoTraitEnabled then
-            task.wait(0.3)
+            task.wait(0.1)
             continue
         end
         
-        if not getgenv().AutoTraitUnit or getgenv().AutoTraitUnit == "" or getgenv().AutoTraitUnit == "No units found" or getgenv().AutoTraitUnit == "Loading units..." then
-            task.wait(0.3)
+        if not getgenv().AutoTraitUnit then
+            task.wait(0.1)
             continue
         end
         
-        local trait1 = getgenv().AutoTraitDesiredTrait1
-        local trait2 = getgenv().AutoTraitDesiredTrait2
-        
-        if (not trait1 or trait1 == "") and (not trait2 or trait2 == "") then
-            task.wait(0.3)
+        if not getgenv().AutoTraitDesiredTrait1 and not getgenv().AutoTraitDesiredTrait2 then
+            task.wait(0.1)
             continue
         end
         
         local success, err = pcall(function()
             local unit = getgenv()._findUnitByDisplay(getgenv().AutoTraitUnit)
-            if not unit then return end
+            if not unit then
+                return
+            end
             
             ClientDataCache.module = nil
             ClientDataCache.lastUpdate = 0
             
-            local currentQuirk1, currentQuirk2 = getgenv()._getUnitTraits(unit.unitID)
+            local currentTrait1, currentTrait2 = getgenv()._getUnitTraits(unit.unitID)
             
-            local hasTrait1 = false
-            local hasTrait2 = false
-            
-            if trait1 and trait1 ~= "" then
-                hasTrait1 = (currentQuirk1 == trait1) or (currentQuirk2 == trait1)
-            else
-                hasTrait1 = true
-            end
-            
-            if trait2 and trait2 ~= "" then
-                hasTrait2 = (currentQuirk1 == trait2) or (currentQuirk2 == trait2)
-            else
-                hasTrait2 = true
-            end
+            local hasDesired1 = getgenv().AutoTraitDesiredTrait1 and (currentTrait1 == getgenv().AutoTraitDesiredTrait1 or currentTrait2 == getgenv().AutoTraitDesiredTrait1)
+            local hasDesired2 = getgenv().AutoTraitDesiredTrait2 and (currentTrait1 == getgenv().AutoTraitDesiredTrait2 or currentTrait2 == getgenv().AutoTraitDesiredTrait2)
             
             local shouldStop = false
             if getgenv().AutoTraitRollForBoth then
-                shouldStop = hasTrait1 and hasTrait2
+                if getgenv().AutoTraitDesiredTrait1 and getgenv().AutoTraitDesiredTrait2 then
+                    shouldStop = hasDesired1 and hasDesired2
+                elseif getgenv().AutoTraitDesiredTrait1 then
+                    shouldStop = hasDesired1
+                elseif getgenv().AutoTraitDesiredTrait2 then
+                    shouldStop = hasDesired2
+                end
             else
-                shouldStop = hasTrait1 or hasTrait2
+                shouldStop = hasDesired1 or hasDesired2
             end
             
             if shouldStop then
-                local gotTraits = {}
-                if hasTrait1 and trait1 and trait1 ~= "" then table.insert(gotTraits, trait1) end
-                if hasTrait2 and trait2 and trait2 ~= "" then table.insert(gotTraits, trait2) end
-                
                 Window:Notify({
                     Title = "Auto Trait",
-                    Description = "Got " .. table.concat(gotTraits, " & ") .. " on " .. unit.unitName .. "!",
+                    Description = "Got desired trait(s) on " .. unit.unitName .. "!",
                     Lifetime = 5,
                     Style = "Confirm"
                 })
@@ -16504,77 +16523,71 @@ task.spawn(function()
                 return
             end
             
-            if getgenv().AutoGlitchedPotionEnabled then
-                pcall(function()
-                    local clientData = getClientData()
-                    if clientData and clientData.PotionStats then
-                        local glitchedPity = clientData.PotionStats.GlitchedPityPotion
-                        if glitchedPity == 0 then
-                            local remotes = RS:FindFirstChild("Remotes")
-                            if remotes then
-                                local usePotionEvent = remotes:FindFirstChild("UsePotionEvent")
-                                if usePotionEvent then
-                                    usePotionEvent:FireServer("GlitchedPityPotion")
-                                end
-                            end
-                        end
-                    end
-                end)
+            local remotes = RS:FindFirstChild("Remotes")
+            if not remotes then
+                return
             end
             
-            local remotes = RS:FindFirstChild("Remotes")
-            if not remotes then return end
-            
             local quirks = remotes:FindFirstChild("Quirks")
-            if not quirks then return end
+            if not quirks then
+                return
+            end
             
-            local rollEvent = quirks:FindFirstChild("RollEvent")
-            if not rollEvent then return end
+            local rollRemote = quirks:FindFirstChild("Roll")
+            if not rollRemote then
+                return
+            end
             
-            pcall(function()
-                rollEvent:InvokeServer(unit.unitID, currentQuirk1)
+            if not currentTrait1 then
+                return
+            end
+            
+            getgenv()._lastTraitRollTime = tick()
+            
+            local rollSuccess, rollResult = pcall(function()
+                return rollRemote:InvokeServer(unit.unitID, currentTrait1)
             end)
             
-            ClientDataCache.module = nil
-            ClientDataCache.lastUpdate = 0
+            if rollSuccess then
+                ClientDataCache.module = nil
+                ClientDataCache.lastUpdate = 0
+                task.wait(0.8)
+                
+                local newTrait1, newTrait2 = getgenv()._getUnitTraits(unit.unitID)
+                
+                local gotDesired1 = getgenv().AutoTraitDesiredTrait1 and (newTrait1 == getgenv().AutoTraitDesiredTrait1 or newTrait2 == getgenv().AutoTraitDesiredTrait1)
+                local gotDesired2 = getgenv().AutoTraitDesiredTrait2 and (newTrait1 == getgenv().AutoTraitDesiredTrait2 or newTrait2 == getgenv().AutoTraitDesiredTrait2)
+                
+                local gotIt = false
+                if getgenv().AutoTraitRollForBoth then
+                    if getgenv().AutoTraitDesiredTrait1 and getgenv().AutoTraitDesiredTrait2 then
+                        gotIt = gotDesired1 and gotDesired2
+                    elseif getgenv().AutoTraitDesiredTrait1 then
+                        gotIt = gotDesired1
+                    elseif getgenv().AutoTraitDesiredTrait2 then
+                        gotIt = gotDesired2
+                    end
+                else
+                    gotIt = gotDesired1 or gotDesired2
+                end
+                
+                if gotIt then
+                    Window:Notify({
+                        Title = "Auto Trait",
+                        Description = "Got desired trait(s) on " .. unit.unitName .. "!",
+                        Lifetime = 5,
+                        Style = "Confirm"
+                    })
+                    getgenv().AutoTraitEnabled = false
+                end
+            end
         end)
         
         if not success then
-            task.wait(0.1)
+            task.wait(0.5)
         end
     end
 end)
-
-getgenv()._AbilityHelpers1 = getgenv()._AbilityHelpers1 or {}
-
-getgenv()._AbilityHelpers1.getCurrentWave = function()
-    local ok, res = pcall(function()
-        local waveValue = RS:FindFirstChild("Wave")
-        if waveValue and waveValue:IsA("IntValue") then
-            return waveValue.Value
-        end
-        return 0
-    end)
-    
-    if ok and res > 0 then
-        return res
-    end
-    
-    local ok2, res2 = pcall(function()
-        local gui = LocalPlayer.PlayerGui:FindFirstChild("HUD")
-        if not gui then return 0 end
-        local frame = gui:FindFirstChild("Frame")
-        if not frame then return 0 end
-        local wave = frame:FindFirstChild("Wave")
-        if not wave then return 0 end
-        local label = wave:FindFirstChild("TextLabel")
-        if not label then return 0 end
-        local text = label.Text
-        local num = tonumber(text:match("%d+"))
-        return num or 0
-    end)
-    return ok2 and res2 or 0
-end
 
 getgenv()._AbilityHelpers1.getCurrentTimeScale = function()
     local ok, res = pcall(function()
@@ -19926,8 +19939,7 @@ task.spawn(function()
             end
         end)
     end
-    end)
-end
+end)
 
 
 local function formatNumber(num)
@@ -20772,8 +20784,8 @@ do
                         
                         if gained > 0 then
                             local displayName = itemName
-                            if itemNamesModule and itemNamesModule[itemName] then
-                                displayName = itemNamesModule[itemName]
+                            if getgenv()._itemNamesModule and getgenv()._itemNamesModule[itemName] then
+                                displayName = getgenv()._itemNamesModule[itemName]
                             else
                                 displayName = itemName:gsub("([A-Z])", " %1"):gsub("^%s+", "")
                             end
@@ -20786,8 +20798,8 @@ do
                         
                         if gained > 0 then
                             local displayName = itemName
-                            if itemNamesModule and itemNamesModule[itemName] then
-                                displayName = itemNamesModule[itemName]
+                            if getgenv()._itemNamesModule and getgenv()._itemNamesModule[itemName] then
+                                displayName = getgenv()._itemNamesModule[itemName]
                             else
                                 displayName = itemName:gsub("([A-Z])", " %1"):gsub("^%s+", "")
                             end
@@ -20838,8 +20850,8 @@ do
                     
                     if gained > 0 then
                         local displayName = unitName
-                        if unitNamesModule and unitNamesModule[unitName] then
-                            displayName = unitNamesModule[unitName]
+                        if getgenv()._unitNamesModule and getgenv()._unitNamesModule[unitName] then
+                            displayName = getgenv()._unitNamesModule[unitName]
                         else
                             displayName = unitName:gsub("([A-Z])", " %1"):gsub("^%s+", "")
                         end
@@ -21261,16 +21273,16 @@ do
         getgenv()._WebhookTimerLocked = false
     end
     
-    local webhookConnection = nil
-    local lastWebhookTime = 0
-    local WEBHOOK_COOLDOWN = 30
+    getgenv()._webhookConnection = nil
+    getgenv()._lastWebhookTime = 0
+    getgenv()._WEBHOOK_COOLDOWN = 30
     
-    local function setupWebhookTrigger()
-        if webhookConnection then
-            webhookConnection:Disconnect()
+    getgenv()._setupWebhookTrigger = function()
+        if getgenv()._webhookConnection then
+            getgenv()._webhookConnection:Disconnect()
         end
         
-        webhookConnection = ConnectionManager:trackGroup("Webhook",
+        getgenv()._webhookConnection = ConnectionManager:trackGroup("Webhook",
             LocalPlayer.PlayerGui.ChildAdded:Connect(function(child)
                 if child.Name == "EndGameUI" and getgenv().WebhookEnabled then
                 if getgenv().WebhookProcessing then
@@ -21459,20 +21471,20 @@ do
         end
     end
     
-    setupWebhookTrigger()
+    getgenv()._setupWebhookTrigger()
     
-    local unitNamesModule = nil
-    local itemNamesModule = nil
+    getgenv()._unitNamesModule = nil
+    getgenv()._itemNamesModule = nil
     pcall(function()
         local modules = RS:FindFirstChild("Modules")
         if modules then
             local unitNamesData = modules:FindFirstChild("UnitNames")
             if unitNamesData then
-                unitNamesModule = require(unitNamesData)
+                getgenv()._unitNamesModule = require(unitNamesData)
             end
             local itemNamesData = modules:FindFirstChild("ItemNames")
             if itemNamesData then
-                itemNamesModule = require(itemNamesData)
+                getgenv()._itemNamesModule = require(itemNamesData)
             end
         end
     end)
@@ -23686,7 +23698,7 @@ local function isSeamlessEnabled()
     return enabled
 end
 
-local function enableSeamlessRetry()
+getgenv()._enableSeamlessRetry = function()
     local currentlyEnabled = isSeamlessEnabled()
     if currentlyEnabled then
         return true
@@ -23704,7 +23716,7 @@ local function enableSeamlessRetry()
     return success
 end
 
-local function disableSeamlessRetry()
+getgenv()._disableSeamlessRetry = function()
     local currentlyEnabled = isSeamlessEnabled()
     if not currentlyEnabled then
         return true
@@ -23722,7 +23734,7 @@ local function disableSeamlessRetry()
     return success
 end
 
-local function performFullRestart()
+getgenv()._performFullRestart = function()
     local manager = getgenv().SeamlessRestartManager
     manager.isRestarting = true
     
@@ -23761,7 +23773,7 @@ local function performFullRestart()
                 
                 if getgenv().SeamlessFixEnabled then
                     task.wait(2)
-                    enableSeamlessRetry()
+                    getgenv()._enableSeamlessRetry()
                 end
                 return true
             end
@@ -23801,10 +23813,10 @@ if not isInLobby then
             
             if manager.roundCount >= maxRounds then
                 if currentlyEnabled then
-                    disableSeamlessRetry()
+                    getgenv()._disableSeamlessRetry()
                     task.wait(0.3)
                     if isSeamlessEnabled() then
-                        disableSeamlessRetry()
+                        getgenv()._disableSeamlessRetry()
                         task.wait(0.3)
                     end
                 end
@@ -23812,7 +23824,7 @@ if not isInLobby then
             end
             
             if manager.roundCount < maxRounds and not currentlyEnabled then
-                enableSeamlessRetry()
+                getgenv()._enableSeamlessRetry()
             end
         end
         
@@ -23828,7 +23840,7 @@ if not isInLobby then
                 if getgenv().SeamlessFixEnabled and manager.roundCount >= manager.maxRounds then
                     if isSeamlessEnabled() then
                         for i = 1, 2 do
-                            disableSeamlessRetry()
+                            getgenv()._disableSeamlessRetry()
                             task.wait(0.3)
                             if not isSeamlessEnabled() then
                                 break
@@ -23851,7 +23863,7 @@ if not isInLobby then
                             if getgenv().SeamlessFixEnabled and manager.roundCount >= manager.maxRounds then
                                 if seamlessValue.Value == true then
                                     task.wait(0.1)
-                                    disableSeamlessRetry()
+                                    getgenv()._disableSeamlessRetry()
                                 end
                             end
                         end)
@@ -23915,7 +23927,7 @@ if not isInLobby then
                             
                             for i = 1, 5 do
                                 if isSeamlessEnabled() then
-                                    disableSeamlessRetry()
+                                    getgenv()._disableSeamlessRetry()
                                     task.wait(0.5)
                                     if not isSeamlessEnabled() then
                                         break
@@ -23933,7 +23945,7 @@ if not isInLobby then
                                 end
                                 
                                 task.wait(2)
-                                performFullRestart()
+                                getgenv()._performFullRestart()
                             end)
                         else
                             task.spawn(function()
@@ -23966,7 +23978,7 @@ if not isInLobby then
                             task.wait(5)
                             
                             if isSeamlessEnabled() then
-                                disableSeamlessRetry()
+                                getgenv()._disableSeamlessRetry()
                                 task.wait(1)
                             end
                             
@@ -23977,7 +23989,7 @@ if not isInLobby then
                             end
                             
                             task.wait(2)
-                            performFullRestart()
+                            getgenv()._performFullRestart()
                         end)
                     else
                         updateSeamlessSettings()
@@ -24006,7 +24018,7 @@ if not isInLobby then
                             
                             for i = 1, 5 do
                                 if isSeamlessEnabled() then
-                                    disableSeamlessRetry()
+                                    getgenv()._disableSeamlessRetry()
                                     task.wait(0.5)
                                     if not isSeamlessEnabled() then
                                         break
@@ -24024,7 +24036,7 @@ if not isInLobby then
                                 end
                                 
                                 task.wait(2)
-                                performFullRestart()
+                                getgenv()._performFullRestart()
                             end)
                         end
                     end
