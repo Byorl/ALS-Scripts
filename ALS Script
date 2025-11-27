@@ -9266,6 +9266,24 @@ task.spawn(function()
             continue
         end
         
+        local anyChallengeEnabled = getgenv().ChallengeRegularEnabled or getgenv().ChallengeDailyEnabled or getgenv().ChallengeWeeklyEnabled
+        if anyChallengeEnabled then
+            local clientData = getClientData()
+            if clientData then
+                local halfHourlyTime = clientData.LastChallengeHalfHourlyTime or 0
+                local weeklyTime = clientData.LastChallengeWeeklyTime or 0
+                local dailyTime = clientData.LastChallengeDailyTime or 0
+                
+                local regularReady = (getgenv().ChallengeRegularEnabled and halfHourlyTime == 0)
+                local weeklyReady = (getgenv().ChallengeWeeklyEnabled and weeklyTime == 0)
+                local dailyReady = (getgenv().ChallengeDailyEnabled and dailyTime == 0)
+                
+                if regularReady or weeklyReady or dailyReady then
+                    continue
+                end
+            end
+        end
+        
         if not getgenv()._checkIfInLobby() then continue end
         
         if getgenv().AutoJoinConfig and getgenv().AutoJoinConfig.enabled then
@@ -16419,19 +16437,16 @@ task.spawn(function()
 end)
 
 task.spawn(function()
-    local lastRollTime = 0
-    local ROLL_COOLDOWN = 2
-    
     while true do
-        task.wait(0.1)
+        task.wait()
         
         if not getgenv().AutoTraitEnabled then
-            task.wait(0.5)
+            task.wait(0.3)
             continue
         end
         
         if not getgenv().AutoTraitUnit or getgenv().AutoTraitUnit == "" or getgenv().AutoTraitUnit == "No units found" or getgenv().AutoTraitUnit == "Loading units..." then
-            task.wait(0.5)
+            task.wait(0.3)
             continue
         end
         
@@ -16439,12 +16454,7 @@ task.spawn(function()
         local trait2 = getgenv().AutoTraitDesiredTrait2
         
         if (not trait1 or trait1 == "") and (not trait2 or trait2 == "") then
-            task.wait(0.5)
-            continue
-        end
-        
-        local currentTime = tick()
-        if (currentTime - lastRollTime) < ROLL_COOLDOWN then
+            task.wait(0.3)
             continue
         end
         
@@ -16454,7 +16464,6 @@ task.spawn(function()
             
             ClientDataCache.module = nil
             ClientDataCache.lastUpdate = 0
-            task.wait(0.3)
             
             local currentQuirk1, currentQuirk2 = getgenv()._getUnitTraits(unit.unitID)
             
@@ -16506,7 +16515,6 @@ task.spawn(function()
                                 local usePotionEvent = remotes:FindFirstChild("UsePotionEvent")
                                 if usePotionEvent then
                                     usePotionEvent:FireServer("GlitchedPityPotion")
-                                    task.wait(0.5)
                                 end
                             end
                         end
@@ -16523,21 +16531,16 @@ task.spawn(function()
             local rollEvent = quirks:FindFirstChild("RollEvent")
             if not rollEvent then return end
             
-            lastRollTime = tick()
-            
-            local rollSuccess, rollResult = pcall(function()
-                return rollEvent:InvokeServer(unit.unitID, currentQuirk1)
+            pcall(function()
+                rollEvent:InvokeServer(unit.unitID, currentQuirk1)
             end)
             
-            if rollSuccess then
-                ClientDataCache.module = nil
-                ClientDataCache.lastUpdate = 0
-                task.wait(1)
-            end
+            ClientDataCache.module = nil
+            ClientDataCache.lastUpdate = 0
         end)
         
         if not success then
-            task.wait(0.5)
+            task.wait(0.1)
         end
     end
 end)
