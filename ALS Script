@@ -3705,6 +3705,12 @@ local saveConfig = getgenv().SaveConfig
 
 getgenv().DebugMode = ConfigManager:get("toggles", "DebugMode", false)
 
+getgenv().ChallengeRegularEnabled = getgenv().Config.toggles and getgenv().Config.toggles.ChallengeRegularToggle or false
+getgenv().ChallengeDailyEnabled = getgenv().Config.toggles and getgenv().Config.toggles.ChallengeDailyToggle or false
+getgenv().ChallengeWeeklyEnabled = getgenv().Config.toggles and getgenv().Config.toggles.ChallengeWeeklyToggle or false
+getgenv().ChallengeRegularType = getgenv().Config.dropdowns and getgenv().Config.dropdowns.ChallengeRegularType or "Pearl"
+getgenv().ChallengeReturnToLobbyEnabled = getgenv().Config.toggles and getgenv().Config.toggles.ChallengeReturnToLobbyToggle or false
+
 UIFactory:init(getgenv().Config, function(config)
     ConfigManager.config = config
     ConfigManager:save()
@@ -6120,7 +6126,7 @@ task.spawn(function()
                 task.wait(5)
                 continue
             else
-                getgenv()._ChallengePriorityActive = false
+                getgenv()._ChallengePriorityActive = true
             end
         else
             getgenv()._ChallengePriorityActive = false
@@ -9679,10 +9685,18 @@ getgenv()._findUnitByDisplay = function(displayName)
     return nil
 end
 
-
-
-
-
+getgenv()._getUnitTraits = function(unitID)
+    local quirk1, quirk2 = nil, nil
+    local success = pcall(function()
+        local clientData = getClientData()
+        if not clientData or not clientData.UnitData or not clientData.UnitData[unitID] then return end
+        
+        quirk1 = clientData.UnitData[unitID].Quirk
+        quirk2 = clientData.UnitData[unitID].Quirk2
+    end)
+    
+    return quirk1, quirk2
+end
 
 getgenv().CandyCards = {
     ["Weakened Resolve I"] = 13,
@@ -14974,6 +14988,150 @@ if not getgenv()._autoEnchantSuccess then
     warn("[UI ERROR] Auto Enchant UI failed:", getgenv()._autoEnchantErr)
 end
 
+Sections.SeamlessFixRight:Divider()
+Sections.SeamlessFixRight:Header({ Text = "🎲 Auto Trait" })
+Sections.SeamlessFixRight:SubLabel({
+    Text = "Automatically reroll traits on your units until you get the desired one"
+})
+
+getgenv()._autoTraitSuccess, getgenv()._autoTraitErr = pcall(function()
+    getgenv().AutoTraitEnabled = getgenv().Config.toggles.AutoTraitToggle or false
+    getgenv().AutoTraitUnit = getgenv().Config.inputs.AutoTraitUnit or nil
+    getgenv().AutoTraitDesiredTrait1 = getgenv().Config.inputs.AutoTraitDesiredTrait1 or nil
+    getgenv().AutoTraitDesiredTrait2 = getgenv().Config.inputs.AutoTraitDesiredTrait2 or nil
+    getgenv().AutoTraitRollForBoth = getgenv().Config.toggles.AutoTraitRollForBoth or false
+    
+    local allTraits = {
+        "Scoped 1", "Accelerate 1", "Sturdy 1",
+        "Scoped 2", "Accelerate 2", "Sturdy 2",
+        "Shining",
+        "Scoped 3", "Accelerate 3", "Sturdy 3",
+        "Eagle Eye", "Golden", "Hyper Speed", "Juggernaut",
+        "Elemental Master", "Vulture", "Diamond", "Cosmic",
+        "Demi God", "All Seeing", "Entrepreneur", "Shinigami",
+        "Overlord", "Avatar", "Glitched"
+    }
+    
+    createToggle(
+        Sections.SeamlessFixRight,
+        "Auto Trait",
+        "AutoTraitToggle",
+        function(value)
+            getgenv().AutoTraitEnabled = value
+            getgenv().Config.toggles.AutoTraitToggle = value
+            saveConfig(getgenv().Config)
+            Window:Notify({
+                Title = "Auto Trait",
+                Description = value and "Enabled" or "Disabled",
+                Lifetime = 3
+            })
+        end,
+        getgenv().AutoTraitEnabled
+    )
+    
+    getgenv()._autoTraitUnitDropdown = createDropdown(
+        Sections.SeamlessFixRight,
+        "Unit Selection",
+        "AutoTraitUnit",
+        {"Loading units..."},
+        false,
+        function(value)
+            getgenv().AutoTraitUnit = value
+            getgenv().Config.inputs.AutoTraitUnit = value
+            saveConfig(getgenv().Config)
+        end,
+        getgenv().AutoTraitUnit
+    )
+    
+    task.spawn(function()
+        task.wait(3)
+        
+        local unitOptions = {}
+        local units = getgenv()._getPlayerUnits()
+        for _, unit in ipairs(units) do
+            table.insert(unitOptions, unit.display)
+        end
+        
+        if #unitOptions == 0 then
+            table.insert(unitOptions, "No units found")
+        end
+        
+        if getgenv()._autoTraitUnitDropdown and getgenv()._autoTraitUnitDropdown.ClearOptions and getgenv()._autoTraitUnitDropdown.InsertOptions then
+            pcall(function()
+                getgenv()._autoTraitUnitDropdown:ClearOptions()
+                getgenv()._autoTraitUnitDropdown:InsertOptions(unitOptions)
+            end)
+        end
+    end)
+    
+    createDropdown(
+        Sections.SeamlessFixRight,
+        "Desired Trait 1",
+        "AutoTraitDesiredTrait1",
+        allTraits,
+        false,
+        function(value)
+            getgenv().AutoTraitDesiredTrait1 = value
+            getgenv().Config.inputs.AutoTraitDesiredTrait1 = value
+            saveConfig(getgenv().Config)
+        end,
+        getgenv().AutoTraitDesiredTrait1
+    )
+    
+    createDropdown(
+        Sections.SeamlessFixRight,
+        "Desired Trait 2",
+        "AutoTraitDesiredTrait2",
+        allTraits,
+        false,
+        function(value)
+            getgenv().AutoTraitDesiredTrait2 = value
+            getgenv().Config.inputs.AutoTraitDesiredTrait2 = value
+            saveConfig(getgenv().Config)
+        end,
+        getgenv().AutoTraitDesiredTrait2
+    )
+    
+    createToggle(
+        Sections.SeamlessFixRight,
+        "Roll For Both",
+        "AutoTraitRollForBoth",
+        function(value)
+            getgenv().AutoTraitRollForBoth = value
+            getgenv().Config.toggles.AutoTraitRollForBoth = value
+            saveConfig(getgenv().Config)
+            Window:Notify({
+                Title = "Auto Trait",
+                Description = value and "Will roll until BOTH traits are obtained" or "Will roll until EITHER trait is obtained",
+                Lifetime = 3
+            })
+        end,
+        getgenv().AutoTraitRollForBoth
+    )
+    
+    getgenv().AutoGlitchedPotionEnabled = getgenv().Config.toggles.AutoGlitchedPotionToggle or false
+    
+    createToggle(
+        Sections.SeamlessFixRight,
+        "Auto Glitched Potion",
+        "AutoGlitchedPotionToggle",
+        function(value)
+            getgenv().AutoGlitchedPotionEnabled = value
+            getgenv().Config.toggles.AutoGlitchedPotionToggle = value
+            saveConfig(getgenv().Config)
+            Window:Notify({
+                Title = "Auto Glitched Potion",
+                Description = value and "Will use Glitched Pity Potion when pity reaches 0" or "Disabled",
+                Lifetime = 3
+            })
+        end,
+        getgenv().AutoGlitchedPotionEnabled
+    )
+end)
+if not getgenv()._autoTraitSuccess then
+    warn("[UI ERROR] Auto Trait UI failed:", getgenv()._autoTraitErr)
+end
+
 do
 
 Sections.AutoTradeLeft:Header({ Text = "🤝 Auto Trade" })
@@ -16260,7 +16418,129 @@ task.spawn(function()
     end
 end)
 
-
+task.spawn(function()
+    local lastRollTime = 0
+    local ROLL_COOLDOWN = 2
+    
+    while true do
+        task.wait(0.1)
+        
+        if not getgenv().AutoTraitEnabled then
+            task.wait(0.5)
+            continue
+        end
+        
+        if not getgenv().AutoTraitUnit or getgenv().AutoTraitUnit == "" or getgenv().AutoTraitUnit == "No units found" or getgenv().AutoTraitUnit == "Loading units..." then
+            task.wait(0.5)
+            continue
+        end
+        
+        local trait1 = getgenv().AutoTraitDesiredTrait1
+        local trait2 = getgenv().AutoTraitDesiredTrait2
+        
+        if (not trait1 or trait1 == "") and (not trait2 or trait2 == "") then
+            task.wait(0.5)
+            continue
+        end
+        
+        local currentTime = tick()
+        if (currentTime - lastRollTime) < ROLL_COOLDOWN then
+            continue
+        end
+        
+        local success, err = pcall(function()
+            local unit = getgenv()._findUnitByDisplay(getgenv().AutoTraitUnit)
+            if not unit then return end
+            
+            ClientDataCache.module = nil
+            ClientDataCache.lastUpdate = 0
+            task.wait(0.3)
+            
+            local currentQuirk1, currentQuirk2 = getgenv()._getUnitTraits(unit.unitID)
+            
+            local hasTrait1 = false
+            local hasTrait2 = false
+            
+            if trait1 and trait1 ~= "" then
+                hasTrait1 = (currentQuirk1 == trait1) or (currentQuirk2 == trait1)
+            else
+                hasTrait1 = true
+            end
+            
+            if trait2 and trait2 ~= "" then
+                hasTrait2 = (currentQuirk1 == trait2) or (currentQuirk2 == trait2)
+            else
+                hasTrait2 = true
+            end
+            
+            local shouldStop = false
+            if getgenv().AutoTraitRollForBoth then
+                shouldStop = hasTrait1 and hasTrait2
+            else
+                shouldStop = hasTrait1 or hasTrait2
+            end
+            
+            if shouldStop then
+                local gotTraits = {}
+                if hasTrait1 and trait1 and trait1 ~= "" then table.insert(gotTraits, trait1) end
+                if hasTrait2 and trait2 and trait2 ~= "" then table.insert(gotTraits, trait2) end
+                
+                Window:Notify({
+                    Title = "Auto Trait",
+                    Description = "Got " .. table.concat(gotTraits, " & ") .. " on " .. unit.unitName .. "!",
+                    Lifetime = 5,
+                    Style = "Confirm"
+                })
+                getgenv().AutoTraitEnabled = false
+                return
+            end
+            
+            if getgenv().AutoGlitchedPotionEnabled then
+                pcall(function()
+                    local clientData = getClientData()
+                    if clientData and clientData.PotionStats then
+                        local glitchedPity = clientData.PotionStats.GlitchedPityPotion
+                        if glitchedPity == 0 then
+                            local remotes = RS:FindFirstChild("Remotes")
+                            if remotes then
+                                local usePotionEvent = remotes:FindFirstChild("UsePotionEvent")
+                                if usePotionEvent then
+                                    usePotionEvent:FireServer("GlitchedPityPotion")
+                                    task.wait(0.5)
+                                end
+                            end
+                        end
+                    end
+                end)
+            end
+            
+            local remotes = RS:FindFirstChild("Remotes")
+            if not remotes then return end
+            
+            local quirks = remotes:FindFirstChild("Quirks")
+            if not quirks then return end
+            
+            local rollEvent = quirks:FindFirstChild("RollEvent")
+            if not rollEvent then return end
+            
+            lastRollTime = tick()
+            
+            local rollSuccess, rollResult = pcall(function()
+                return rollEvent:InvokeServer(unit.unitID, currentQuirk1)
+            end)
+            
+            if rollSuccess then
+                ClientDataCache.module = nil
+                ClientDataCache.lastUpdate = 0
+                task.wait(1)
+            end
+        end)
+        
+        if not success then
+            task.wait(0.5)
+        end
+    end
+end)
 
 getgenv()._AbilityHelpers1 = getgenv()._AbilityHelpers1 or {}
 
@@ -16820,99 +17100,96 @@ end
 do
     task.spawn(function()
         while true do
-            local pollingInterval = 2
-            task.wait(pollingInterval)
+            task.wait(2)
             
             if getgenv()._ChallengePriorityActive then continue end
             if not getgenv().AutoJoinSpiralTrialEnabled then continue end
             if not getgenv()._checkIfInLobby() then continue end
             
-            ErrorHandler:wrapAsync(function()
+            pcall(function()
                 local remotes = RS:FindFirstChild("Remotes")
-                local spiralTrialRemotes = remotes and remotes:FindFirstChild("SpiralTrial")
-                local enterEvent = spiralTrialRemotes and spiralTrialRemotes:FindFirstChild("Enter")
+                if not remotes then return end
                 
-                if enterEvent then
-                    if getgenv().SpiralTrialWaitForPlayersEnabled then
-                        local entryUI = nil
-                        for _, gui in ipairs(LocalPlayer.PlayerGui:GetChildren()) do
-                            if gui.Name:find("Entry") or gui.Name:find("Spiral") then
-                                entryUI = gui
-                                break
-                            end
-                        end
-                        
-                        if entryUI then
-                            local function findTextLabel(parent)
-                                for _, child in ipairs(parent:GetDescendants()) do
-                                    if child:IsA("TextLabel") and child.Text:find("Players") then
-                                        return child
-                                    end
-                                end
-                                return nil
-                            end
-                            
-                            local textLabel = findTextLabel(entryUI)
-                            if textLabel then
-                                local waitStartTime = tick()
-                                local maxWaitTime = 300
-                                
-                                while tick() - waitStartTime < maxWaitTime do
-                                    local text = textLabel.Text
-                                    local current, max = text:match("%((%d+)/(%d+)%)")
-                                    
-                                    if current and max then
-                                        local currentPlayers = tonumber(current)
-                                        local targetCount = getgenv().SpiralTrialWaitForPlayerCount or 1
-                                        
-                                        if currentPlayers >= targetCount then
-                                            break
-                                        end
-                                    end
-                                    
-                                    task.wait(1)
-                                end
-                            end
-                        end
-                    end
-                    
-                    local spiralPart = workspace:FindFirstChild("Lobby")
+                local spiralTrialRemotes = remotes:FindFirstChild("SpiralTrial")
+                if not spiralTrialRemotes then return end
+                
+                local enterEvent = spiralTrialRemotes:FindFirstChild("Enter")
+                if not enterEvent then return end
+                
+                local spiralPart = workspace:FindFirstChild("Lobby")
+                if spiralPart then
+                    spiralPart = spiralPart:FindFirstChild("SpiralTrials")
                     if spiralPart then
-                        spiralPart = spiralPart:FindFirstChild("SpiralTrials")
-                        if spiralPart then
-                            spiralPart = spiralPart:FindFirstChild("Part")
-                        end
-                    end
-                    
-                    if spiralPart then
-                        local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                        if hrp then
-                            local spiralPrompt = spiralPart:FindFirstChild("SpiralTrialPrompt")
-                            if spiralPrompt then
-                                hrp.CFrame = spiralPrompt.CFrame
-                            else
-                                hrp.CFrame = spiralPart.CFrame
-                            end
-                            task.wait(0.3)
-                        end
-                        
-                        enterEvent:FireServer(spiralPart)
-                        task.wait(0.5)
-                        
-                        local startRemote = spiralTrialRemotes:FindFirstChild("Start")
-                        if startRemote then
-                            startRemote:FireServer()
-                        end
-                        
-                        Window:Notify({
-                            Title = "Spiral Trial",
-                            Description = "Joining Spiral Trial...",
-                            Lifetime = 3
-                        })
-                        
-                        task.wait(5)
+                        spiralPart = spiralPart:FindFirstChild("Part")
                     end
                 end
+                
+                if not spiralPart then return end
+                
+                local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                if not hrp then return end
+                
+                local spiralPrompt = spiralPart:FindFirstChild("SpiralTrialPrompt")
+                if spiralPrompt then
+                    hrp.CFrame = spiralPrompt.CFrame
+                else
+                    hrp.CFrame = spiralPart.CFrame
+                end
+                task.wait(0.3)
+                
+                enterEvent:FireServer(spiralPart)
+                task.wait(0.5)
+                
+                local startRemote = spiralTrialRemotes:FindFirstChild("Start")
+                if not startRemote then return end
+                
+                if getgenv().SpiralTrialWaitForPlayersEnabled then
+                    local entryUI = nil
+                    for _, gui in ipairs(LocalPlayer.PlayerGui:GetChildren()) do
+                        if gui.Name:find("Entry") or gui.Name:find("Spiral") then
+                            entryUI = gui
+                            break
+                        end
+                    end
+                    
+                    if entryUI then
+                        local function findTextLabel(parent)
+                            for _, child in ipairs(parent:GetDescendants()) do
+                                if child:IsA("TextLabel") and child.Text:find("Players") then
+                                    return child
+                                end
+                            end
+                            return nil
+                        end
+                        
+                        local textLabel = findTextLabel(entryUI)
+                        if textLabel then
+                            local waitStartTime = tick()
+                            local maxWaitTime = 300
+                            
+                            while tick() - waitStartTime < maxWaitTime do
+                                if not getgenv().AutoJoinSpiralTrialEnabled then break end
+                                
+                                local text = textLabel.Text
+                                local current, max = text:match("%((%d+)/(%d+)%)")
+                                
+                                if current and max then
+                                    local currentPlayers = tonumber(current)
+                                    local targetCount = getgenv().SpiralTrialWaitForPlayerCount or 1
+                                    
+                                    if currentPlayers >= targetCount then
+                                        break
+                                    end
+                                end
+                                
+                                task.wait(1)
+                            end
+                        end
+                    end
+                end
+                
+                startRemote:FireServer()
+                task.wait(5)
             end)
         end
     end)
