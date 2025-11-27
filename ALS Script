@@ -16542,8 +16542,6 @@ task.spawn(function()
                 return
             end
             
-            getgenv()._lastTraitRollTime = tick()
-            
             local rollSuccess, rollResult = pcall(function()
                 return rollRemote:InvokeServer(unit.unitID, currentTrait1)
             end)
@@ -16551,43 +16549,33 @@ task.spawn(function()
             if rollSuccess then
                 ClientDataCache.module = nil
                 ClientDataCache.lastUpdate = 0
-                task.wait(0.8)
-                
-                local newTrait1, newTrait2 = getgenv()._getUnitTraits(unit.unitID)
-                
-                local gotDesired1 = getgenv().AutoTraitDesiredTrait1 and (newTrait1 == getgenv().AutoTraitDesiredTrait1 or newTrait2 == getgenv().AutoTraitDesiredTrait1)
-                local gotDesired2 = getgenv().AutoTraitDesiredTrait2 and (newTrait1 == getgenv().AutoTraitDesiredTrait2 or newTrait2 == getgenv().AutoTraitDesiredTrait2)
-                
-                local gotIt = false
-                if getgenv().AutoTraitRollForBoth then
-                    if getgenv().AutoTraitDesiredTrait1 and getgenv().AutoTraitDesiredTrait2 then
-                        gotIt = gotDesired1 and gotDesired2
-                    elseif getgenv().AutoTraitDesiredTrait1 then
-                        gotIt = gotDesired1
-                    elseif getgenv().AutoTraitDesiredTrait2 then
-                        gotIt = gotDesired2
-                    end
-                else
-                    gotIt = gotDesired1 or gotDesired2
-                end
-                
-                if gotIt then
-                    Window:Notify({
-                        Title = "Auto Trait",
-                        Description = "Got desired trait(s) on " .. unit.unitName .. "!",
-                        Lifetime = 5,
-                        Style = "Confirm"
-                    })
-                    getgenv().AutoTraitEnabled = false
-                end
             end
         end)
         
         if not success then
-            task.wait(0.5)
+            task.wait(0.1)
         end
     end
 end)
+
+getgenv()._AbilityHelpers1 = getgenv()._AbilityHelpers1 or {}
+
+getgenv()._AbilityHelpers1.getCurrentWave = function()
+    local ok, res = pcall(function()
+        local gui = LocalPlayer.PlayerGui:FindFirstChild("HUD")
+        if not gui then return 0 end
+        local frame = gui:FindFirstChild("Frame")
+        if not frame then return 0 end
+        local wave = frame:FindFirstChild("Wave")
+        if not wave then return 0 end
+        local label = wave:FindFirstChild("TextLabel")
+        if not label then return 0 end
+        local text = label.Text
+        local num = tonumber(text:match("%d+"))
+        return num or 0
+    end)
+    return ok and res or 0
+end
 
 getgenv()._AbilityHelpers1.getCurrentTimeScale = function()
     local ok, res = pcall(function()
@@ -16940,6 +16928,26 @@ end
 getgenv()._lastGameStartedForAbilities = true
 
 getgenv()._InitializeGameSystems = function()
+
+task.spawn(function()
+    local guiNames = {
+        "Ability", "Bottom", "AbilityManager", "ItemHover", "ItemNotifications",
+        "MainUI", "Right", "Top", "UnitHover", "UnitManager", "UnitMessage",
+        "UnitSelection", "Watermark"
+    }
+    
+    while true do
+        task.wait(0.5)
+        pcall(function()
+            for _, guiName in ipairs(guiNames) do
+                local gui = LocalPlayer.PlayerGui:FindFirstChild(guiName)
+                if gui and gui:IsA("ScreenGui") and not gui.Enabled then
+                    gui.Enabled = true
+                end
+            end
+        end)
+    end
+end)
 
 do
 getgenv()._AbilitySystem_lastWave = 0
