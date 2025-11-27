@@ -7002,14 +7002,11 @@ local function setupRecordingHook()
     mt.__namecall = newcclosure(function(self, ...)
         local method = getnamecallmethod()
         
-        local result = {oldNamecall(self, ...)}
+        if not getgenv().MacroRecordingV2 or getgenv()._SkipRecordingNextCall then
+            return oldNamecall(self, ...)
+        end
         
-        local shouldRecord = getgenv().MacroRecordingV2 and 
-                            not getgenv()._SkipRecordingNextCall and 
-                            (method == "InvokeServer" or method == "FireServer") and
-                            not GameStateDetector:isLobby()
-        
-        if shouldRecord then
+        if (method == "InvokeServer" or method == "FireServer") and not GameStateDetector:isLobby() then
             local args = {...}
             task.spawn(function()
                 pcall(function()
@@ -7039,7 +7036,7 @@ local function setupRecordingHook()
             end)
         end
         
-        return table.unpack(result)
+        return oldNamecall(self, ...)
     end)
     
     setreadonly(mt, true)
