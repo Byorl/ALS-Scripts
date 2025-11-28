@@ -4834,7 +4834,8 @@ local function loadMacroSettings()
         playMacroEnabled = false,
         selectedMacro = nil,
         macroMaps = {},
-        stepDelay = 0
+        stepDelay = 0,
+        recordAbilities = true
     }
     pcall(function()
         if isfile(SETTINGS_FILE) then
@@ -4853,7 +4854,8 @@ local function saveMacroSettings()
             playMacroEnabled = getgenv().MacroPlayEnabled or false,
             selectedMacro = getgenv().CurrentMacro,
             macroMaps = getgenv().MacroMaps or {},
-            stepDelay = getgenv().MacroStepDelay or 0
+            stepDelay = getgenv().MacroStepDelay or 0,
+            recordAbilities = getgenv().MacroRecordAbilities ~= false
         }
         writefile(SETTINGS_FILE, HttpService:JSONEncode(settings))
     end)
@@ -5157,6 +5159,7 @@ local savedMacroSettings = loadMacroSettings()
 getgenv().MacroMaps = savedMacroSettings.macroMaps or {}
 getgenv().MacroStepDelay = savedMacroSettings.stepDelay or 0
 getgenv().CurrentMacro = savedMacroSettings.selectedMacro
+getgenv().MacroRecordAbilities = savedMacroSettings.recordAbilities ~= false
 
 getgenv().MacroPlayEnabled = getgenv().Config.toggles.MacroPlayToggle or false
 
@@ -6596,6 +6599,11 @@ local function setupTowerUpgradeListener(tower)
                     return
                 end
                 
+                local placementIndex = nil
+                if getgenv()._MacroTowerToIndex and getgenv()._MacroTowerToIndex[tower] then
+                    placementIndex = getgenv()._MacroTowerToIndex[tower]
+                end
+                
                 table.insert(getgenv().MacroDataV2, {
                     RemoteName = "Upgrade",
                     Args = {},
@@ -6604,7 +6612,8 @@ local function setupTowerUpgradeListener(tower)
                     Cost = cost,
                     TowerName = displayName,
                     ActionType = "Upgrade",
-                    Wave = getgenv().MacroGameState.currentWave
+                    Wave = getgenv().MacroGameState.currentWave,
+                    PlacementIndex = placementIndex
                 })
             end
             
@@ -6923,11 +6932,18 @@ local function processRemoteCall(remoteName, method, args)
             local tower = args[1]
             local towerName = tower.Name
             
+            local placementIndex = nil
+            if getgenv()._MacroTowerToIndex and getgenv()._MacroTowerToIndex[tower] then
+                placementIndex = getgenv()._MacroTowerToIndex[tower]
+            end
+            
             if #getgenv().MacroDataV2 >= 5000 then
                 warn("[Macro] Recording limit reached (5000 steps). Stopping recording.")
                 getgenv().MacroRecordingV2 = false
                 return
             end
+            
+            local displayName = getgenv()._GetEZADisplayName(towerName)
             
             table.insert(getgenv().MacroDataV2, {
                 RemoteName = remoteName,
@@ -6935,9 +6951,10 @@ local function processRemoteCall(remoteName, method, args)
                 Time = now - getgenv().MacroRecordingStartTime,
                 IsInvoke = (method == "InvokeServer"),
                 Cost = 0,
-                TowerName = towerName,
+                TowerName = displayName,
                 ActionType = "Sell",
-                Wave = getgenv().MacroGameState.currentWave
+                Wave = getgenv().MacroGameState.currentWave,
+                PlacementIndex = placementIndex
             })
             
             if towerTracker.placeCounts[towerName] then
@@ -7002,11 +7019,14 @@ local function setupRecordingHook()
     mt.__namecall = newcclosure(function(self, ...)
         local method = getnamecallmethod()
         
-        if not getgenv().MacroRecordingV2 or getgenv()._SkipRecordingNextCall then
-            return oldNamecall(self, ...)
-        end
+        local result = {oldNamecall(self, ...)}
         
-        if (method == "InvokeServer" or method == "FireServer") and not GameStateDetector:isLobby() then
+        local shouldRecord = getgenv().MacroRecordingV2 and 
+                            not getgenv()._SkipRecordingNextCall and 
+                            (method == "InvokeServer" or method == "FireServer") and
+                            not GameStateDetector:isLobby()
+        
+        if shouldRecord then
             local args = {...}
             task.spawn(function()
                 pcall(function()
@@ -7036,7 +7056,7 @@ local function setupRecordingHook()
             end)
         end
         
-        return oldNamecall(self, ...)
+        return table.unpack(result)
     end)
     
     setreadonly(mt, true)
@@ -7104,12 +7124,21 @@ local function setupRecordingHook()
                             
                             local displayName = getgenv()._GetEZADisplayName(towerName)
                             
+                            local placeUnitName = towerName:gsub("EZA$", ""):gsub("Eza$", "")
+                            
                             if displayName ~= towerName then
-                                print("[Macro Recording] EZA unit detected: " .. displayName .. " (actual: " .. towerName .. ")")
+                                print("[Macro Recording] EZA unit detected: " .. displayName .. " (place as: " .. placeUnitName .. ")")
                             end
                             
                             local cframe = newestTower:GetPivot()
-                            local savedArgs = {towerName, {cframe:GetComponents()}}
+                            local savedArgs = {placeUnitName, {cframe:GetComponents()}}
+                            
+                            getgenv()._MacroPlacementIndex = getgenv()._MacroPlacementIndex or {}
+                            getgenv()._MacroPlacementIndex[displayName] = (getgenv()._MacroPlacementIndex[displayName] or 0) + 1
+                            local placementIndex = getgenv()._MacroPlacementIndex[displayName]
+                            
+                            getgenv()._MacroTowerToIndex = getgenv()._MacroTowerToIndex or {}
+                            getgenv()._MacroTowerToIndex[newestTower] = placementIndex
                             
                             table.insert(getgenv().MacroDataV2, {
                                 RemoteName = "PlaceTower",
@@ -7119,7 +7148,8 @@ local function setupRecordingHook()
                                 Cost = cost,
                                 TowerName = displayName,
                                 ActionType = "Place",
-                                Wave = getgenv().MacroGameState.currentWave
+                                Wave = getgenv().MacroGameState.currentWave,
+                                PlacementIndex = placementIndex
                             })
                             
                             getgenv().MacroStatusText = "Recording"
@@ -7409,17 +7439,14 @@ local function executeAction(action, retryCount)
                 local matches = (t.Name == towerNameToFind)
                 
                 if not matches and ezaDisplayName:match("EZA$") then
-                    local clientData = getClientData()
-                    if clientData and clientData.Slots then
-                        for _, slotData in pairs(clientData.Slots) do
-                            if slotData and slotData.Value == towerNameToFind and slotData.UnitID then
-                                local unitData = clientData.UnitData and clientData.UnitData[slotData.UnitID]
-                                if unitData and unitData.EZA == true then
-                                    matches = (t.Name == towerNameToFind)
-                                    break
-                                end
-                            end
-                        end
+                    matches = (t.Name == towerNameToFind .. "EZA") or (t.Name == ezaDisplayName)
+                end
+                
+                if not matches then
+                    local towerBaseName = t.Name:gsub("EZA$", ""):gsub("Eza$", "")
+                    local targetBaseName = towerNameToFind:gsub("EZA$", ""):gsub("Eza$", "")
+                    if towerBaseName == targetBaseName then
+                        matches = true
                     end
                 end
                 
@@ -7446,20 +7473,53 @@ local function executeAction(action, retryCount)
         
         local selectedTower = nil
         local selectionMethod = "lowest_level"
+        
+        if action.PlacementIndex then
+            getgenv()._MacroPlaybackTowerIndex = getgenv()._MacroPlaybackTowerIndex or {}
+            local indexKey = action.TowerName .. "_" .. action.PlacementIndex
+            
+            if getgenv()._MacroPlaybackTowerIndex[indexKey] then
+                local trackedTower = getgenv()._MacroPlaybackTowerIndex[indexKey]
+                if trackedTower and trackedTower.Parent then
+                    for _, towerData in ipairs(towers) do
+                        if towerData.tower == trackedTower then
+                            selectedTower = towerData
+                            selectionMethod = "placement_index"
+                            break
+                        end
+                    end
+                end
+            end
+        end
+        
         local placementCFrame = nil
         
-        if not action.CFrame and getgenv().MacroPlaybackMacroData then
+        if not selectedTower and action.PlacementIndex and getgenv().MacroPlaybackMacroData then
             for i = 1, getgenv().MacroCurrentStep - 1 do
                 local prevAction = getgenv().MacroPlaybackMacroData[i]
-                if prevAction and prevAction.ActionType == "Place" and prevAction.TowerName == action.TowerName then
+                if prevAction and prevAction.ActionType == "Place" and prevAction.TowerName == action.TowerName and prevAction.PlacementIndex == action.PlacementIndex then
                     if prevAction.Args and prevAction.Args[2] and type(prevAction.Args[2]) == "table" and #prevAction.Args[2] >= 12 then
                         placementCFrame = prevAction.Args[2]
                         break
                     end
                 end
             end
-        else
-            placementCFrame = action.CFrame
+        end
+        
+        if not selectedTower and not placementCFrame then
+            if not action.CFrame and getgenv().MacroPlaybackMacroData then
+                for i = 1, getgenv().MacroCurrentStep - 1 do
+                    local prevAction = getgenv().MacroPlaybackMacroData[i]
+                    if prevAction and prevAction.ActionType == "Place" and prevAction.TowerName == action.TowerName then
+                        if prevAction.Args and prevAction.Args[2] and type(prevAction.Args[2]) == "table" and #prevAction.Args[2] >= 12 then
+                            placementCFrame = prevAction.Args[2]
+                            break
+                        end
+                    end
+                end
+            else
+                placementCFrame = action.CFrame
+            end
         end
         
         if placementCFrame and type(placementCFrame) == "table" and #placementCFrame >= 12 then
@@ -7570,10 +7630,28 @@ local function executeAction(action, retryCount)
         local allTowers = {}
         
         local towerNameToFind = getgenv()._GetActualTowerName(action.TowerName)
+        local ezaDisplayName = action.TowerName
         
         for _, t in pairs(workspace.Towers:GetChildren()) do
-            if t.Name == towerNameToFind and t:FindFirstChild("Owner") and t.Owner.Value == LocalPlayer then
-                table.insert(allTowers, t)
+            local owner = t:FindFirstChild("Owner")
+            if owner and owner.Value == LocalPlayer then
+                local matches = (t.Name == towerNameToFind)
+                
+                if not matches and ezaDisplayName:match("EZA$") then
+                    matches = (t.Name == towerNameToFind .. "EZA") or (t.Name == ezaDisplayName)
+                end
+                
+                if not matches then
+                    local towerBaseName = t.Name:gsub("EZA$", ""):gsub("Eza$", "")
+                    local targetBaseName = towerNameToFind:gsub("EZA$", ""):gsub("Eza$", "")
+                    if towerBaseName == targetBaseName then
+                        matches = true
+                    end
+                end
+                
+                if matches then
+                    table.insert(allTowers, t)
+                end
             end
         end
         
@@ -7582,20 +7660,52 @@ local function executeAction(action, retryCount)
         end
         
         local tower = nil
+        
+        if action.PlacementIndex then
+            getgenv()._MacroPlaybackTowerIndex = getgenv()._MacroPlaybackTowerIndex or {}
+            local indexKey = action.TowerName .. "_" .. action.PlacementIndex
+            
+            if getgenv()._MacroPlaybackTowerIndex[indexKey] then
+                local trackedTower = getgenv()._MacroPlaybackTowerIndex[indexKey]
+                if trackedTower and trackedTower.Parent then
+                    for _, t in ipairs(allTowers) do
+                        if t == trackedTower then
+                            tower = t
+                            break
+                        end
+                    end
+                end
+            end
+        end
+        
         local placementCFrame = nil
         
-        if not action.CFrame and getgenv().MacroPlaybackMacroData then
+        if not tower and action.PlacementIndex and getgenv().MacroPlaybackMacroData then
             for i = 1, getgenv().MacroCurrentStep - 1 do
                 local prevAction = getgenv().MacroPlaybackMacroData[i]
-                if prevAction and prevAction.ActionType == "Place" and prevAction.TowerName == action.TowerName then
+                if prevAction and prevAction.ActionType == "Place" and prevAction.TowerName == action.TowerName and prevAction.PlacementIndex == action.PlacementIndex then
                     if prevAction.Args and prevAction.Args[2] and type(prevAction.Args[2]) == "table" and #prevAction.Args[2] >= 12 then
                         placementCFrame = prevAction.Args[2]
                         break
                     end
                 end
             end
-        else
-            placementCFrame = action.CFrame
+        end
+        
+        if not tower and not placementCFrame then
+            if not action.CFrame and getgenv().MacroPlaybackMacroData then
+                for i = 1, getgenv().MacroCurrentStep - 1 do
+                    local prevAction = getgenv().MacroPlaybackMacroData[i]
+                    if prevAction and prevAction.ActionType == "Place" and prevAction.TowerName == action.TowerName then
+                        if prevAction.Args and prevAction.Args[2] and type(prevAction.Args[2]) == "table" and #prevAction.Args[2] >= 12 then
+                            placementCFrame = prevAction.Args[2]
+                            break
+                        end
+                    end
+                end
+            else
+                placementCFrame = action.CFrame
+            end
         end
         
         if placementCFrame and type(placementCFrame) == "table" and #placementCFrame >= 12 and #allTowers > 1 then
@@ -7676,17 +7786,19 @@ local function executeAction(action, retryCount)
         
         print("[Macro] Placing " .. (action.TowerName or "?") .. " at position")
         
-        local actualTowerName = getgenv()._GetActualTowerName(action.TowerName or unitNameToPlace)
-        local specificTowerCountBefore = 0
+        local displayName = action.TowerName or unitNameToPlace
+        local baseName = unitNameToPlace
+        local ezaName = baseName .. "EZA"
+        local isEZA = displayName:match("EZA$")
+        
+        local towersBefore = {}
         local towerCountBefore = 0
         
         for _, t in pairs(workspace.Towers:GetChildren()) do
             local owner = t:FindFirstChild("Owner")
             if owner and owner.Value == LocalPlayer then
                 towerCountBefore = towerCountBefore + 1
-                if t.Name == actualTowerName then
-                    specificTowerCountBefore = specificTowerCountBefore + 1
-                end
+                towersBefore[t] = true
             end
         end
         
@@ -7699,28 +7811,32 @@ local function executeAction(action, retryCount)
         
         task.wait(0.8)
         
-        local specificTowerCountAfter = 0
+        local newTower = nil
         local towerCountAfter = 0
         
         for _, t in pairs(workspace.Towers:GetChildren()) do
             local owner = t:FindFirstChild("Owner")
             if owner and owner.Value == LocalPlayer then
                 towerCountAfter = towerCountAfter + 1
-                if t.Name == actualTowerName then
-                    specificTowerCountAfter = specificTowerCountAfter + 1
+                if not towersBefore[t] then
+                    local nameMatches = (t.Name == baseName) or (t.Name == ezaName) or (t.Name == displayName)
+                    if nameMatches then
+                        newTower = t
+                    end
                 end
             end
         end
         
-        if specificTowerCountAfter > specificTowerCountBefore then
-            print("[Macro] ✅ Placement successful - " .. actualTowerName .. " (" .. specificTowerCountBefore .. " → " .. specificTowerCountAfter .. ") | Total: " .. towerCountBefore .. " → " .. towerCountAfter)
+        if newTower then
+            if action.PlacementIndex then
+                getgenv()._MacroPlaybackTowerIndex = getgenv()._MacroPlaybackTowerIndex or {}
+                local indexKey = displayName .. "_" .. action.PlacementIndex
+                getgenv()._MacroPlaybackTowerIndex[indexKey] = newTower
+            end
+            print("[Macro] ✅ Placement successful - " .. newTower.Name .. " | Total: " .. towerCountBefore .. " → " .. towerCountAfter)
             return true, "Placed"
         else
-            print("[Macro] ❌ Placement failed - " .. actualTowerName .. " count unchanged: " .. specificTowerCountBefore .. " | Total towers: " .. towerCountAfter)
-            if specificTowerCountBefore > 0 then
-                print("[Macro] ⚠️ Unit already placed, skipping duplicate placement attempt")
-                return true, "Already placed"
-            end
+            print("[Macro] ❌ Placement failed - " .. displayName .. " not found | Total towers: " .. towerCountAfter)
             if retryCount < 1 then
                 warn("[Macro] Retrying placement...")
                 task.wait(0.5)
@@ -7897,6 +8013,7 @@ local function playMacroV2()
     end
     
     getgenv().MacroPlaybackActive = true
+    getgenv()._MacroPlaybackTowerIndex = {}
     
     if not getgenv()._MacroInstanceId then
         getgenv()._MacroInstanceId = 0
@@ -13179,6 +13296,8 @@ getgenv().MacroRecordToggle = createToggleNoSave(
             getgenv().MacroRecordingV2 = true
             getgenv().MacroDataV2 = {}
             getgenv().MacroRecordingStartTime = tick()
+            getgenv()._MacroPlacementIndex = {}
+            getgenv()._MacroTowerToIndex = {}
             getgenv().MacroStatusText = "Recording"
             getgenv().MacroCurrentStep = 0
             getgenv().MacroTotalSteps = 0
