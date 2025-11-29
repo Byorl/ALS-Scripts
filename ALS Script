@@ -6183,26 +6183,41 @@ task.spawn(function()
                         interactRemote:FireServer("Select", "Challenge", 1, "Weekly")
                         task.wait(0.3)
                     end
-                    task.wait(0.5)
-                    interactRemote:FireServer("Skip")
-                    task.wait(3)
+                    if getgenv().ChallengeAutoStartEnabled then
+                        task.wait(0.5)
+                        for i = 1, 5 do
+                            interactRemote:FireServer("Skip")
+                            task.wait(0.5)
+                        end
+                    end
+                    task.wait(2)
                 elseif getgenv().ChallengeDailyEnabled and dailyTime == 0 then
                     for i = 1, 2 do
                         interactRemote:FireServer("Select", "Challenge", 1, "Daily")
                         task.wait(0.3)
                     end
-                    task.wait(0.5)
-                    interactRemote:FireServer("Skip")
-                    task.wait(3)
+                    if getgenv().ChallengeAutoStartEnabled then
+                        task.wait(0.5)
+                        for i = 1, 5 do
+                            interactRemote:FireServer("Skip")
+                            task.wait(0.5)
+                        end
+                    end
+                    task.wait(2)
                 elseif getgenv().ChallengeRegularEnabled and halfHourlyTime == 0 then
                     local challengeType = getgenv().ChallengeRegularType or "Pearl"
                     for i = 1, 2 do
                         interactRemote:FireServer("Select", "Challenge", 1, challengeType)
                         task.wait(0.3)
                     end
-                    task.wait(0.5)
-                    interactRemote:FireServer("Skip")
-                    task.wait(3)
+                    if getgenv().ChallengeAutoStartEnabled then
+                        task.wait(0.5)
+                        for i = 1, 5 do
+                            interactRemote:FireServer("Skip")
+                            task.wait(0.5)
+                        end
+                    end
+                    task.wait(2)
                 end
             end)
         end
@@ -10809,6 +10824,22 @@ createToggle(
         })
     end,
     getgenv().ChallengeRegularEnabled
+)
+
+getgenv().ChallengeAutoStartEnabled = getgenv().Config.toggles.ChallengeAutoStartToggle or false
+createToggle(
+    Sections.ChallengeLeft,
+    "Auto Start Challenge",
+    "ChallengeAutoStartToggle",
+    function(value)
+        getgenv().ChallengeAutoStartEnabled = value
+        Window:Notify({
+            Title = "Challenge Auto Start",
+            Description = value and "Will auto-start challenge games" or "Disabled",
+            Lifetime = 3
+        })
+    end,
+    getgenv().ChallengeAutoStartEnabled
 )
 
 getgenv().ChallengeReturnToLobbyEnabled = getgenv().Config.toggles.ChallengeReturnToLobbyToggle or false
