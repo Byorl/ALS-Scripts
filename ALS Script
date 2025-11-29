@@ -6224,6 +6224,37 @@ task.spawn(function()
     end
 end)
 
+task.spawn(function()
+    while true do
+        task.wait(1)
+        
+        if not getgenv().ChallengeAutoStartEnabled then
+            continue
+        end
+        
+        local anyChallengeEnabled = getgenv().ChallengeRegularEnabled or getgenv().ChallengeDailyEnabled or getgenv().ChallengeWeeklyEnabled
+        if not anyChallengeEnabled then
+            continue
+        end
+        
+        pcall(function()
+            local currentlyInLobby = workspace:FindFirstChild("Lobby") ~= nil
+            if not currentlyInLobby then return end
+            
+            local remotes = RS:FindFirstChild("Remotes")
+            if not remotes then return end
+            
+            local teleporter = remotes:FindFirstChild("Teleporter")
+            if not teleporter then return end
+            
+            local interactRemote = teleporter:FindFirstChild("Interact")
+            if not interactRemote then return end
+            
+            interactRemote:FireServer("Skip")
+        end)
+    end
+end)
+
 local function cacheRemotes()
     if next(getgenv().MacroRemoteCache) then return true end
     
