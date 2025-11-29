@@ -6135,7 +6135,7 @@ task.spawn(function()
             getgenv()._ChallengePriorityActive = false
         end
         
-        if anyChallengeEnabled then
+        if anyChallengeEnabled and not getgenv()._ChallengeSelected then
             pcall(function()
                 local currentlyInLobby = false
                 pcall(function()
@@ -6144,6 +6144,7 @@ task.spawn(function()
                 end)
                 
                 if not currentlyInLobby then
+                    getgenv()._ChallengeSelected = false
                     return
                 end
                 
@@ -6166,58 +6167,34 @@ task.spawn(function()
                             if door and door:IsA("BasePart") then
                                 local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
                                 if hrp then
-                                    for i = 1, 3 do
-                                        hrp.CFrame = door.CFrame + Vector3.new(0, 3, 0)
-                                        task.wait(0.3)
-                                    end
+                                    hrp.CFrame = door.CFrame + Vector3.new(0, 3, 0)
+                                    task.wait(0.5)
                                 end
                             end
                         end
                     end
                 end
                 
-                task.wait(0.5)
+                task.wait(0.3)
+                
+                local selectedChallenge = false
                 
                 if getgenv().ChallengeWeeklyEnabled and weeklyTime == 0 then
-                    for i = 1, 2 do
-                        interactRemote:FireServer("Select", "Challenge", 1, "Weekly")
-                        task.wait(0.3)
-                    end
-                    if getgenv().ChallengeAutoStartEnabled then
-                        task.wait(0.5)
-                        for i = 1, 5 do
-                            interactRemote:FireServer("Skip")
-                            task.wait(0.5)
-                        end
-                    end
-                    task.wait(2)
+                    interactRemote:FireServer("Select", "Challenge", 1, "Weekly")
+                    selectedChallenge = true
                 elseif getgenv().ChallengeDailyEnabled and dailyTime == 0 then
-                    for i = 1, 2 do
-                        interactRemote:FireServer("Select", "Challenge", 1, "Daily")
-                        task.wait(0.3)
-                    end
-                    if getgenv().ChallengeAutoStartEnabled then
-                        task.wait(0.5)
-                        for i = 1, 5 do
-                            interactRemote:FireServer("Skip")
-                            task.wait(0.5)
-                        end
-                    end
-                    task.wait(2)
+                    interactRemote:FireServer("Select", "Challenge", 1, "Daily")
+                    selectedChallenge = true
                 elseif getgenv().ChallengeRegularEnabled and halfHourlyTime == 0 then
                     local challengeType = getgenv().ChallengeRegularType or "Pearl"
-                    for i = 1, 2 do
-                        interactRemote:FireServer("Select", "Challenge", 1, challengeType)
-                        task.wait(0.3)
-                    end
-                    if getgenv().ChallengeAutoStartEnabled then
-                        task.wait(0.5)
-                        for i = 1, 5 do
-                            interactRemote:FireServer("Skip")
-                            task.wait(0.5)
-                        end
-                    end
-                    task.wait(2)
+                    interactRemote:FireServer("Select", "Challenge", 1, challengeType)
+                    selectedChallenge = true
+                end
+                
+                if selectedChallenge then
+                    getgenv()._ChallengeSelected = true
+                    task.wait(10)
+                    getgenv()._ChallengeSelected = false
                 end
             end)
         end
