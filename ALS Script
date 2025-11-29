@@ -6825,6 +6825,189 @@ getgenv().recordCardSelection = function(numericArg, cardName)
     end
 end
 
+getgenv().recordPromptCardClick = function(cardName)
+    local success, err = pcall(function()
+        if not getgenv().MacroRecordingV2 then return end
+        if getgenv().MacroRecordAbilities == false then return end
+        if getgenv()._SkipRecordingNextCall then return end
+        
+        local now = tick()
+        local elapsedTime = now - getgenv().MacroRecordingStartTime
+        local currentWave = getgenv().MacroGameState.currentWave
+        
+        if #getgenv().MacroDataV2 >= 5000 then
+            getgenv().MacroRecordingV2 = false
+            return
+        end
+        
+        table.insert(getgenv().MacroDataV2, {
+            RemoteName = "PromptCardClick",
+            Args = {cardName},
+            Time = elapsedTime,
+            IsInvoke = false,
+            Cost = 0,
+            CardName = cardName,
+            ActionType = "PromptCardClick",
+            Wave = currentWave
+        })
+        
+        getgenv().MacroStatusText = "Recording"
+        getgenv().MacroCurrentStep = #getgenv().MacroDataV2
+        getgenv().MacroTotalSteps = #getgenv().MacroDataV2
+        getgenv().MacroActionText = "Prompt Card"
+        getgenv().MacroUnitText = cardName
+        
+        if getgenv().UpdateMacroStatus then
+            getgenv().UpdateMacroStatus()
+        end
+    end)
+end
+
+getgenv()._PromptCardConnections = {}
+
+getgenv()._GetPromptCardName = function(button)
+    local ok, result = pcall(function()
+        local function searchForTextLabel(parent, depth)
+            if depth > 10 then return nil end
+            for _, child in ipairs(parent:GetChildren()) do
+                if child:IsA("TextLabel") and child.Text and child.Text ~= "" and child.Text:find(":") then
+                    return child.Text
+                end
+                if child:IsA("Frame") or child:IsA("Folder") then
+                    local found = searchForTextLabel(child, depth + 1)
+                    if found then return found end
+                end
+            end
+            return nil
+        end
+        return searchForTextLabel(button, 0)
+    end)
+    return ok and result or nil
+end
+
+getgenv()._SetupPromptCardListener = function(button)
+    if not button or not button:IsA("TextButton") then return end
+    if getgenv()._PromptCardConnections[button] then return end
+    
+    local cardName = getgenv()._GetPromptCardName(button)
+    if not cardName then return end
+    
+    local conn = button.MouseButton1Click:Connect(function()
+        if getgenv()._SkipRecordingNextCall then return end
+        local currentName = getgenv()._GetPromptCardName(button)
+        if currentName and currentName:find(":") then
+            getgenv().recordPromptCardClick(currentName)
+        end
+    end)
+    getgenv()._PromptCardConnections[button] = conn
+end
+
+getgenv()._CleanupPromptCardConnections = function()
+    for button, conn in pairs(getgenv()._PromptCardConnections) do
+        pcall(function() conn:Disconnect() end)
+    end
+    getgenv()._PromptCardConnections = {}
+end
+
+task.spawn(function()
+    local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+    
+    local function scanPromptButtons(instance)
+        if instance:IsA("TextButton") then
+            local cardName = getgenv()._GetPromptCardName(instance)
+            if cardName and cardName:find(":") then
+                getgenv()._SetupPromptCardListener(instance)
+            end
+        end
+    end
+    
+    local function onPromptAdded(prompt)
+        if prompt.Name ~= "Prompt" then return end
+        for _, desc in ipairs(prompt:GetDescendants()) do
+            scanPromptButtons(desc)
+        end
+        prompt.DescendantAdded:Connect(scanPromptButtons)
+    end
+    
+    for _, child in ipairs(PlayerGui:GetChildren()) do
+        if child.Name == "Prompt" then
+            onPromptAdded(child)
+        end
+    end
+    
+    PlayerGui.ChildAdded:Connect(function(child)
+        if child.Name == "Prompt" then
+            onPromptAdded(child)
+        end
+    end)
+end)
+
+getgenv().executePromptCardClick = function(action)
+    local success, result = pcall(function()
+        if not action.CardName then return false end
+        
+        local targetCard = action.CardName
+        local PlayerGui = LocalPlayer.PlayerGui
+        local prompt = PlayerGui:FindFirstChild("Prompt")
+        if not prompt then return false end
+        
+        local targetButton = nil
+        for _, desc in ipairs(prompt:GetDescendants()) do
+            if desc:IsA("TextButton") then
+                local cardName = getgenv()._GetPromptCardName(desc)
+                if cardName and cardName == targetCard then
+                    targetButton = desc
+                    break
+                end
+            end
+        end
+        
+        if not targetButton then return false end
+        
+        getgenv()._SkipRecordingNextCall = true
+        local clicked = false
+        
+        if getconnections then
+            pcall(function()
+                local events = {"Activated", "MouseButton1Click", "MouseButton1Down"}
+                for _, eventName in ipairs(events) do
+                    local connections = getconnections(targetButton[eventName])
+                    if connections then
+                        for _, conn in ipairs(connections) do
+                            if conn and conn.Fire then
+                                conn:Fire()
+                                clicked = true
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+        
+        if not clicked then
+            pcall(function()
+                local VIM = game:GetService("VirtualInputManager")
+                local GuiService = game:GetService("GuiService")
+                pcall(function() GuiService.SelectedObject = nil end)
+                task.wait(0.05)
+                if targetButton:IsDescendantOf(PlayerGui) then
+                    pcall(function() GuiService.SelectedObject = targetButton end)
+                    task.wait(0.1)
+                    VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
+                    task.wait(0.02)
+                    VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
+                    clicked = true
+                end
+            end)
+        end
+        
+        getgenv()._SkipRecordingNextCall = false
+        return clicked
+    end)
+    
+    return success and result or false
+end
+
 local function processRemoteCall(remoteName, method, args)
     local now = tick()
     local remoteNameLower = remoteName:lower()
@@ -7897,6 +8080,13 @@ local function executeAction(action, retryCount)
         else
             return false, "Card selection failed"
         end
+    elseif action.ActionType == "PromptCardClick" then
+        local success = getgenv().executePromptCardClick(action)
+        if success then
+            return true, "Prompt card clicked"
+        else
+            return false, "Prompt card click failed"
+        end
     end
     
     return false, "Unknown action type"
@@ -8001,7 +8191,7 @@ local function validateMacro(macroData)
 end
 
 getgenv().shouldExecuteAbility = function(action, currentElapsedTime)
-    if action.ActionType ~= "Ability" and action.ActionType ~= "AbilitySelection" then
+    if action.ActionType ~= "Ability" and action.ActionType ~= "AbilitySelection" and action.ActionType ~= "PromptCardClick" then
         return false
     end
     
@@ -8280,7 +8470,7 @@ local function playMacroV2()
             
             local currentElapsedTime = tick() - playbackStartTime
             
-            if action.ActionType == "Ability" or action.ActionType == "AbilitySelection" then
+            if action.ActionType == "Ability" or action.ActionType == "AbilitySelection" or action.ActionType == "PromptCardClick" then
                 if not getgenv().shouldExecuteAbility(action, currentElapsedTime) then
                     task.wait(0.1)
                     continue
@@ -8292,7 +8482,7 @@ local function playMacroV2()
             getgenv().MacroActionText = action.ActionType or "Action"
             getgenv().MacroUnitText = action.TowerName or "?"
             
-            if action.ActionType == "Ability" or action.ActionType == "AbilitySelection" then
+            if action.ActionType == "Ability" or action.ActionType == "AbilitySelection" or action.ActionType == "PromptCardClick" then
                 getgenv().MacroWaitingText = "Using ability..."
             else
                 getgenv().MacroWaitingText = ""
@@ -19046,18 +19236,19 @@ getgenv()._GetGriffithCardButtons = function()
     local ok, result = pcall(function()
         local prompt = LocalPlayer.PlayerGui:FindFirstChild("Prompt")
         if not prompt or not prompt.Enabled then return nil end
-        local frame = prompt:FindFirstChild("Frame")
-        if not frame then return nil end
-        local frame2 = frame:FindFirstChild("Frame")
-        if not frame2 then return nil end
-        local frame3 = frame2:FindFirstChild("Frame")
-        if not frame3 then return nil end
-        local frame4 = frame3:FindFirstChild("Frame")
-        if not frame4 then return nil end
         local buttons = {}
-        for _, child in ipairs(frame4:GetChildren()) do
-            if child:IsA("TextButton") then
-                table.insert(buttons, child)
+        for _, desc in ipairs(prompt:GetDescendants()) do
+            if desc:IsA("TextButton") then
+                local hasLightSacrifice = false
+                for _, child in ipairs(desc:GetDescendants()) do
+                    if child:IsA("TextLabel") and child.Text and child.Text:find("Light Sacrifice") then
+                        hasLightSacrifice = true
+                        break
+                    end
+                end
+                if hasLightSacrifice then
+                    table.insert(buttons, desc)
+                end
             end
         end
         return #buttons > 0 and buttons or nil
