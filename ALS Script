@@ -15097,6 +15097,10 @@ getgenv()._autoEnchantSuccess, getgenv()._autoEnchantErr = pcall(function()
             table.insert(unitOptions, unit.display)
         end
         
+        table.sort(unitOptions, function(a, b)
+            return a:lower() < b:lower()
+        end)
+        
         if #unitOptions == 0 then
             table.insert(unitOptions, "No units found")
         end
@@ -15209,6 +15213,10 @@ getgenv()._autoTraitSuccess, getgenv()._autoTraitErr = pcall(function()
         for _, unit in ipairs(units) do
             table.insert(unitOptions, unit.display)
         end
+        
+        table.sort(unitOptions, function(a, b)
+            return a:lower() < b:lower()
+        end)
         
         if #unitOptions == 0 then
             table.insert(unitOptions, "No units found")
