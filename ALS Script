@@ -18265,6 +18265,7 @@ do
             if not text then return false end
             if text:find("on CD") then return true end
             if text:find("Unit Currently Stunned!") then return true end
+            if text:find("Ability Disabled!") then return true end
             if text:find("ability") or text:find("Ability") then
                 if text:find("cooldown") or text:find("per-player") then
                     return true
