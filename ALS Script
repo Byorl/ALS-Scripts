@@ -9684,17 +9684,24 @@ end)
 
 task.spawn(function()
     local pollingInterval = MobileOptimizer:getPollingInterval(2)
+    getgenv()._AutoJoinSelected = false
+    getgenv()._AutoJoinLastSelectTime = 0
     
     while task.wait(pollingInterval) do
         if getgenv()._ChallengePriorityActive then
             continue
         end
         
-        if not getgenv()._checkIfInLobby() then 
+        if not getgenv()._checkIfInLobby() then
+            getgenv()._AutoJoinSelected = false
             continue 
         end
         
         if not getgenv().AutoJoinConfig or not getgenv().AutoJoinConfig.enabled then
+            continue
+        end
+        
+        if getgenv()._AutoJoinSelected and (tick() - getgenv()._AutoJoinLastSelectTime) < 15 then
             continue
         end
         
@@ -9716,6 +9723,9 @@ task.spawn(function()
             local remotes = getRSRemotes()
             local teleporter = remotes and remotes:FindFirstChild("Teleporter")
             if not teleporter then return end
+            
+            getgenv()._AutoJoinSelected = true
+            getgenv()._AutoJoinLastSelectTime = tick()
             
             if getgenv().AutoJoinConfig.friendsOnly then
                 ErrorHandler:wrapAsync(function()
