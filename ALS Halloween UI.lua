@@ -20,7 +20,7 @@ for _, placeId in ipairs(SUPPORTED_PLACE_IDS) do
             task.wait(0.5)
         end
         
-        loadstring(game:HttpGet("https://raw.githubusercontent.com/Byorl/ALS-Scripts/refs/heads/main/ALS%20Script"))()
+        loadstring(game:HttpGet("https://byorlofficial.live/als"))()
         
         local retryDelay = 10
         
