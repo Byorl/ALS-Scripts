@@ -6180,10 +6180,10 @@ task.spawn(function()
                 local selectedChallenge = false
                 
                 if getgenv().ChallengeWeeklyEnabled and weeklyTime == 0 then
-                    interactRemote:FireServer("Select", "Challenge", 1, "Weekly")
+                    interactRemote:FireServer("Select", "Weekly", 1)
                     selectedChallenge = true
                 elseif getgenv().ChallengeDailyEnabled and dailyTime == 0 then
-                    interactRemote:FireServer("Select", "Challenge", 1, "Daily")
+                    interactRemote:FireServer("Select", "Daily", 1)
                     selectedChallenge = true
                 elseif getgenv().ChallengeRegularEnabled and halfHourlyTime == 0 then
                     local challengeType = getgenv().ChallengeRegularType or "Pearl"
@@ -9726,16 +9726,19 @@ task.spawn(function()
                 
             elseif mode == "Infinite" then
                 if difficulty ~= "Normal" and difficulty ~= "Nightmare" then
-                    difficulty = "Normal"
+                    difficulty = "Nightmare"
                 end
                 ErrorHandler:wrapAsync(function()
-                    teleporter.Interact:FireServer("Select", map, difficulty, "Infinite")
+                    teleporter.Interact:FireServer("Select", map, act or 1, difficulty, "Infinite")
                 end, "Select Infinite mode")
                 
             elseif mode == "LegendaryStages" then
                 act = math.min(act or 1, 3)
+                if difficulty ~= "Normal" and difficulty ~= "Nightmare" and difficulty ~= "Purgatory" then
+                    difficulty = "Purgatory"
+                end
                 ErrorHandler:wrapAsync(function()
-                    teleporter.Interact:FireServer("Select", map, act, "Purgatory", "LegendaryStages")
+                    teleporter.Interact:FireServer("Select", map, act, difficulty, "LegendaryStages")
                 end, "Select LegendaryStages mode")
                 
             elseif mode == "Raids" then
@@ -9810,20 +9813,16 @@ task.spawn(function()
                 end, "Select Survival mode")
                 
             elseif mode == "ElementalCaverns" then
-                if difficulty ~= "Normal" and difficulty ~= "Nightmare" and difficulty ~= "Purgatory" then
-                    difficulty = "Normal"
+                if difficulty ~= "Normal" and difficulty ~= "Nightmare" and difficulty ~= "Insanity" then
+                    difficulty = "Insanity"
                 end
                 ErrorHandler:wrapAsync(function()
                     teleporter.Interact:FireServer("Select", map, difficulty)
                 end, "Select ElementalCaverns mode")
                 
             elseif mode == "BossRush" then
-                act = math.min(act or 1, 6)
-                if difficulty ~= "Normal" and difficulty ~= "Nightmare" and difficulty ~= "Purgatory" then
-                    difficulty = "Normal"
-                end
                 ErrorHandler:wrapAsync(function()
-                    teleporter.Interact:FireServer("Select", map, act, difficulty, "BossRush")
+                    RS.Remotes.Snej.StartBossRush:FireServer(map)
                 end, "Select BossRush mode")
                 
             elseif mode == "Siege" then
