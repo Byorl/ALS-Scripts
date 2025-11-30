@@ -6193,8 +6193,12 @@ task.spawn(function()
                 
                 if selectedChallenge then
                     getgenv()._ChallengeSelected = true
+                    getgenv()._ChallengeReadyForSkip = false
+                    task.wait(1.5)
+                    getgenv()._ChallengeReadyForSkip = true
                     task.wait(10)
                     getgenv()._ChallengeSelected = false
+                    getgenv()._ChallengeReadyForSkip = false
                 end
             end)
         end
@@ -6203,7 +6207,7 @@ end)
 
 task.spawn(function()
     while true do
-        task.wait(1)
+        task.wait(0.5)
         
         if not getgenv().ChallengeAutoStartEnabled then
             continue
@@ -6211,6 +6215,10 @@ task.spawn(function()
         
         local anyChallengeEnabled = getgenv().ChallengeRegularEnabled or getgenv().ChallengeDailyEnabled or getgenv().ChallengeWeeklyEnabled
         if not anyChallengeEnabled then
+            continue
+        end
+        
+        if not getgenv()._ChallengeSelected or not getgenv()._ChallengeReadyForSkip then
             continue
         end
         
@@ -9734,11 +9742,8 @@ task.spawn(function()
                 
             elseif mode == "LegendaryStages" then
                 act = math.min(act or 1, 3)
-                if difficulty ~= "Normal" and difficulty ~= "Nightmare" and difficulty ~= "Purgatory" then
-                    difficulty = "Purgatory"
-                end
                 ErrorHandler:wrapAsync(function()
-                    teleporter.Interact:FireServer("Select", map, act, difficulty, "LegendaryStages")
+                    teleporter.Interact:FireServer("Select", map, act, "Purgatory", "LegendaryStages")
                 end, "Select LegendaryStages mode")
                 
             elseif mode == "Raids" then
