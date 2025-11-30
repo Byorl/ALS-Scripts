@@ -6061,6 +6061,85 @@ getgenv()._ChallengePriorityActive = false
 
 task.spawn(function()
     while true do
+        task.wait(0.5)
+        
+        pcall(function()
+            if not getgenv()._checkIfInLobby() then return end
+            
+            local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if not hrp then return end
+            
+            local teleporterFolder = workspace:FindFirstChild("TeleporterFolder")
+            if not teleporterFolder then return end
+            
+            local anyChallengeEnabled = getgenv().ChallengeRegularEnabled or getgenv().ChallengeDailyEnabled or getgenv().ChallengeWeeklyEnabled
+            
+            if anyChallengeEnabled then
+                local clientData = getClientData()
+                if clientData then
+                    local halfHourlyTime = clientData.LastChallengeHalfHourlyTime or 0
+                    local weeklyTime = clientData.LastChallengeWeeklyTime or 0
+                    local dailyTime = clientData.LastChallengeDailyTime or 0
+                    
+                    local challengeReady = (getgenv().ChallengeRegularEnabled and halfHourlyTime == 0) or
+                                          (getgenv().ChallengeWeeklyEnabled and weeklyTime == 0) or
+                                          (getgenv().ChallengeDailyEnabled and dailyTime == 0)
+                    
+                    if challengeReady then
+                        local challengeFolder = teleporterFolder:FindFirstChild("Challenge")
+                        if challengeFolder then
+                            local teleporter = challengeFolder:FindFirstChild("Teleporter")
+                            if teleporter then
+                                local door = teleporter:FindFirstChild("Door")
+                                if door and door:IsA("BasePart") then
+                                    hrp.CFrame = door.CFrame + Vector3.new(0, 3, 0)
+                                end
+                            end
+                        end
+                        return
+                    end
+                end
+            end
+            
+            if getgenv().AutoJoinConfig and getgenv().AutoJoinConfig.enabled then
+                local mode = getgenv().AutoJoinConfig.mode
+                if not mode then return end
+                
+                local doorFolder
+                if mode == "Raids" then
+                    doorFolder = teleporterFolder:FindFirstChild("Raids")
+                elseif mode == "Siege" then
+                    doorFolder = teleporterFolder:FindFirstChild("Siege")
+                elseif mode == "Dungeon" then
+                    doorFolder = teleporterFolder:FindFirstChild("Dungeon")
+                elseif mode == "Survival" then
+                    doorFolder = teleporterFolder:FindFirstChild("Survival")
+                elseif mode == "Story" or mode == "Infinite" or mode == "LegendaryStages" then
+                    doorFolder = teleporterFolder:FindFirstChild("Story")
+                elseif mode == "ElementalCaverns" then
+                    doorFolder = teleporterFolder:FindFirstChild("ElementalCaverns")
+                elseif mode == "BossRush" then
+                    doorFolder = teleporterFolder:FindFirstChild("BossRush")
+                end
+                
+                if doorFolder then
+                    for _, teleporter in pairs(doorFolder:GetChildren()) do
+                        if teleporter:IsA("Model") and teleporter.Name == "Teleporter" then
+                            local door = teleporter:FindFirstChild("Door")
+                            if door and door:IsA("BasePart") then
+                                hrp.CFrame = door.CFrame + Vector3.new(0, 3, 0)
+                                return
+                            end
+                        end
+                    end
+                end
+            end
+        end)
+    end
+end)
+
+task.spawn(function()
+    while true do
         task.wait(5)
         
         local regularEnabled = getgenv().ChallengeRegularEnabled == true
@@ -6156,26 +6235,6 @@ task.spawn(function()
                 
                 local interactRemote = teleporterRemote:FindFirstChild("Interact")
                 if not interactRemote then return end
-                
-                local teleporterFolder = workspace:FindFirstChild("TeleporterFolder")
-                if teleporterFolder then
-                    local challengeFolder = teleporterFolder:FindFirstChild("Challenge")
-                    if challengeFolder then
-                        local teleporter = challengeFolder:FindFirstChild("Teleporter")
-                        if teleporter then
-                            local door = teleporter:FindFirstChild("Door")
-                            if door and door:IsA("BasePart") then
-                                local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                                if hrp then
-                                    hrp.CFrame = door.CFrame + Vector3.new(0, 3, 0)
-                                    task.wait(0.5)
-                                end
-                            end
-                        end
-                    end
-                end
-                
-                task.wait(0.3)
                 
                 local selectedChallenge = false
                 
@@ -9636,49 +9695,6 @@ task.spawn(function()
         end
         
         if not getgenv()._checkIfInLobby() then continue end
-        
-        if getgenv().AutoJoinConfig and getgenv().AutoJoinConfig.enabled then
-            pcall(function()
-                local mode = getgenv().AutoJoinConfig.mode
-                if not mode then return end
-                
-                local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                if not hrp then return end
-                
-                local teleporterFolder = workspace:FindFirstChild("TeleporterFolder")
-                if not teleporterFolder then return end
-                
-                local doorFolder
-                
-                if mode == "Raid" then
-                    doorFolder = teleporterFolder:FindFirstChild("Raids")
-                elseif mode == "Siege" then
-                    doorFolder = teleporterFolder:FindFirstChild("Siege")
-                elseif mode == "Dungeon" then
-                    doorFolder = teleporterFolder:FindFirstChild("Dungeon")
-                elseif mode == "Survival" then
-                    doorFolder = teleporterFolder:FindFirstChild("Survival")
-                elseif mode == "Story" or mode == "Infinite" or mode == "LegendaryStages" then
-                    doorFolder = teleporterFolder:FindFirstChild("Story")
-                elseif mode == "Elemental Cavern" then
-                    doorFolder = teleporterFolder:FindFirstChild("ElementalCaverns")
-                elseif mode == "Challenge" then
-                    doorFolder = teleporterFolder:FindFirstChild("Challenge")
-                end
-                
-                if doorFolder then
-                    for _, teleporter in pairs(doorFolder:GetChildren()) do
-                        if teleporter:IsA("Model") and teleporter.Name == "Teleporter" then
-                            local door = teleporter:FindFirstChild("Door")
-                            if door and door:IsA("BasePart") then
-                                hrp.CFrame = door.CFrame
-                                return
-                            end
-                        end
-                    end
-                end
-            end)
-        end
     end
 end)
 
